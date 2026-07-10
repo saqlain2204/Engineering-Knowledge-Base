@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
   <title>Inference Optimization | AI Engineering</title>
   <link rel="stylesheet" href="../../styles.css">
 </head>
@@ -72,7 +73,7 @@ python -m vllm.entrypoints.openai.api_server \
     <ul>
       <li>Route easy queries to smaller models</li>
       <li>Cache exact prompt completions where safe</li>
-      <li>Truncate or summarize context before model call</li>
+      <li>Truncate, summarize, or <a href="learn/ai-engineering-prompt-compression.html">compress context</a> before model call</li>
       <li>Stream tokens to improve perceived latency</li>
       <li>Set max_tokens aggressively per use case</li>
       <li>Batch offline jobs separately from interactive traffic</li>

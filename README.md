@@ -31,13 +31,13 @@ Hub: [`AI Engineer/ai-engineering.html`](AI%20Engineer/ai-engineering.html)
 
 Covers the full AI engineering stack from foundations through production.
 
-#### Learn topics (24 pages)
+#### Learn topics (25 pages)
 
 | Section | Topics |
 |---------|--------|
 | **Foundations and Architecture** | Foundations, Transformers, Tokenization, LLMs, SLMs |
 | **Training Pipeline** | Pretraining, Distributed Training, Fine-Tuning, Post-Training |
-| **Prompting and Retrieval** | Prompt Engineering, Embeddings, Vector Databases, RAG |
+| **Prompting and Retrieval** | Prompt Engineering, Embeddings, Vector Databases, RAG, Prompt Compression |
 | **Inference, Deployment, Operations** | Inference Optimization, Deployment, LLMOps and Monitoring, Evaluation |
 | **Agents and Protocols** | Agents, MCP |
 | **Frameworks** | LangChain, LangGraph, Langfuse |
