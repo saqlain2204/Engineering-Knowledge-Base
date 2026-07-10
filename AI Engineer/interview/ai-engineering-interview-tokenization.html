@@ -1,0 +1,60 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tokenization | Interview Prep</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="ai-engineering-interview.html">Interview Prep</a> &rsaquo; Tokenization</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Tokenization</h1>
+  <p>How raw text becomes model input. <a href="../learn/ai-engineering-tokenization.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Tokenization</h2>
+<p>How raw text becomes model input.</p>
+
+<details><summary>Why not just use words or characters as tokens?</summary>
+<div><p>Word-level tokenization creates huge vocabularies and can't handle unseen/misspelled words (out-of-vocabulary problem). Character-level avoids OOV but produces very long sequences, making the model expensive and harder to learn long-range structure. Subword tokenization is the practical middle ground.</p></div>
+</details>
+
+<details><summary>Explain Byte-Pair Encoding (BPE).</summary>
+<div><p>BPE starts with individual characters/bytes as the base vocabulary and iteratively merges the most frequent adjacent pair into a new token, repeating until a target vocabulary size is reached. Common words end up as single tokens while rare words get split into meaningful subword pieces, giving a good balance of vocabulary size and sequence length.</p></div>
+</details>
+
+<details><summary>BPE vs WordPiece vs SentencePiece/Unigram - what's the difference?</summary>
+<div>
+<ul>
+<li><strong>BPE</strong>: greedy frequency-based merges (GPT family).</li>
+<li><strong>WordPiece</strong>: similar to BPE but merges pairs that maximize training-data likelihood, not just frequency (BERT).</li>
+<li><strong>Unigram/SentencePiece</strong>: starts with a large vocabulary and prunes tokens that least hurt the likelihood of the corpus; SentencePiece treats text as a raw stream (including spaces) so it's language-agnostic and doesn't need pre-tokenized words (used in LLaMA, T5).</li>
+</ul>
+</div>
+</details>
+
+<details><summary>Why do LLMs struggle with things like counting letters or arithmetic on large numbers?</summary>
+<div><p>Tokenizers often split numbers and words inconsistently - "hello" might be one token but a specific number could be split arbitrarily across digit groups, and the model never sees individual characters directly, only token IDs. This makes character-level tasks (spelling, letter-counting) and precise multi-digit arithmetic fundamentally harder for a token-based model, independent of reasoning ability.</p></div>
+</details>
+
+<details><summary>What is vocabulary size trade-off in tokenizer design?</summary>
+<div><p>A larger vocabulary means shorter sequences for the same text (cheaper compute, more context fits) but a bigger embedding/output matrix and more parameters spent on rare tokens. A smaller vocabulary means longer sequences (more compute per input) but a leaner model. Production LLMs typically land in the 32k–200k range depending on multilingual needs.</p></div>
+</details>
+
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../ai-engineering.html">Learn section</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+</body>
+</html>

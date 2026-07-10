@@ -1,0 +1,72 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agents | Interview Prep</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="ai-engineering-interview.html">Interview Prep</a> &rsaquo; Agents</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Agents and Tool Use</h1>
+  <p>LLMs that act, not just respond. <a href="../learn/ai-engineering-agents.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Agents & Tool Use</h2>
+<p>LLMs that act, not just respond.</p>
+
+<details><summary>What is function/tool calling and how does it work under the hood?</summary>
+<div><p>The model is given structured descriptions of available tools (name, description, parameter schema) in its context. Instead of a plain text response, it's trained/prompted to output a structured request to call a specific tool with specific arguments when appropriate; the application code executes that call and feeds the tool's result back into the conversation for the model to use in its next response.</p></div>
+</details>
+
+<details><summary>What is the ReAct pattern (Reason + Act)?</summary>
+<div><p>ReAct interleaves reasoning traces ("thought") with actions (tool calls) and observations (tool results) in a loop: the model thinks about what it needs, takes an action, observes the result, and repeats until it has enough information to produce a final answer - combining CoT-style reasoning with the ability to gather real information rather than reasoning purely from parametric knowledge.</p></div>
+</details>
+
+<details><summary>What's the difference between a single-agent tool-using system and a multi-agent system?</summary>
+<div><p>A single agent has one LLM loop that reasons and calls tools directly. Multi-agent systems split work across specialized agents (e.g. a planner, a researcher, a coder, a critic) that communicate and hand off subtasks - potentially improving quality on complex tasks through specialization and self-critique, at the cost of significantly more complexity, latency, and failure modes (agents miscommunicating, compounding errors).</p></div>
+</details>
+
+<details><summary>What are the main failure modes of agentic systems, and how do you mitigate them?</summary>
+<div>
+<ul>
+<li><strong>Infinite/unproductive loops</strong> - mitigate with max iteration limits and loop detection.</li>
+<li><strong>Error compounding</strong> - an early wrong tool result or reasoning mistake propagates through later steps; mitigate with verification steps and the ability to backtrack.</li>
+<li><strong>Over-triggering tool use</strong> (calling tools when not needed) or under-triggering (failing to call a needed tool) - mitigate with clear tool descriptions and few-shot examples of correct usage.</li>
+<li><strong>Unsafe/irreversible actions</strong> - mitigate with human-in-the-loop confirmation for high-stakes actions (sending emails, deleting data, spending money) and least-privilege tool permissions.</li>
+</ul>
+</div>
+</details>
+
+
+<details><summary>What types of memory do agents need?</summary>
+<div>
+<ul>
+<li><strong>Short-term</strong>: current conversation in the context window.</li>
+<li><strong>Long-term</strong>: vector store or DB of past sessions and facts.</li>
+<li><strong>Working memory</strong>: scratchpad the agent writes to during multi-step tasks.</li>
+<li><strong>Episodic</strong>: logs of prior tool calls and outcomes for reflection.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is plan-and-execute vs ReAct?</summary>
+<div><p><strong>ReAct</strong> interleaves one thought and one action at a time. <strong>Plan-and-execute</strong> first generates a full plan, then executes steps (possibly with a cheaper executor model). Planning reduces wasted tool calls on complex tasks but can fail if the initial plan is wrong without replanning.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../ai-engineering.html">Learn section</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Langfuse | Frameworks | AI Engineering</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering.html#frameworks">Frameworks</a> &rsaquo; Langfuse</p>
+  </nav>
+  <h1>Langfuse</h1>
+  <p>Open-source LLM engineering platform: tracing, evaluations, prompt management, datasets, and production analytics.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>What Langfuse Is</h2>
+    <p>Langfuse is observability and LLMOps infrastructure for LLM applications. It captures traces of every request (inputs, outputs, latency, cost, tool calls, retrieval context), lets teams score quality, manage prompt versions, run experiments on datasets, and debug failures in production.</p>
+    <p>Unlike generic APM, Langfuse understands LLM semantics: token usage, model names, nested agent steps, RAG retrieval spans, and multi-turn sessions. It integrates with LangChain, LangGraph, OpenAI SDK, LiteLLM, LlamaIndex, and custom code via decorators or the REST API.</p>
+    <p class="refer-link"><small>Refer: <a href="https://langfuse.com/docs" rel="noopener noreferrer">Langfuse docs</a> · <a href="https://github.com/langfuse/langfuse" rel="noopener noreferrer">GitHub</a></small></p>
+  </section>
+
+  <section>
+    <h2>Data Model: Traces, Observations, Sessions</h2>
+    <h3>Trace</h3>
+    <p>Top-level unit representing one user-facing request or batch job. Carries <code>user_id</code>, <code>session_id</code>, <code>tags</code>, <code>metadata</code>, and release/environment labels. All nested work hangs under a trace ID.</p>
+    <h3>Observations (spans and generations)</h3>
+    <ul>
+      <li><strong>Generation</strong> - LLM call with model, prompt/completion messages, token counts, cost, latency</li>
+      <li><strong>Span</strong> - non-LLM work: retrieval, tool execution, graph node, HTTP call</li>
+      <li><strong>Event</strong> - point-in-time log inside a span</li>
+    </ul>
+    <p>Observations form a tree mirroring your call stack. A LangGraph agent run might show: trace &gt; span (graph) &gt; generation (model) &gt; span (tool) &gt; generation (model).</p>
+    <h3>Session</h3>
+    <p>Groups multiple traces for one conversation or workflow (e.g. chat thread over days). Analyze session-level cost, drop-off, and satisfaction scores.</p>
+  </section>
+
+  <section>
+    <h2>SDK Integration Patterns</h2>
+    <h3>Python decorator (framework-agnostic)</h3>
+    <pre><code>from langfuse.decorators import langfuse_context, observe
+
+@observe()
+def answer_question(query: str, user_id: str):
+    langfuse_context.update_current_trace(user_id=user_id)
+    context = retrieve(query)
+    return generate(query, context)
+
+@observe(as_type="generation")
+def generate(query: str, context: str):
+    response = openai_client.chat.completions.create(...)
+    return response.choices[0].message.content</code></pre>
+    <p><code>@observe</code> auto-creates nested spans. Child calls become child observations. Set <code>as_type="generation"</code> on LLM functions for correct cost attribution.</p>
+    <h3>LangChain / LangGraph callback handler</h3>
+    <pre><code>from langfuse.callback import CallbackHandler
+
+handler = CallbackHandler(
+    session_id="chat-9f2a",
+    user_id="user_123",
+    tags=["production", "rag-v2"],
+)
+
+result = chain.invoke(
+    {"question": "..."},
+    config={"callbacks": [handler]},
+)</code></pre>
+    <p>The handler maps LangChain run IDs to Langfuse observations automatically, including tool calls and retriever steps. Pass the same handler through LangGraph <code>config</code> on <code>graph.invoke</code>.</p>
+    <h3>OpenAI SDK wrapper</h3>
+    <pre><code>from langfuse.openai import openai
+
+completion = openai.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hello"}],
+)</code></pre>
+    <p>Drop-in replacement import instruments calls without changing call sites. Works with streaming when using supported patterns.</p>
+  </section>
+
+  <section>
+    <h2>Manual Trace Control</h2>
+    <p>For fine control, use the Langfuse client directly:</p>
+    <pre><code>from langfuse import Langfuse
+
+langfuse = Langfuse()
+
+trace = langfuse.trace(name="support-ticket", user_id="u1", metadata={"plan": "enterprise"})
+retrieval = trace.span(name="retrieval", input={"query": q})
+docs = search(q)
+retrieval.end(output={"doc_ids": [d.id for d in docs]})
+
+gen = trace.generation(
+    name="draft-reply",
+    model="gpt-4o",
+    input=messages,
+    output=reply,
+    usage={"input": 1200, "output": 340},
+)
+trace.update(output=reply)</code></pre>
+    <p>Manual traces suit non-Python services or when callbacks do not reach all code paths. Flush on shutdown in short-lived workers: <code>langfuse.flush()</code>.</p>
+  </section>
+
+  <section>
+    <h2>Scoring and Quality Feedback</h2>
+    <p>Scores attach to traces, observations, or sessions:</p>
+    <ul>
+      <li><strong>Numeric</strong> - 0 to 1 relevance, latency SLA compliance</li>
+      <li><strong>Boolean</strong> - thumbs up/down, policy violation yes/no</li>
+      <li><strong>Categorical</strong> - tone labels, error types</li>
+    </ul>
+    <pre><code>langfuse.score(
+    trace_id=trace_id,
+    name="user-feedback",
+    value=1,
+    comment="Accurate citation",
+)</code></pre>
+    <h3>Sources of scores</h3>
+    <ul>
+      <li>End-user UI feedback buttons</li>
+      <li>Human reviewer queues sampling production traces</li>
+      <li>Automated eval scripts (BLEU, exact match, JSON schema pass)</li>
+      <li>LLM-as-judge pipelines writing scores back via API</li>
+    </ul>
+    <p>Scores power dashboards, regression alerts, and fine-tuning dataset curation (export low-scored traces as training or preference pairs).</p>
+  </section>
+
+  <section>
+    <h2>Prompt Management</h2>
+    <p>Langfuse stores versioned prompts with labels (<code>production</code>, <code>staging</code>, <code>latest</code>). Fetch at runtime so copy changes do not require redeploys:</p>
+    <pre><code>prompt = langfuse.get_prompt("support-agent-system", label="production")
+compiled = prompt.compile(customer_name="Acme", tier="enterprise")
+messages = compiled  # ready for chat API</code></pre>
+    <p>Each prompt version tracks config (model hints, temperature), template text, and linked experiments. Compare versions by running the same dataset against v3 vs v4 and measuring scores.</p>
+    <p>Link prompt versions to generations automatically when using Langfuse-integrated SDKs; traces show exactly which prompt version produced each output.</p>
+  </section>
+
+  <section>
+    <h2>Datasets and Experiments</h2>
+    <h3>Datasets</h3>
+    <p>Collections of <code>input</code> / <code>expected_output</code> items (and optional metadata). Import from CSV, production traces, or manual curation. Datasets are the ground truth for regression testing.</p>
+    <h3>Experiments (dataset runs)</h3>
+    <p>Run a handler function or chain against every dataset item. Langfuse records outputs, latency, cost, and scores per item. Compare runs side-by-side when you change prompts, models, or retrieval settings.</p>
+    <pre><code>from langfuse import Langfuse
+
+def run_item(*, item, **kwargs):
+    return my_rag_chain.invoke({"question": item.input})
+
+dataset = langfuse.get_dataset("golden-qa")
+result = dataset.run_experiment(
+    name="rag-v2-bge-reranker",
+    task=run_item,
+)</code></pre>
+    <p>Use experiments in CI on staging: fail the build if average score drops below threshold vs baseline run.</p>
+  </section>
+
+  <section>
+    <h2>Cost and Performance Analytics</h2>
+    <p>Generations record model name and token usage. Langfuse computes cost from model price tables (configurable). Dashboards break down:</p>
+    <ul>
+      <li>Cost per user, feature, model, prompt version</li>
+      <li>P50/P95 latency per step and end-to-end</li>
+      <li>Error rates and timeout patterns</li>
+      <li>Token volume trends for capacity planning</li>
+    </ul>
+    <p>Attribute cost to retrieval vs generation vs tool steps by inspecting span trees. Expensive retriever rerankers often hide inside RAG traces.</p>
+  </section>
+
+  <section>
+    <h2>Debugging Production Failures</h2>
+    <p>Typical workflow:</p>
+    <ol>
+      <li>Filter traces by error tag, low score, or user complaint ID in metadata</li>
+      <li>Open trace timeline: see exact retrieval chunks, tool args, model raw output</li>
+      <li>Compare to a golden trace from datasets</li>
+      <li>Clone inputs into playground, tweak prompt, re-run experiment</li>
+      <li>Ship prompt or retrieval fix; monitor next experiment run</li>
+    </ol>
+    <p>Export trace JSON for support tickets (redact PII first). Session replay shows multi-turn context loss or tool loop bugs.</p>
+  </section>
+
+  <section>
+    <h2>Langfuse with LangGraph</h2>
+    <p>Pass <code>CallbackHandler</code> in graph config. Each node execution becomes a span; model calls inside nodes become generations. For custom node names in the UI, set run names in node config or use <code>@observe</code> inside node functions.</p>
+    <p>Long-running graphs: ensure handler flushes periodically in workers. Use <code>trace_id</code> correlation across async continuations after interrupts.</p>
+  </section>
+
+  <section>
+    <h2>Deployment: Cloud vs Self-Hosted</h2>
+    <h3>Langfuse Cloud</h3>
+    <p>Managed SaaS with EU/US hosting, SSO, RBAC, and retention policies. Fastest path for teams without ops overhead.</p>
+    <h3>Self-hosted (Docker / Kubernetes)</h3>
+    <p>Open-source stack: Langfuse web + worker + Postgres + ClickHouse (analytics) + Redis/Blob storage depending on version. Required for strict data residency, air-gapped environments, or cost control at very high volume.</p>
+    <p>Set <code>LANGFUSE_HOST</code>, <code>LANGFUSE_PUBLIC_KEY</code>, <code>LANGFUSE_SECRET_KEY</code> in app env. Use separate projects per environment (dev/staging/prod) with different API keys.</p>
+  </section>
+
+  <section>
+    <h2>Security and Compliance</h2>
+    <ul>
+      <li>Scrub PII before <code>trace.update</code> or use field-level redaction in SDK</li>
+      <li>Restrict API keys per environment; never embed secret keys in frontend</li>
+      <li>Configure data retention and deletion for GDPR requests</li>
+      <li>Role-based access: engineers see traces, annotators see queues, PMs see dashboards</li>
+      <li>Audit prompt changes via version history</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Langfuse vs LangSmith</h2>
+    <table>
+      <thead>
+        <tr><th>Dimension</th><th>Langfuse</th><th>LangSmith</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Open source</td><td>Yes (self-host)</td><td>Proprietary cloud</td></tr>
+        <tr><td>Framework coupling</td><td>LangChain + agnostic SDKs</td><td>LangChain ecosystem focus</td></tr>
+        <tr><td>Prompt management</td><td>Built-in versioning</td><td>Hub + playground</td></tr>
+        <tr><td>Evaluations</td><td>Datasets + experiments</td><td>Datasets + evaluators</td></tr>
+        <tr><td>Data residency</td><td>Self-host option</td><td>Vendor cloud regions</td></tr>
+      </tbody>
+    </table>
+    <p>Teams often pick Langfuse for open-source/self-host requirements and strong production analytics. LangSmith fits teams all-in on LangChain with tight Studio integration. Both solve tracing and eval; avoid running duplicate tracing in production.</p>
+  </section>
+
+  <section>
+    <h2>Operational Best Practices</h2>
+    <ul>
+      <li>Sample traces in high-QPS paths (e.g. 10%) but always capture errors and low-confidence paths</li>
+      <li>Standardize <code>tags</code>: env, app version, model tier, experiment flag</li>
+      <li>Wire user feedback directly to <code>langfuse.score</code> in the API handler</li>
+      <li>Schedule weekly dataset runs against production prompts</li>
+      <li>Alert on score regression, cost spikes, and p95 latency SLO breaches</li>
+      <li>Document which traces are allowed to contain raw prompts vs redacted forms</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>How the Three Frameworks Fit Together</h2>
+    <p><strong>LangChain</strong> composes models, retrievers, and tools. <strong>LangGraph</strong> runs durable agent graphs with checkpoints and interrupts. <strong>Langfuse</strong> observes everything: trace each graph invoke, score outputs, version prompts, and regression-test on datasets. This stack is a common production pattern for enterprise RAG and agent products.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p>Also in Frameworks: <a href="ai-engineering-frameworks-langchain.html">LangChain</a> · <a href="ai-engineering-frameworks-langgraph.html">LangGraph</a></p>
+    <p><a href="../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+</body>
+</html>

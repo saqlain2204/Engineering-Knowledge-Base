@@ -1,0 +1,96 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG | AI Engineering</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; RAG</p>
+  </nav>
+  <h1>Retrieval-Augmented Generation (RAG)</h1>
+  <p>Grounding LLM responses in retrieved documents to improve factuality and domain coverage.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>Why RAG Exists</h2>
+    <p>LLMs memorize training data imperfectly and cannot know private or post-training facts. RAG retrieves relevant passages at query time and injects them into the prompt so the model answers from supplied evidence. Benefits include reduced hallucination on factual QA, access to proprietary data without full fine-tuning, and easier updates by refreshing the document index instead of retraining weights.</p>
+    <p>RAG does not guarantee truth. The model can still ignore context, misread passages, or combine retrieved facts incorrectly. Retrieval quality and generation discipline both matter.</p>
+  </section>
+
+  <section>
+    <h2>Ingestion Pipeline</h2>
+    <p>Documents flow through parsing, cleaning, chunking, embedding, and indexing:</p>
+    
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2005.11401" rel="noopener noreferrer">Original RAG paper</a> · <a href="https://docs.llamaindex.ai/en/stable/understanding/rag/" rel="noopener noreferrer">LlamaIndex RAG guide</a></small></p>
+    <ul>
+      <li><strong>Parsing</strong> - PDF, HTML, DOCX, tickets, code repos into plain text with structure hints</li>
+      <li><strong>Chunking</strong> - split into segments (256-1024 tokens typical) with overlap to preserve continuity</li>
+      <li><strong>Metadata</strong> - title, URL, section, ACL, version, timestamp for filtering and citations</li>
+      <li><strong>Embedding</strong> - batch encode chunks with a retrieval-tuned model</li>
+      <li><strong>Indexing</strong> - store in vector DB plus optional sparse index for hybrid search</li>
+    </ul>
+    <p>Chunking strategy is a top quality lever: semantic chunking, heading-aware splits, and parent-child indexes (small chunks for retrieval, large parents for generation context) often beat naive fixed-size windows.</p>
+  </section>
+
+  <section>
+    <h2>Retrieval Stage</h2>
+    <p>At query time the system embeds the user question (sometimes rewritten), searches the index, and returns top-k chunks. Improvements include:</p>
+    <ul>
+      <li><strong>Query rewriting</strong> - HyDE, multi-query expansion, or LLM-generated sub-questions</li>
+      <li><strong>Hybrid search</strong> - dense plus BM25 fusion</li>
+      <li><strong>Reranking</strong> - cross-encoder or LLM reranker on top 50-100 candidates to refine top 5-10</li>
+      <li><strong>Metadata filters</strong> - scope to user permissions and product area</li>
+    </ul>
+    <div class="callout">
+      <strong>Bottleneck insight:</strong> Most RAG failures are retrieval failures, not generation failures. Invest in eval for recall before tuning prompts.
+    </div>
+  </section>
+
+  <section>
+    <h2>Generation Stage</h2>
+    <p>Retrieved chunks are packed into the context window with clear delimiters and citation instructions. The system prompt should require grounding: answer only from provided context, cite sources, and refuse when context is insufficient.</p>
+    <pre><code>from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+
+vectorstore = Chroma.from_documents(chunks, OpenAIEmbeddings())
+qa = RetrievalQA.from_chain_type(
+    llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+    retriever=vectorstore.as_retriever(search_kwargs={"k": 5}),
+    return_source_documents=True,
+)
+result = qa.invoke({"query": user_question})</code></pre>
+    <p>Context packing must respect token limits. Prioritize highest rerank scores, deduplicate near-identical chunks, and optionally summarize long passages before injection. Lost-in-the-middle phenomenon means models may underweight context placed in the center of very long prompts; put critical chunks near the start or end.</p>
+  </section>
+
+  <section>
+    <h2>Advanced Patterns</h2>
+    <h3>Agentic RAG</h3>
+    <p>The LLM decides when to retrieve, which tools to call, or whether to decompose questions into sub-queries iteratively.</p>
+    <h3>Graph RAG</h3>
+    <p>Knowledge graphs link entities across documents for multi-hop reasoning when flat chunk retrieval misses connections.</p>
+    <h3>Corrective RAG (CRAG)</h3>
+    <p>A grader scores retrieved relevance and triggers re-retrieval or web fallback when chunks are off-topic.</p>
+  </section>
+
+  <section>
+    <h2>Evaluation and Operations</h2>
+    <p>Measure retrieval (recall@k, MRR) and end-to-end answer quality (faithfulness, citation accuracy) separately. Log retrieved chunk IDs with each response for debugging user reports. Refresh pipelines on schedule and on document change events. Version embedding models and indexes together to avoid mixed-vector search.</p>
+    <p>Cost control: cache embeddings for static corpora, limit k and reranker calls, and route simple queries to smaller models when retrieval confidence is high.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../interview/ai-engineering-interview-rag.html">Interview questions on RAG</a></p>
+    <p><a href="../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+</body>
+</html>

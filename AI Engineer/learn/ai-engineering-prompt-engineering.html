@@ -1,0 +1,106 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt Engineering | AI Engineering</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; Prompt Engineering</p>
+  </nav>
+  <h1>Prompt Engineering</h1>
+  <p>Designing inputs, sampling settings, and guardrails to get reliable outputs from language models.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>Prompt Structure</h2>
+    <p>A production prompt usually combines several layers:</p>
+    <ul>
+      <li><strong>System message</strong> - role, policies, output format, safety rules</li>
+      <li><strong>Context</strong> - retrieved documents, user profile, tool results</li>
+      <li><strong>User message</strong> - the actual task or question</li>
+      <li><strong>Few-shot examples</strong> - optional demonstrations of desired input-output pairs</li>
+    </ul>
+    <p>Clarity beats cleverness. Explicit instructions ("respond in JSON", "cite sources by ID", "refuse if unsure") outperform vague requests. Chat templates wrap these pieces with model-specific tokens; never hand-craft separators that fight the tokenizer template.</p>
+    <pre><code>messages = [
+    {"role": "system", "content": "Answer only from provided context. Cite [id]. Refuse if unsure."},
+    {"role": "user", "content": f"Context:\n{retrieved_chunks}\n\nQuestion: {query}"},
+]
+
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=messages,
+    temperature=0.2,
+    max_tokens=512,
+    response_format={"type": "json_object"},
+)</code></pre>
+  </section>
+
+  <section>
+    <h2>Reasoning Techniques</h2>
+    <h3>Chain-of-thought (CoT)</h3>
+    <p>Asking the model to reason step by step before answering improves performance on math, logic, and multi-hop questions. Variants include zero-shot CoT ("think step by step") and few-shot CoT with worked examples in the prompt.</p>
+    <h3>Structured decomposition</h3>
+    <p>Break complex tasks into stages: plan, retrieve, draft, verify. Each stage can be a separate LLM call with a narrower prompt, reducing error compounding in one shot.</p>
+    <h3>Self-consistency</h3>
+    <p>Sample multiple reasoning paths at higher temperature and majority-vote the final answer. Trades compute for reliability on hard problems.</p>
+  </section>
+
+  <section>
+    <h2>Sampling Parameters</h2>
+    <ul>
+      <li><strong>Temperature</strong> - scales logits before softmax; low (0-0.3) for deterministic extraction, higher for creative writing</li>
+      <li><strong>Top-p (nucleus)</strong> - sample from the smallest set of tokens whose cumulative probability exceeds p</li>
+      <li><strong>Top-k</strong> - restrict to k highest-probability tokens</li>
+      <li><strong>Max tokens</strong> - cap completion length to control cost and rambling</li>
+      <li><strong>Stop sequences</strong> - halt generation at delimiters (e.g., end of JSON object)</li>
+    </ul>
+    <div class="callout">
+      <strong>Production tip:</strong> Fix temperature and top-p per use case in config, not per request from clients. Expose only safe knobs to end users.
+    </div>
+  </section>
+
+  <section>
+    <h2>Output Format Control</h2>
+    <p>Structured outputs reduce parsing failures in downstream code:</p>
+    <ul>
+      <li>JSON mode or schema-constrained decoding where the API supports it</li>
+      <li>Grammar-guided generation (GBNF, outlines) for open models</li>
+      <li>Retry with repair prompts when validation fails</li>
+      <li>Separate "thinking" and "answer" sections with clear markers for extraction</li>
+    </ul>
+    <p>Always validate LLM JSON with a strict parser. Models hallucinate keys and slip out of schema under edge inputs.</p>
+  </section>
+
+  <section>
+    <h2>Prompt Injection and Defensive Design</h2>
+    <p>Prompt injection embeds adversarial instructions in untrusted content (emails, web pages, user uploads) that override system intent. Defenses layer together:</p>
+    <ul>
+      <li>Treat retrieved text as data, not instructions (delimiter fencing, "untrusted context" labels)</li>
+      <li>Output filtering and tool permission scopes</li>
+      <li>Separate models for classification vs generation</li>
+      <li>Human approval for high-impact tool actions</li>
+    </ul>
+    <p>No single prompt trick is foolproof. Security is architectural, not cosmetic wording.</p>
+  </section>
+
+  <section>
+    <h2>Iteration and Versioning</h2>
+    <p>Prompts are code. Store them in version control, A/B test changes against eval sets, and log prompt hashes with responses in production. Regression in prompt v2 often comes from subtle example ordering or whitespace changes that alter tokenization.</p>
+    <p>Automated prompt optimization (DSPy, evolutionary search) can tune few-shot sets, but human review remains important for safety-critical policies.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../interview/ai-engineering-interview-prompt-engineering.html">Interview questions on Prompt Engineering</a></p>
+    <p><a href="../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+</body>
+</html>

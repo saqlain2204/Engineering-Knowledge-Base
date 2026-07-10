@@ -1,0 +1,106 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vector Databases | Interview Prep</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="ai-engineering-interview.html">Interview Prep</a> &rsaquo; Vector Databases</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Vector Databases</h1>
+  <p>Why you need them, which to pick, and how to tune them. <a href="../learn/ai-engineering-vector-databases.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Vector Databases - Why, Which, and How to Choose</h2>
+<p>The most commonly probed practical topic in AI engineering interviews.</p>
+
+<details><summary>Why do you need a vector database instead of just a normal database?</summary>
+<div><p>Traditional databases index for exact-match or range queries (B-trees, hash indexes); similarity search over high-dimensional embeddings requires nearest-neighbor search, which doesn't map to those index structures efficiently. Vector databases implement Approximate Nearest Neighbor (ANN) indexes purpose-built for fast similarity search at scale (millions to billions of vectors), plus metadata filtering, CRUD operations on vectors, and horizontal scaling - none of which a relational DB gives you out of the box.</p></div>
+</details>
+
+<details><summary>Exact (brute-force) nearest neighbor vs Approximate Nearest Neighbor (ANN) - why does everyone use ANN in production?</summary>
+<div><p>Exact kNN computes distance to every vector in the dataset - perfectly accurate but O(n) per query, which doesn't scale past roughly hundreds of thousands of vectors for low-latency use cases. ANN algorithms trade a small, tunable amount of recall accuracy for massive speed gains (sub-linear or near-constant time lookups), which is the only way to serve similarity search at scale (millions-billions of vectors) with sub-100ms latency.</p></div>
+</details>
+
+<details><summary>Explain HNSW (Hierarchical Navigable Small World) - the most widely used ANN index.</summary>
+<div><p>HNSW builds a multi-layer graph where each vector is a node; the top layers are sparse "highways" connecting distant regions of the space and lower layers are dense with local connections. A search starts at the top layer, greedily navigates toward the query's neighborhood, and descends layer by layer, refining the search - giving logarithmic-ish search complexity with very high recall. It's memory-hungry (whole graph typically lives in RAM) but offers some of the best speed/accuracy tradeoffs available, which is why it's the default in most vector DBs (Qdrant, Weaviate, Milvus, pgvector, Pinecone).</p></div>
+</details>
+
+<details><summary>Explain IVF (Inverted File Index) and how it differs from HNSW.</summary>
+<div><p>IVF clusters the vector space into <code>nlist</code> partitions (via k-means) at index time; at query time it only searches the <code>nprobe</code> clusters closest to the query vector rather than the whole dataset, trading full-database search for a much smaller candidate set. It's more memory-efficient than HNSW (doesn't need a full graph in RAM) and works well combined with quantization for very large-scale, disk-friendly indexes, but generally needs more tuning (nlist/nprobe) to match HNSW's recall at the same speed.</p></div>
+</details>
+
+<details><summary>What is Product Quantization (PQ) and why combine it with IVF (IVF-PQ)?</summary>
+<div><p>PQ compresses each vector by splitting it into sub-vectors and replacing each sub-vector with the ID of its nearest centroid from a small learned codebook, shrinking storage by an order of magnitude (e.g., a 512-dim float32 vector becomes a handful of bytes) at some accuracy cost. IVF-PQ combines coarse clustering (IVF, to narrow the search space) with PQ (to make each comparison and the overall index cheap in memory), which is the standard approach for billion-scale vector search where an all-RAM HNSW graph would be too expensive.</p></div>
+</details>
+
+<details><summary>Cosine similarity vs dot product vs Euclidean (L2) distance - how do you choose?</summary>
+<div>
+<ul>
+<li><strong>Cosine similarity</strong> measures angle only, ignoring magnitude - good default when you care purely about semantic direction/similarity and vector magnitudes aren't meaningful.</li>
+<li><strong>Dot product</strong> is cosine similarity scaled by magnitude - appropriate when the embedding model was trained with dot product as its training objective (many are), since magnitude may encode meaningful signal (e.g. confidence/salience).</li>
+<li><strong>Euclidean (L2)</strong> measures literal distance in space - matters when absolute position/magnitude is meaningful, common in non-text embeddings (images, some structured data).</li>
+</ul>
+<p>Rule of thumb: use whatever metric the embedding model was trained/optimized for - check the model card, don't guess.</p>
+</div>
+</details>
+
+<details><summary>How do you actually choose a vector database for a production system? Walk through the decision.</summary>
+<div>
+<p>Key axes to evaluate, roughly in order of impact:</p>
+<ul>
+<li><strong>Scale</strong> - tens of thousands of vectors can live in-process (FAISS, or even pgvector); tens of millions to billions need a purpose-built distributed system (Milvus, Pinecone, Qdrant, Weaviate).</li>
+<li><strong>Managed vs self-hosted</strong> - Pinecone is fully managed (fast to ship, less ops burden, recurring cost); Milvus/Qdrant/Weaviate can be self-hosted (more control, data residency, no vendor lock-in, but you own the ops).</li>
+<li><strong>Metadata filtering needs</strong> - if you need to combine vector search with structured filters (e.g. "similar docs AND user_id=X AND date>Y"), check how well the DB supports pre-filtering vs post-filtering - post-filtering can silently return fewer results than requested.</li>
+<li><strong>Existing infrastructure</strong> - if you're already on Postgres and scale is moderate, pgvector avoids adding a new system to operate at all.</li>
+<li><strong>Hybrid search support</strong> - native BM25 + dense hybrid (Weaviate, Qdrant) saves building your own fusion layer.</li>
+<li><strong>Update patterns</strong> - some indexes (HNSW) handle inserts/deletes better than others; if your data changes constantly, check re-indexing cost.</li>
+<li><strong>Cost at your scale</strong> - managed services charge per-vector/per-query and can get expensive at very large scale; self-hosted shifts cost to infrastructure + engineering time.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>Compare the major vector databases: Pinecone, Milvus, Weaviate, Qdrant, Chroma, FAISS, pgvector.</summary>
+<div>
+<ul>
+<li><strong>Pinecone</strong> - fully managed, serverless option, minimal ops, strong for teams that want to ship fast without managing infra; proprietary/closed-source, cost scales with usage.</li>
+<li><strong>Milvus</strong> - open-source, built for very large scale (billions of vectors), highly configurable index types, more operational complexity, strong choice for large self-hosted deployments.</li>
+<li><strong>Weaviate</strong> - open-source, built-in hybrid search and modules for embedding generation, GraphQL-ish API, good developer ergonomics for RAG use cases.</li>
+<li><strong>Qdrant</strong> - open-source, written in Rust (fast), strong filtering support, good balance of performance and simplicity, popular for mid-to-large scale RAG.</li>
+<li><strong>Chroma</strong> - lightweight, easy local/embedded setup, great for prototyping and small-to-medium apps; less battle-tested at very large scale.</li>
+<li><strong>FAISS</strong> - a library (not a database/server) from Meta for in-process ANN search; extremely fast and flexible for research/prototyping, but you build persistence, filtering, and distribution yourself.</li>
+<li><strong>pgvector</strong> - a Postgres extension adding vector types and ANN indexes (HNSW/IVFFlat); best when you want vector search alongside relational data in one system without adding new infrastructure, at some ceiling on scale/performance vs purpose-built vector DBs.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What's the recall/latency/memory tradeoff, and how do you tune an ANN index for it?</summary>
+<div><p>Every ANN index has a knob that trades accuracy for speed/memory: for HNSW it's <code>ef_search</code> (candidates explored at query time) and graph connectivity (<code>M</code>); for IVF it's <code>nprobe</code> (clusters searched). Increasing these knobs raises recall (closer to exact search) but increases latency and sometimes memory - the right setting is chosen empirically by plotting recall vs latency on a held-out query set and picking the point that meets your product's latency SLA while maximizing recall.</p></div>
+</details>
+
+<details><summary>What is metadata filtering and why is pre-filtering vs post-filtering an important distinction?</summary>
+<div><p>Metadata filtering restricts vector search to a subset of records matching structured conditions (e.g. tenant ID, date range, category). Post-filtering runs the ANN search first and discards non-matching results afterward - if the filter is restrictive, you might get far fewer results than requested, or none. Pre-filtering restricts the search space before or during the ANN traversal itself, giving correct result counts but potentially slower search if not implemented efficiently - production vector DBs increasingly support efficient pre-filtering (filtered HNSW traversal) as a differentiator.</p></div>
+</details>
+
+<details><summary>How do you handle vector index updates (inserts, deletes, updates) in production?</summary>
+<div><p>Some ANN structures (like HNSW) support incremental inserts reasonably well but degrade over many deletes (tombstoning is common - mark as deleted, filter at query time, periodically rebuild/compact). At high update volume, teams often batch updates and rebuild indexes on a schedule rather than updating live, or use a DB that explicitly supports efficient online updates (Qdrant, Milvus) rather than an in-process library like raw FAISS which is more static by default.</p></div>
+</details>
+
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../ai-engineering.html">Learn section</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+</body>
+</html>

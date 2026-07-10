@@ -1,0 +1,98 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Evaluation | AI Engineering</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; Evaluation</p>
+  </nav>
+  <h1>Evaluation</h1>
+  <p>Measuring model quality, regression risk, and production fitness beyond public leaderboard scores.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>Why Eval Matters</h2>
+    <p>LLM outputs are high-dimensional and subjective. Without systematic evaluation, teams ship regressions discovered only by user complaints. Evaluation spans pre-deployment benchmarking, CI gates on prompt or model changes, and ongoing production monitoring tied to human feedback.</p>
+    <p>Good eval is task-specific. A model strong on MMLU may fail your invoice extraction JSON schema or your support tone guidelines.</p>
+  </section>
+
+  <section>
+    <h2>Benchmark Types</h2>
+    <h3>Public academic benchmarks</h3>
+    <ul>
+      <li><strong>MMLU / GPQA</strong> - broad knowledge and reasoning</li>
+      <li><strong>HumanEval / MBPP</strong> - code generation</li>
+      <li><strong>GSM8K / MATH</strong> - math word problems</li>
+      <li><strong>MT-Bench / Arena-style</strong> - multi-turn chat quality</li>
+    </ul>
+    <p>Useful for coarse model selection, but vulnerable to contamination if training data overlapped benchmark questions.</p>
+    <h3>Custom eval sets</h3>
+    <p>Curate prompts from real logs (redacted), label expected behaviors, and score automatically or with human raters. This is the highest-signal eval for product teams.</p>
+  </section>
+
+  <section>
+    <h2>Metrics</h2>
+    <ul>
+      <li><strong>Exact match / F1</strong> - QA with short answers</li>
+      <li><strong>BLEU / ROUGE</strong> - n-gram overlap for summarization (limited semantic capture)</li>
+      <li><strong>Pass@k</strong> - code tasks with multiple samples</li>
+      <li><strong>Faithfulness / groundedness</strong> - answer supported by retrieved context in RAG</li>
+      <li><strong>Latency and cost</strong> - tokens per task, p95 response time</li>
+      <li><strong>Safety rates</strong> - refusal appropriateness, jailbreak success</li>
+    </ul>
+    <div class="callout">
+      <strong>LLM-as-judge:</strong> Using a strong model to score outputs scales eval but introduces judge bias (verbosity preference, self-model favoritism). Calibrate against human labels regularly.
+    </div>
+  </section>
+
+  <section>
+    <h2>RAG-Specific Evaluation</h2>
+    <p>Split retrieval and generation eval:</p>
+    <ul>
+      <li>Retrieval: recall@k, MRR, nDCG on query-chunk relevance labels</li>
+      <li>Generation: citation correctness, answer faithfulness, hallucination rate when context is empty</li>
+    </ul>
+    <p>Synthetic QA generation from documents can bootstrap labels, but human spot-checks remain necessary to catch bad synthetic questions.</p>
+    <pre><code>from ragas import evaluate
+from ragas.metrics import faithfulness, answer_relevancy, context_recall
+
+result = evaluate(
+    dataset=eval_dataset,  # question, answer, contexts, ground_truth
+    metrics=[faithfulness, answer_relevancy, context_recall],
+)
+print(result.to_pandas())</code></pre>
+  </section>
+
+  <section>
+    <h2>Eval Harness Design</h2>
+    <p>A reproducible harness fixes model version, temperature, prompt template, and tool configuration. Store results per git commit or config hash. Run nightly or on PR for critical suites. Include pairwise comparison against a baseline checkpoint, not only absolute scores.</p>
+    <p>Stratify reports by task category, language, and user segment. Aggregate averages hide failures on minority slices that matter legally or commercially.</p>
+  </section>
+
+  <section>
+    <h2>Human Evaluation</h2>
+    <p>Humans rate helpfulness, correctness, and safety on side-by-side outputs. Use clear rubrics, multiple raters per item, and inter-rater agreement tracking. Human eval is expensive but essential before major launches and for disputes when automatic metrics disagree with user sentiment.</p>
+    <p>Close the loop: production thumbs-down flows into labeling queues; labeled data feeds fine-tuning and preference optimization.</p>
+  </section>
+
+  <section>
+    <h2>Continuous Improvement</h2>
+    <p>Evaluation is never finished. New failure modes emerge with features (tools, longer context, multimodal inputs). Treat eval sets as living assets with owners, versioning, and deprecation of stale prompts that no longer reflect the product.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../interview/ai-engineering-interview-evaluation.html">Interview questions on Evaluation</a></p>
+    <p><a href="../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+</body>
+</html>

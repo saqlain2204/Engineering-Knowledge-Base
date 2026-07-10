@@ -1,0 +1,95 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vector Databases | AI Engineering</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; Vector Databases</p>
+  </nav>
+  <h1>Vector Databases</h1>
+  <p>Storage and approximate nearest neighbor search for embedding-powered applications.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>Role in the Stack</h2>
+    <p>Vector databases (or vector-capable stores) persist embeddings with metadata and answer "which vectors are closest to this query vector?" at low latency. They sit between embedding models and applications like RAG, recommendation, deduplication, and anomaly detection.</p>
+    <p>Some teams use dedicated vector DBs (Pinecone, Weaviate, Qdrant, Milvus). Others add vector indexes to existing databases (pgvector in PostgreSQL, Elasticsearch dense_vector). Choice depends on scale, ops maturity, filtering needs, and hybrid search requirements.</p>
+  </section>
+
+  <section>
+    <h2>Approximate Nearest Neighbor (ANN)</h2>
+    <p>Exact nearest neighbor search over millions of high-dimensional vectors is too slow for interactive queries. ANN indexes trade perfect recall for speed using data structures that probe only promising regions of vector space.</p>
+    
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1603.09320" rel="noopener noreferrer">HNSW paper</a> · <a href="https://github.com/facebookresearch/faiss/wiki/Faiss-indexes" rel="noopener noreferrer">FAISS index guide</a></small></p>
+    <h3>Common index types</h3>
+    <ul>
+      <li><strong>HNSW (Hierarchical Navigable Small World)</strong> - graph-based, high recall, popular default; memory-heavy</li>
+      <li><strong>IVF (Inverted File)</strong> - clusters vectors into cells; fast at scale with tunable nprobe</li>
+      <li><strong>PQ / OPQ (Product Quantization)</strong> - compresses vectors for memory savings with some accuracy loss</li>
+      <li><strong>DiskANN</strong> - disk-backed graphs for billion-scale indexes</li>
+    </ul>
+    <p>Tuning parameters (efConstruction, M, nprobe, quantizer settings) balances recall, latency, and memory. Always benchmark on representative queries, not defaults.</p>
+    <pre><code>from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+client = QdrantClient(url="http://localhost:6333")
+hits = client.search(
+    collection_name="docs",
+    query_vector=query_embedding,
+    query_filter=Filter(must=[
+        FieldCondition(key="tenant_id", match=MatchValue(value="acme")),
+    ]),
+    limit=10,
+    score_threshold=0.75,
+)</code></pre>
+  </section>
+
+  <section>
+    <h2>Metadata Filtering</h2>
+    <p>Production queries rarely are pure vector search. You filter by tenant ID, document type, date range, or permissions before or during ANN search. Pre-filtering vs post-filtering affects recall: aggressive pre-filters on small subsets may return empty results if the index is not designed for constrained search.</p>
+    <p>Design schemas with filter fields indexed alongside vectors. Multi-tenant SaaS almost always requires mandatory tenant_id filters on every query.</p>
+    <div class="callout">
+      <strong>Security:</strong> Vector search without ACL metadata filtering can leak cross-tenant context into RAG prompts. Treat metadata as authorization, not decoration.
+    </div>
+  </section>
+
+  <section>
+    <h2>Operational Concerns</h2>
+    <ul>
+      <li><strong>Ingestion throughput</strong> - bulk upsert vs streaming updates</li>
+      <li><strong>Index rebuild</strong> - required when embedding model or dimension changes</li>
+      <li><strong>Consistency</strong> - eventual vs strong for write-read paths</li>
+      <li><strong>Replication and sharding</strong> - horizontal scale for vector count and QPS</li>
+      <li><strong>Backup and disaster recovery</strong> - re-embedding from source may be slow; snapshot indexes</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Comparing Approaches</h2>
+    <p><strong>Managed vector DB:</strong> fastest time to market, hosted scaling, built-in monitoring. Vendor lock-in and per-dimension pricing matter at scale.</p>
+    <p><strong>pgvector:</strong> good when data already lives in Postgres, moderate scale, strong transactional needs. May need careful index tuning past tens of millions of vectors.</p>
+    <p><strong>Elasticsearch/OpenSearch:</strong> strong if you already need full-text plus hybrid fusion in one system.</p>
+    <p><strong>In-memory (FAISS, USearch):</strong> research and single-node prototypes; you own persistence and distribution.</p>
+  </section>
+
+  <section>
+    <h2>Monitoring Search Quality</h2>
+    <p>Track recall@k on golden query sets, p50/p95 query latency, index size growth, and null-result rate after filters. Drift in document distribution or embedding model upgrades can collapse retrieval quality without obvious infrastructure alerts. Pair vector indexes with rerankers and periodic human relevance audits.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../interview/ai-engineering-interview-vector-databases.html">Interview questions on Vector Databases</a></p>
+    <p><a href="../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+</body>
+</html>

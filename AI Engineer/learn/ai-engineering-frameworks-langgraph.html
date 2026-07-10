@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangGraph | Frameworks | AI Engineering</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering.html#frameworks">Frameworks</a> &rsaquo; LangGraph</p>
+  </nav>
+  <h1>LangGraph</h1>
+  <p>Low-level orchestration for stateful, multi-step LLM workflows: graphs, checkpoints, interrupts, and durable agent loops.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>What LangGraph Solves</h2>
+    <p>LangGraph models LLM applications as <strong>state machines</strong> (graphs) instead of opaque agent loops. Each step is a node function that reads shared state and returns partial updates. Edges define control flow: fixed transitions, conditional routing, or dynamic jumps via the <code>Command</code> API.</p>
+    <p>This matters because production agents need persistence across restarts, human approval on risky actions, replay for debugging, and explicit caps on loops. LangChain LCEL chains are acyclic pipelines; LangGraph adds cycles, branching, and checkpointed state by design.</p>
+    <p class="refer-link"><small>Refer: <a href="https://langchain-ai.github.io/langgraph/concepts/low_level/" rel="noopener noreferrer">LangGraph low-level concepts</a> · <a href="https://github.com/langchain-ai/langgraph" rel="noopener noreferrer">GitHub</a></small></p>
+  </section>
+
+  <section>
+    <h2>Core Concepts: State, Nodes, Edges</h2>
+    <h3>State schema</h3>
+    <p>State is a TypedDict (or Pydantic model) defining keys the graph reads and writes. Use <code>Annotated[list, add_messages]</code> reducers so new messages append instead of overwrite:</p>
+    <pre><code>from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph.message import add_messages
+
+class AgentState(TypedDict):
+    messages: Annotated[list, add_messages]
+    user_id: str
+    step_count: int</code></pre>
+    <p>Reducers define how concurrent or sequential updates merge. Without reducers, last write wins. Custom reducers implement counters, set unions, or last-value semantics per key.</p>
+    <h3>Nodes</h3>
+    <p>Nodes are Python callables <code>(state, config) -> partial_state | Command</code>. They should be small: call the model, execute one tool batch, run a validator. Heavy side effects belong in tool functions with idempotency keys.</p>
+    <h3>Edges</h3>
+    <ul>
+      <li><strong>Normal edges</strong> - unconditional A to B</li>
+      <li><strong>Conditional edges</strong> - routing function returns next node name(s)</li>
+      <li><strong>START / END</strong> - special nodes marking entry and termination</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Building a Graph</h2>
+    <pre><code>from langgraph.graph import StateGraph, START, END
+
+def call_model(state: AgentState):
+    response = model.invoke(state["messages"])
+    return {"messages": [response], "step_count": state["step_count"] + 1}
+
+def should_continue(state: AgentState):
+    last = state["messages"][-1]
+    if state["step_count"] > 10:
+        return END
+    if last.tool_calls:
+        return "tools"
+    return END
+
+builder = StateGraph(AgentState)
+builder.add_node("agent", call_model)
+builder.add_node("tools", tool_node)
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", should_continue, ["tools", END])
+builder.add_edge("tools", "agent")
+
+graph = builder.compile()</code></pre>
+    <p><code>compile()</code> validates the graph, wires checkpointers, and returns an invokable application. The compiled graph is itself a Runnable with invoke, stream, batch, and async variants.</p>
+  </section>
+
+  <section>
+    <h2>Prebuilt ReAct Agent</h2>
+    <p><code>create_react_agent(model, tools, prompt=...)</code> ships a production-ready loop: model decides tool calls, tool node executes, returns to model until done. Customize via state schema extensions, pre/post hooks, or by building from scratch when you need non-standard routing.</p>
+    <pre><code>from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(model, tools)
+result = agent.invoke(
+    {"messages": [("user", "Search docs for rate limits")]},
+    config={"configurable": {"thread_id": "user-42"}},
+)</code></pre>
+    <p>Prebuilt agents are a starting point. Complex products (multi-tenant ACL, sub-workflows, approval gates) usually outgrow them and require custom graphs.</p>
+  </section>
+
+  <section>
+    <h2>Persistence and Checkpointers</h2>
+    <p>Checkpointers save graph state after each super-step so runs survive process crashes and support conversation threads.</p>
+    <ul>
+      <li><strong>MemorySaver</strong> - in-process dict; dev and tests only</li>
+      <li><strong>SqliteSaver</strong> - local file persistence</li>
+      <li><strong>PostgresSaver</strong> - production-grade, multi-instance safe with connection pooling</li>
+    </ul>
+    <pre><code>from langgraph.checkpoint.postgres import PostgresSaver
+
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    graph = builder.compile(checkpointer=checkpointer)
+    graph.invoke(input, config={"configurable": {"thread_id": "abc-123"}})</code></pre>
+    <p><code>thread_id</code> scopes checkpoint history per conversation or workflow instance. Use separate thread IDs per user session. <code>checkpoint_id</code> enables time travel: resume from an earlier snapshot for debugging or forked execution.</p>
+    <h3>What gets persisted</h3>
+    <p>Full state dict after each node (or super-step in parallel graphs). Large blobs (raw PDFs) should live in object storage with references in state, not megabyte strings in Postgres JSON.</p>
+  </section>
+
+  <section>
+    <h2>Human-in-the-Loop: Interrupts</h2>
+    <p><code>interrupt()</code> pauses graph execution before or after a node, surfacing state to an operator UI. Resume with <code>Command(resume=...)</code> after approval or edited input.</p>
+    <pre><code>from langgraph.types import interrupt, Command
+
+def sensitive_action(state):
+  approval = interrupt({
+      "action": "delete_records",
+      "count": state["pending_deletes"],
+  })
+  if not approval.get("approved"):
+      return Command(goto=END)
+  return run_delete(state)</code></pre>
+    <p>Patterns: approve tool calls, edit model drafts before send, collect missing form fields. Interrupts require a checkpointer; the graph serializes pending interrupt metadata in the checkpoint.</p>
+  </section>
+
+  <section>
+    <h2>The Command API</h2>
+    <p>Nodes can return <code>Command(update={...}, goto="node_name")</code> for dynamic routing plus state updates in one step. Replaces brittle conditional edge functions when routing depends on rich logic inside the node.</p>
+    <p><code>Command(graph=Command.PARENT)</code> supports jumping between parent and child graphs in multi-agent setups.</p>
+  </section>
+
+  <section>
+    <h2>Subgraphs and Multi-Agent</h2>
+    <p>Compile a subgraph and add it as a node in a parent graph. Child graphs can have isolated state schemas with input/output mappers. Supervisor patterns:</p>
+    <ul>
+      <li>Supervisor node routes to specialist subgraphs (research, code, review)</li>
+      <li>Shared message bus in parent state</li>
+      <li>Each subgraph checkpoints independently or inherits parent thread</li>
+    </ul>
+    <p>Watch cost and latency: each subgraph invocation may trigger full model calls. Cap delegations and cache specialist outputs.</p>
+  </section>
+
+  <section>
+    <h2>Streaming Modes</h2>
+    <p><code>graph.stream(input, stream_mode=...)</code> supports multiple modes (combinable):</p>
+    <ul>
+      <li><code>"values"</code> - full state after each step</li>
+      <li><code>"updates"</code> - only state deltas per node</li>
+      <li><code>"messages"</code> - token streams from chat model nodes</li>
+      <li><code>"custom"</code> - user-defined events via <code>get_stream_writer()</code></li>
+      <li><code>"debug"</code> - detailed execution trace</li>
+    </ul>
+    <p>UI chat products typically stream <code>messages</code> to the client and log <code>updates</code> server-side for observability.</p>
+  </section>
+
+  <section>
+    <h2>Configuration and Runtime Context</h2>
+    <p><code>config["configurable"]</code> passes per-run values without polluting state: <code>thread_id</code>, <code>user_id</code>, feature flags, model name. Access in nodes via <code>config = get_config()</code> or the config argument.</p>
+    <p><code>store</code> (LangGraph Store) provides long-term memory across threads: namespace + key-value documents retrievable inside nodes, backed by Postgres or in-memory for dev.</p>
+  </section>
+
+  <section>
+    <h2>LangGraph Platform and Deployment</h2>
+    <p>LangGraph Platform (managed or self-hosted) runs compiled graphs as APIs with built-in persistence, cron triggers, and assistants UI. You package <code>langgraph.json</code> defining graph entrypoints, dependencies, and env vars.</p>
+    <p>Self-hosting options: Docker containers behind your API gateway, same auth and rate limits as the rest of your stack. Horizontal scale requires shared Postgres checkpointer, not MemorySaver.</p>
+    <p>For Kubernetes deployments, run stateless API replicas; all coordination lives in the checkpointer DB and optional message queue for long jobs.</p>
+  </section>
+
+  <section>
+    <h2>Error Handling and Retries</h2>
+    <p>Node failures can retry with policies on the node decorator. Distinguish transient (rate limit, timeout) from permanent (validation) errors. Surface tool errors as ToolMessages so the model can recover instead of crashing the graph.</p>
+    <p>Use <code>RetryPolicy</code> with max attempts and backoff. For paid side effects, combine retries with idempotency keys on the tool layer.</p>
+  </section>
+
+  <section>
+    <h2>Testing LangGraph Applications</h2>
+    <ul>
+      <li>Unit test nodes in isolation with fixture state dicts</li>
+      <li>Integration test full graph with MemorySaver and mocked model returning fixed tool calls</li>
+      <li>Snapshot checkpoint state after critical nodes for regression diffs</li>
+      <li>Record Langfuse traces per test run to compare trajectory changes across PRs</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>LangGraph vs LangChain Agents</h2>
+    <table>
+      <thead>
+        <tr><th>Concern</th><th>LangChain AgentExecutor</th><th>LangGraph</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Control flow visibility</td><td>Opaque loop</td><td>Explicit graph</td></tr>
+        <tr><td>Persistence</td><td>Limited / custom</td><td>First-class checkpointers</td></tr>
+        <tr><td>Human approval</td><td>Custom hacks</td><td>Native interrupts</td></tr>
+        <tr><td>Parallel branches</td><td>Awkward</td><td>Supported</td></tr>
+        <tr><td>Time travel / replay</td><td>No</td><td>Checkpoint history</td></tr>
+      </tbody>
+    </table>
+    <p>New agent features in the ecosystem land in LangGraph first. Treat LangChain as the integration layer (models, tools, prompts) and LangGraph as the runtime.</p>
+  </section>
+
+  <section>
+    <h2>Production Checklist</h2>
+    <ul>
+      <li>Postgres (or managed) checkpointer with backups</li>
+      <li>Hard caps on steps, tool calls, and wall time per thread</li>
+      <li>Interrupt gates on destructive tools</li>
+      <li>Structured logging + Langfuse/LangSmith on every invoke</li>
+      <li>Tenant isolation via thread_id and metadata filters</li>
+      <li>State schema versioning when deploying graph changes</li>
+    </ul>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p>Also in Frameworks: <a href="ai-engineering-frameworks-langchain.html">LangChain</a> · <a href="ai-engineering-frameworks-langfuse.html">Langfuse</a></p>
+    <p><a href="../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+</body>
+</html>

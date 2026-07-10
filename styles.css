@@ -1,0 +1,583 @@
+/* Engineering Knowledge Base - dark theme */
+
+:root {
+  --bg: #0d0f12;
+  --surface: #161a20;
+  --surface-raised: #1c2129;
+  --border: #2a3038;
+  --text: #e8eaed;
+  --text-muted: #9aa3af;
+  --accent: #5eead4;
+  --accent-hover: #99f6e4;
+  --question: #f5c451;
+  --code-bg: #1e2430;
+  --link: #5eead4;
+  --max-width: 52rem;
+  --radius: 10px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ── */
+
+header {
+  padding: 2.5rem 1.25rem 1.75rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #12151a 0%, var(--bg) 100%);
+}
+
+.site-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.site-logo {
+  display: block;
+  width: 72px;
+  height: 72px;
+}
+
+header h1 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.site-brand h1 {
+  margin: 0;
+}
+
+.maintainer {
+  margin: 1rem auto 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.maintainer a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.maintainer a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+header > p {
+  margin: 0 auto;
+  max-width: var(--max-width);
+  color: var(--text-muted);
+  font-size: 1.05rem;
+}
+
+/* Breadcrumb nav inside header */
+header nav p {
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+header nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+header nav a:hover {
+  color: var(--accent);
+}
+
+/* ── Table of contents (Q&A page) ── */
+
+nav[aria-label="Table of contents"] {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+nav[aria-label="Table of contents"] h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+nav[aria-label="Table of contents"] ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+nav[aria-label="Table of contents"] li {
+  margin: 0;
+}
+
+nav[aria-label="Table of contents"] a {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+nav[aria-label="Table of contents"] a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(94, 234, 212, 0.06);
+}
+
+/* ── Main content ── */
+
+main {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+section {
+  margin-bottom: 2.5rem;
+}
+
+section:last-child {
+  margin-bottom: 0;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+}
+
+main > section h3 {
+  margin: 1.5rem 0 0.6rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+main > section h3:first-of-type {
+  margin-top: 0.75rem;
+}
+
+section > p:first-of-type {
+  margin-top: 0;
+}
+
+p {
+  margin: 0 0 1rem;
+}
+
+/* Subject / segment list cards (lists that contain links) */
+main > section > ul:has(a) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+main > section > ul:has(a) > li {
+  margin-bottom: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+main > section > ul:has(a) > li:hover {
+  border-color: #3d4654;
+}
+
+main > section > ul:has(a) > li a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 1.05rem;
+}
+
+main > section > ul:has(a) > li a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+main > section > ul:has(a) > li {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+/* Regular lists inside sections */
+section ul:not(main > section > ul),
+section ol {
+  margin: 0 0 1rem;
+  padding-left: 1.4rem;
+}
+
+section li {
+  margin-bottom: 0.4rem;
+}
+
+section li::marker {
+  color: var(--text-muted);
+}
+
+/* ── Links ── */
+
+a {
+  color: var(--link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+/* ── Inline code & tags ── */
+
+code {
+  padding: 0.15em 0.45em;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+  font-family: "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  font-size: 0.88em;
+}
+
+strong {
+  color: #d4dae0;
+  font-weight: 600;
+}
+
+/* ── Q&A sections (interview page) ── */
+
+main > section[id] {
+  padding-top: 0.5rem;
+}
+
+main > section[id] > h2 {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+
+main > section[id] > p {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Expandable Q&A */
+details {
+  margin-bottom: 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+details[open] {
+  border-color: #3d5a54;
+  background: var(--surface-raised);
+}
+
+summary {
+  cursor: pointer;
+  padding: 0.9rem 1rem 0.9rem 0.75rem;
+  font-weight: 600;
+  color: var(--question);
+  list-style: none;
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  line-height: 1.45;
+  user-select: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::before {
+  content: "Q";
+  flex-shrink: 0;
+  margin-top: 0.1em;
+  padding: 0.1em 0.45em;
+  background: var(--question);
+  color: #1a1408;
+  font-size: 0.7rem;
+  font-weight: 800;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+
+details > div {
+  padding: 0 1rem 1rem 2.6rem;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+details > div p:last-child,
+details > div ul:last-child {
+  margin-bottom: 0;
+}
+
+details > div ul {
+  padding-left: 1.25rem;
+}
+
+details > div li {
+  margin-bottom: 0.5rem;
+}
+
+details > div strong {
+  color: var(--accent);
+}
+
+/* ── Footer ── */
+
+footer {
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  background: #0a0c0f;
+}
+
+footer p {
+  margin: 0;
+}
+
+footer small {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+footer a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+footer a:hover {
+  color: var(--accent);
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 600px) {
+  header {
+    padding: 1.75rem 1rem 1.25rem;
+  }
+
+  main {
+    padding: 1.5rem 1rem 3rem;
+  }
+
+  details > div {
+    padding-left: 1rem;
+  }
+
+  nav[aria-label="Table of contents"] ol {
+    gap: 0.4rem;
+  }
+}
+
+/* Knowledge article pages */
+.learn-page main.article h3 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.05rem;
+  color: #d4dae0;
+}
+
+.learn-page main.article h4 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.learn-page .callout {
+  margin: 1.25rem 0;
+  padding: 1rem 1.15rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.learn-page .callout strong {
+  color: var(--accent);
+}
+
+.learn-page pre {
+  margin: 1rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.learn-page pre code {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: inherit;
+}
+
+.learn-page .refer-link {
+  margin: 0.75rem 0 1.25rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.learn-page .refer-link a {
+  color: var(--accent);
+}
+
+.learn-page table {
+  width: 100%;
+  margin: 1rem 0 1.25rem;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.learn-page th,
+.learn-page td {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.learn-page th {
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.learn-page .page-footer-nav {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.learn-page .page-footer-nav p {
+  margin-bottom: 0.5rem;
+}
+
+.learn-page .interview-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: rgba(94, 234, 212, 0.08);
+  border: 1px solid #3d5a54;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.learn-page .interview-link:hover {
+  background: rgba(94, 234, 212, 0.14);
+}
+
+/* Hub: two-track layout */
+.hub-tracks {
+  display: grid;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 700px) {
+  .hub-tracks {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.hub-track {
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.hub-track h2 {
+  margin-top: 0;
+}
+
+.hub-track-learn {
+  border-color: #3d5a54;
+}
+
+.hub-track-interview {
+  border-color: #5a4d3d;
+}
+
+.hub-track-interview h2 {
+  color: var(--question);
+}
+
+/* Interview hub badge on Q&A pages */
+header .badge-interview {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  padding: 0.25rem 0.65rem;
+  background: rgba(245, 196, 81, 0.15);
+  border: 1px solid #5a4d2a;
+  border-radius: 999px;
+  color: var(--question);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+}

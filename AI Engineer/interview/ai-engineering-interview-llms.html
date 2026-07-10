@@ -1,0 +1,69 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLMs | Interview Prep</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="ai-engineering-interview.html">Interview Prep</a> &rsaquo; LLMs</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Large Language Models (LLMs)</h1>
+  <p>What defines an LLM, how they scale, and the engineering tradeoffs behind frontier models. <a href="../learn/ai-engineering-llms.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Large Language Models</h2>
+<p>Architecture, scale, and capability questions specific to large generative models.</p>
+
+<details><summary>What technically distinguishes an LLM from a smaller language model?</summary>
+<div><p>There is no single hard cutoff, but LLMs typically have billions of parameters, are trained on trillions of tokens, and exhibit strong few-shot and instruction-following behavior that smaller models lack. Scale unlocks emergent patterns: better in-context learning, broader world knowledge stored in weights, and more robust reasoning when paired with the right post-training.</p></div>
+</details>
+
+<details><summary>What are scaling laws and why do labs obsess over them?</summary>
+<div><p>Scaling laws describe predictable loss improvements as you increase model size (N), dataset size (D), and compute (C). They let teams forecast whether a larger training run is worth the budget before spending millions on GPUs. Chinchilla showed many models were under-trained for their size; modern labs often train smaller models longer to optimize inference cost.</p></div>
+</details>
+
+<details><summary>What is the difference between total parameters and active parameters (especially in MoE)?</summary>
+<div><p>Total parameters count every weight in the model. Active parameters are only those used in a single forward pass. Mixture-of-Experts models may have 100B+ total parameters but activate only a subset (e.g. 10-15B) per token via a router, giving large-model capacity without proportional inference FLOPs.</p></div>
+</details>
+
+<details><summary>How does context window length affect LLM system design?</summary>
+<div><p>Longer context lets you pack more retrieved documents, conversation history, and tool outputs into one prompt, but increases prefill compute and KV cache memory quadratically or linearly depending on optimizations. Engineering choices include: chunking/RAG vs long context, prompt compression, KV cache quantization, and models with native long-context support (RoPE scaling, YaRN, etc.).</p></div>
+</details>
+
+<details><summary>What are emergent abilities and should you rely on them in production?</summary>
+<div><p>Emergent abilities are capabilities (e.g. multi-step arithmetic, instruction following) that appear suddenly at certain model scales on benchmarks. They are useful for model selection but risky as a production strategy: behavior can be inconsistent, hard to eval, and may not transfer across model versions. Prefer explicit fine-tuning, RAG, or tooling over hoping emergence.</p></div>
+</details>
+
+<details><summary>Decoder-only vs encoder-decoder LLMs: which dominates and why?</summary>
+<div><p>Decoder-only (GPT, LLaMA, Claude-style) dominates generative AI because one architecture handles pretraining, fine-tuning, and inference uniformly, scales well, and supports simple autoregressive APIs. Encoder-decoder still wins some seq2seq tasks (translation, summarization with long inputs) but most new frontier LLMs are decoder-only.</p></div>
+</details>
+
+<details><summary>What is a foundation model vs a chat model vs an instruct model?</summary>
+<div><p>A <strong>foundation/base model</strong> is raw pretrained weights (next-token prediction). An <strong>instruct/SFT model</strong> is fine-tuned on instruction-response pairs. A <strong>chat/aligned model</strong> adds RLHF, DPO, or similar preference optimization for helpful, safe dialogue. Production assistants almost always use chat models; base models are for further fine-tuning or research.</p></div>
+</details>
+
+<details><summary>Open-weight vs closed API models: engineering implications?</summary>
+<div><p>Open weights (LLaMA, Mistral, Qwen) give full control: self-hosting, fine-tuning, no data leaving your infra, predictable unit economics at scale. Closed APIs (GPT-4, Claude) offer frontier quality without GPU ops but add vendor lock-in, rate limits, and per-token cost. Many production systems use a router: closed API for hard tasks, open model for high-volume easy tasks.</p></div>
+</details>
+
+<details><summary>What is model collapse and when does it matter?</summary>
+<div><p>Model collapse occurs when models are trained recursively on AI-generated text, causing diversity and quality to degrade over generations. It matters for synthetic data pipelines and web-scale scraping as AI content grows. Mitigations: filter synthetic data, mix real human data, and monitor distributional drift in training corpora.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../ai-engineering.html">Learn section</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+</body>
+</html>
