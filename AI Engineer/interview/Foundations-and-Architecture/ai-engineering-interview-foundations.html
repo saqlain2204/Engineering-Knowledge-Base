@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Foundations | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Foundations</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Neural Network and Deep Learning Foundations</h1>
+  <p>The base layer every LLM question builds on. <a href="../../learn/Foundations-and-Architecture/ai-engineering-foundations.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Neural Network & Deep Learning Foundations</h2>
+<p>The base layer every LLM question builds on.</p>
+
+<details><summary>What is backpropagation and why does it work?</summary>
+<div><p>Backpropagation computes gradients of the loss with respect to every parameter using the chain rule, propagating error signals backward from the output layer to the input. It works efficiently because it reuses intermediate gradients computed at later layers instead of recomputing them from scratch for each parameter, making training cost roughly linear in network size rather than exponential.</p></div>
+</details>
+
+<details><summary>Why do we need non-linear activation functions?</summary>
+<div><p>Stacking linear layers without non-linearity collapses into a single linear transformation, no matter how many layers you add. Non-linear activations (ReLU, GELU, SiLU/Swish) let networks approximate arbitrarily complex functions, which is what gives depth its representational power.</p></div>
+</details>
+
+<details><summary>Explain vanishing and exploding gradients, and how modern architectures avoid them.</summary>
+<div><p>In deep networks, gradients are products of many partial derivatives; if these are consistently &lt;1 they shrink to zero (vanishing), if &gt;1 they blow up (exploding). Transformers mitigate this with residual/skip connections (gradients have a direct path back), layer normalization, careful weight initialization, and gradient clipping.</p></div>
+</details>
+
+<details><summary>What's the difference between batch, layer, and RMS normalization?</summary>
+<div>
+<ul>
+<li><strong>BatchNorm</strong> normalizes across the batch dimension per feature - poor fit for variable-length sequences and small batches.</li>
+<li><strong>LayerNorm</strong> normalizes across the feature dimension per sample - independent of batch size, standard in early transformers.</li>
+<li><strong>RMSNorm</strong> only rescales by the root-mean-square of activations (no mean-centering), which is cheaper and used in most modern LLMs (LLaMA, Mistral) for efficiency with similar stability.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>Adam vs AdamW - what's the actual difference?</summary>
+<div><p>Adam applies L2 regularization by adding a weight-decay term directly into the gradient before the adaptive moment update, which interacts poorly with Adam's per-parameter scaling. AdamW decouples weight decay from the gradient update, applying it directly to the weights, which gives more predictable regularization and is now the default optimizer for training LLMs.</p></div>
+</details>
+
+<details><summary>What is the bias-variance tradeoff and how does it show up in LLM training?</summary>
+<div><p>High bias (underfitting) means the model is too simple to capture patterns; high variance (overfitting) means it memorizes training data and fails to generalize. In LLMs this appears as: too few parameters/data ? poor benchmark performance (bias); too many epochs on a small fine-tuning set ? memorization and loss of general capability (variance), which is why fine-tuning typically uses very few epochs.</p></div>
+</details>
+
+
+<details><summary>What is cross-entropy loss and why is it used for language modeling?</summary>
+<div><p>Cross-entropy measures how far the model's predicted token distribution is from the true next token. Minimizing it is equivalent to maximum likelihood estimation: the model learns to assign high probability to tokens that actually appear in the training data. It is the standard loss for both pretraining and SFT.</p></div>
+</details>
+
+<details><summary>SGD vs Adam: why do LLMs rarely use plain SGD?</summary>
+<div><p>Plain SGD uses one learning rate for all parameters and struggles with sparse, noisy gradients in huge models. Adam adapts per-parameter step sizes using running estimates of gradient mean and variance, converging faster and more stably on transformer training. AdamW is the de-facto default for LLM pretraining and fine-tuning.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+  <title>AI Engineering Learn</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body>
+
+  <header>
+    <nav aria-label="Breadcrumb">
+      <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; Learn</p>
+    </nav>
+    <h1>AI Engineering Learning Notes</h1>
+    <p>Concepts, how things work, pipelines, and engineering tradeoffs.</p>
+  </header>
+
+  <main class="wide">
+    <div class="learn-topics-grid">
+      <section>
+        <h2>Foundations and Architecture</h2>
+        <ul>
+          <li><a href="Foundations-and-Architecture/ai-engineering-foundations.html"><strong>Foundations</strong></a><br>Neural networks, loss, optimizers, normalization.</li>
+          <li><a href="Foundations-and-Architecture/ai-engineering-transformers.html"><strong>Transformers</strong></a><br>Attention, blocks, RoPE, MoE, GQA.</li>
+          <li><a href="Foundations-and-Architecture/ai-engineering-tokenization.html"><strong>Tokenization</strong></a><br>Subword tokenizers and vocabulary design.</li>
+          <li><a href="Foundations-and-Architecture/ai-engineering-llms.html"><strong>LLMs</strong></a><br>Large models, scaling, lifecycle, open vs API.</li>
+          <li><a href="Foundations-and-Architecture/ai-engineering-slms.html"><strong>SLMs</strong></a><br>Small models, edge, distillation, routing.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Training Pipeline</h2>
+        <ul>
+          <li><a href="Training-Pipeline/ai-engineering-pretraining.html"><strong>Pretraining</strong></a><br>Data, objectives, scaling laws, stability.</li>
+          <li><a href="Training-Pipeline/ai-engineering-distributed-training.html"><strong>Distributed Training</strong></a><br>Parallelism, ZeRO, FSDP, clusters.</li>
+          <li><a href="Training-Pipeline/ai-engineering-fine-tuning.html"><strong>Fine-Tuning</strong></a><br>SFT, LoRA, QLoRA, adapters.</li>
+          <li><a href="Training-Pipeline/ai-engineering-post-training.html"><strong>Post-Training</strong></a><br>RLHF, DPO, alignment, preferences.</li>
+          <li><a href="Training-Pipeline/ai-engineering-reinforcement-learning.html"><strong>Reinforcement Learning</strong></a><br>MDPs, policy gradients, PPO, SAC, RL for LLMs, full derivations.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Prompting and Retrieval</h2>
+        <ul>
+          <li><a href="Prompting-and-Retrieval/ai-engineering-prompt-engineering.html"><strong>Prompt Engineering</strong></a><br>System prompts, CoT, sampling, injection.</li>
+          <li><a href="Prompting-and-Retrieval/ai-engineering-embeddings.html"><strong>Embeddings</strong></a><br>Vectors, contrastive training, hybrid search.</li>
+          <li><a href="Prompting-and-Retrieval/ai-engineering-vector-databases.html"><strong>Vector Databases</strong></a><br>ANN indexes, tuning, product comparison.</li>
+          <li><a href="Prompting-and-Retrieval/ai-engineering-rag.html"><strong>RAG</strong></a><br>Ingestion, chunking, retrieval, generation.</li>
+          <li><a href="Prompting-and-Retrieval/ai-engineering-prompt-compression.html"><strong>Prompt Compression</strong></a><br>LLMLingua, Headroom, when to compress, pros and cons.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Inference, Deployment, Operations</h2>
+        <ul>
+          <li><a href="Inference-Deployment-Operations/ai-engineering-inference-optimization.html"><strong>Inference Optimization</strong></a><br>KV cache, quantization, batching.</li>
+          <li><a href="Inference-Deployment-Operations/ai-engineering-deployment.html"><strong>Deployment</strong></a><br>Serving stacks, scaling, gateways.</li>
+          <li><a href="Inference-Deployment-Operations/ai-engineering-llmops-monitoring.html"><strong>LLMOps and Monitoring</strong></a><br>Logs, guardrails, cost, drift.</li>
+          <li><a href="Inference-Deployment-Operations/ai-engineering-evaluation.html"><strong>Evaluation</strong></a><br>Benchmarks, metrics, eval sets.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Agents and Protocols</h2>
+        <ul>
+          <li><a href="Agents-and-Protocols/ai-engineering-agents.html"><strong>Agents</strong></a><br>Tool use, ReAct, memory, multi-agent.</li>
+          <li><a href="Agents-and-Protocols/ai-engineering-mcp.html"><strong>MCP</strong></a><br>Model Context Protocol architecture.</li>
+        </ul>
+      </section>
+
+      <section id="frameworks">
+        <h2>Frameworks</h2>
+        <ul>
+          <li><a href="Frameworks/ai-engineering-frameworks-langchain.html"><strong>LangChain</strong></a><br>LCEL, runnables, prompts, RAG primitives, tools, and provider integrations.</li>
+          <li><a href="Frameworks/ai-engineering-frameworks-langgraph.html"><strong>LangGraph</strong></a><br>Stateful graphs, checkpoints, interrupts, streaming, and agent runtime.</li>
+          <li><a href="Frameworks/ai-engineering-frameworks-langfuse.html"><strong>Langfuse</strong></a><br>Tracing, scores, prompt management, datasets, experiments, and LLMOps analytics.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Safety and System Design</h2>
+        <ul>
+          <li><a href="Safety-and-System-Design/ai-engineering-safety.html"><strong>Safety</strong></a><br>Hallucination, jailbreaks, bias, PII.</li>
+          <li><a href="Safety-and-System-Design/ai-engineering-system-design.html"><strong>System Design</strong></a><br>End-to-end AI product architecture.</li>
+        </ul>
+      </section>
+    </div>
+
+  </main>
+
+  <footer>
+    <p><small><a href="../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../index.html">Home</a></small></p>
+  </footer>
+
+  <script src="../../assets/site.js"></script>
+  <script src="../../assets/search.js" defer></script>
+</body>
+
+</html>

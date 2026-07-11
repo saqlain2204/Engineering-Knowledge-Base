@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Transformers | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Transformers</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Transformer Architecture</h1>
+  <p>The mechanics behind every modern LLM. <a href="../../learn/Foundations-and-Architecture/ai-engineering-transformers.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Transformer Architecture</h2>
+<p>The mechanics behind every modern LLM.</p>
+
+<details><summary>Explain self-attention from first principles.</summary>
+<div><p>Each token is projected into Query, Key, and Value vectors. Attention scores are computed as the dot product of a token's Query with every other token's Key, scaled by <code>1/vd_k</code>, then passed through softmax to get weights. Those weights are used to combine the Value vectors, so each token's new representation is a weighted mixture of every other token's information - letting the model dynamically decide what to "attend to" regardless of distance.</p></div>
+</details>
+
+<details><summary>Why scale by vd_k in attention?</summary>
+<div><p>As dimension <code>d_k</code> grows, dot products grow in magnitude, pushing softmax into regions with extremely small gradients (saturation). Dividing by <code>vd_k</code> keeps the variance of the dot products roughly constant regardless of dimension, keeping softmax gradients well-behaved.</p></div>
+</details>
+
+<details><summary>What is multi-head attention and why use multiple heads instead of one big one?</summary>
+<div><p>Instead of one attention computation over the full embedding dimension, the model splits it into several smaller "heads" that each learn to attend to different types of relationships (syntax, coreference, position, etc.) in parallel, then concatenates and projects the results. This gives more representational diversity than a single attention operation at the same total parameter cost.</p></div>
+</details>
+
+<details><summary>Encoder-only vs decoder-only vs encoder-decoder - when is each used?</summary>
+<div>
+<ul>
+<li><strong>Encoder-only</strong> (BERT): bidirectional context, best for classification, embeddings, retrieval.</li>
+<li><strong>Decoder-only</strong> (GPT, LLaMA, Mistral): causal/autoregressive, generates text left-to-right - the dominant architecture for modern generative LLMs because it scales well and unifies pretraining with generation.</li>
+<li><strong>Encoder-decoder</strong> (T5, BART): encoder reads full input bidirectionally, decoder generates conditioned on it - strong for translation and structured seq2seq tasks.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is causal (masked) self-attention?</summary>
+<div><p>A mask is applied to the attention score matrix so each token can only attend to itself and earlier tokens (future positions are set to -infinity before softmax). This enforces autoregressive generation - the model can't "cheat" by seeing future tokens during training, which matches how it must generate at inference time.</p></div>
+</details>
+
+<details><summary>Positional encoding: absolute, learned, RoPE, ALiBi - how do they differ?</summary>
+<div>
+<ul>
+<li><strong>Absolute sinusoidal</strong> (original Transformer): fixed sin/cos functions added to embeddings; doesn't extrapolate well beyond trained length.</li>
+<li><strong>Learned absolute</strong> (GPT-2/BERT): a trainable embedding per position; also struggles beyond max trained length.</li>
+<li><strong>RoPE</strong> (Rotary Position Embedding - LLaMA, Mistral, most modern LLMs): rotates Query/Key vectors by an angle proportional to position, encoding relative position directly into the dot product, which generalizes better to longer contexts.</li>
+<li><strong>ALiBi</strong>: adds a fixed linear penalty to attention scores based on distance between tokens, no learned parameters, extrapolates well to longer sequences than seen in training.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is the feed-forward (MLP) block inside a transformer layer doing?</summary>
+<div><p>After attention mixes information across tokens, the position-wise feed-forward network (typically expand to 4x hidden dim, apply a non-linearity like GELU/SwiGLU, then project back down) processes each token independently, adding capacity for the model to transform and store learned features. Most of a transformer's parameters live here, and it's widely believed this is where a lot of factual "knowledge" is stored.</p></div>
+</details>
+
+<details><summary>What is Mixture-of-Experts (MoE) and why do models like Mixtral use it?</summary>
+<div><p>Instead of one dense feed-forward block per layer, MoE has many "expert" feed-forward sub-networks and a router that picks a small subset (e.g., top-2) to activate per token. This decouples total parameter count from compute-per-token: the model can have far more total parameters (more capacity) while only a fraction are used per forward pass, giving better performance per unit of inference compute.</p></div>
+</details>
+
+<details><summary>Multi-Head vs Multi-Query vs Grouped-Query Attention - why do they matter for inference?</summary>
+<div><p>Standard Multi-Head Attention (MHA) gives every head its own Key/Value projections, which means a large KV cache at inference. Multi-Query Attention (MQA) shares a single Key/Value head across all query heads, drastically shrinking the KV cache and speeding up decoding, at some quality cost. Grouped-Query Attention (GQA) is the middle ground - groups of query heads share a Key/Value head - used in LLaMA-2/3 and Mistral to balance inference speed with quality.</p></div>
+</details>
+
+
+<details><summary>What is SwiGLU and why do modern LLMs use it?</summary>
+<div><p>SwiGLU is a gated activation in the feed-forward block: split the projected hidden state, apply Swish to one half, multiply with the other, then project down. It improves quality vs plain GELU-MLP at similar parameter count and is used in LLaMA, PaLM, and most recent open models.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+  <title>Attention Is All You Need - AI Engineering</title>
+  <link rel="stylesheet" href="../../styles.css">
+  <!-- MathJax for rendering math formulas -->
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    };
+  </script>
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../ai-engineering.html">AI Engineering</a> &rsaquo; Research</p>
+  </nav>
+  <h1>Attention Is All You Need</h1>
+  <p>The definitive deep-dive into the 2017 paper by Vaswani et al. that introduced the Transformer architecture.</p>
+</header>
+
+<main class="learn-page">
+
+  <section>
+    <h2>1. The Problem with Prior Architectures</h2>
+    <p>Before the Transformer, the dominant sequence transduction models for Natural Language Processing (NLP) tasks like machine translation were based on complex recurrent or convolutional neural networks (RNNs, LSTMs, GRUs) often arranged in an encoder-decoder configuration.</p>
+    <ul>
+      <li><strong>Sequential Computation:</strong> RNNs process sequences token by token (from left to right or right to left). This inherent sequential nature precludes parallelization within training examples, becoming a critical bottleneck for longer sequence lengths.</li>
+      <li><strong>Long-Range Dependencies:</strong> Learning dependencies between distant positions in a sequence is incredibly difficult for RNNs due to the vanishing gradient problem. While LSTMs and GRUs partially mitigated this, they still struggled with very long sequences.</li>
+      <li><strong>Convolutional Alternatives:</strong> Models like ByteNet and ConvS2S used CNNs to parallelize computation. However, the number of operations required to relate signals from two arbitrary input or output positions grew in the distance between positions (linearly for ConvS2S, logarithmically for ByteNet), making it hard to learn dependencies between distant positions.</li>
+    </ul>
+    <p><strong>The Transformer's Solution:</strong> The Transformer eschews recurrence and convolutions entirely, relying solely on an <em>attention mechanism</em> to draw global dependencies between input and output. This allows for significantly more parallelization and reduces the number of sequential operations to a constant $O(1)$.</p>
+  </section>
+
+  <section>
+    <h2>2. Model Architecture overview</h2>
+    <p>The Transformer follows the standard encoder-decoder architecture, but replaces the recurrent layers with stacked self-attention and point-wise, fully connected layers.</p>
+    
+    <h3>The Encoder</h3>
+    <p>The encoder is composed of a stack of $N = 6$ identical layers. Each layer has two sub-layers:</p>
+    <ol>
+      <li><strong>Multi-Head Self-Attention Mechanism.</strong></li>
+      <li><strong>Position-wise Fully Connected Feed-Forward Network.</strong></li>
+    </ol>
+    <p>A <strong>residual connection</strong> is employed around each of the two sub-layers, followed by <strong>Layer Normalization</strong>. That is, the output of each sub-layer is $LayerNorm(x + Sublayer(x))$, where $Sublayer(x)$ is the function implemented by the sub-layer itself. To facilitate these residual connections, all sub-layers in the model, as well as the embedding layers, produce outputs of dimension $d_{model} = 512$.</p>
+
+    <h3>The Decoder</h3>
+    <p>The decoder is also composed of a stack of $N = 6$ identical layers. In addition to the two sub-layers in each encoder layer, the decoder inserts a third sub-layer:</p>
+    <ol>
+      <li><strong>Masked Multi-Head Self-Attention Mechanism:</strong> The self-attention sub-layer is modified to prevent positions from attending to subsequent positions (looking into the future). This masking, combined with the fact that output embeddings are offset by one position, ensures that the predictions for position $i$ can depend only on the known outputs at positions less than $i$.</li>
+      <li><strong>Multi-Head Attention over Encoder Output:</strong> This layer performs attention over the output of the encoder stack (queries come from previous decoder layer, keys and values come from the encoder output).</li>
+      <li><strong>Position-wise Feed-Forward Network.</strong></li>
+    </ol>
+    <p>Like the encoder, residual connections and Layer Normalization are applied around each sub-layer.</p>
+  </section>
+
+  <section>
+    <h2>3. Deep Dive into Attention</h2>
+    <p>An attention function maps a <strong>Query (Q)</strong> and a set of <strong>Key (K) - Value (V)</strong> pairs to an output. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.</p>
+
+    <h3>3.1 Scaled Dot-Product Attention</h3>
+    <p>The specific attention mechanism used is "Scaled Dot-Product Attention."</p>
+    <p><strong>Formula:</strong> $Attention(Q, K, V) = softmax(\frac{QK^T}{\sqrt{d_k}})V$</p>
+    <ul>
+      <li><strong>Q (Queries):</strong> Matrix of queries, with dimension $d_k$.</li>
+      <li><strong>K (Keys):</strong> Matrix of keys, with dimension $d_k$.</li>
+      <li><strong>V (Values):</strong> Matrix of values, with dimension $d_v$.</li>
+    </ul>
+    <p><strong>Step-by-step computation:</strong></p>
+    <ol>
+      <li>Compute the dot products of the query with all keys: $QK^T$. This results in a score that indicates how much focus to place on other parts of the sequence.</li>
+      <li>Divide each result by $\sqrt{d_k}$.</li>
+      <li>Apply a softmax function to obtain the weights (probabilities summing to 1) on the values.</li>
+      <li>Multiply the softmax weights by the Value matrix $V$.</li>
+    </ol>
+    <p><strong>Why scale by $\frac{1}{\sqrt{d_k}}$?</strong><br>For large values of $d_k$ (the dimension of keys/queries), the dot products grow very large in magnitude. This pushes the softmax function into regions where it has extremely small (vanishing) gradients, severely slowing down learning. Scaling by the inverse square root of $d_k$ pulls the dot products back to a variance of $1$, keeping the gradients stable.</p>
+
+    <h3>3.2 Multi-Head Attention</h3>
+    <p>Instead of performing a single attention function with $d_{model}$-dimensional keys, values, and queries, the authors found it beneficial to linearly project the queries, keys, and values $h$ times with different, learned linear projections to $d_k$, $d_k$, and $d_v$ dimensions, respectively.</p>
+    <p>Attention is applied in parallel to each of these $h$ projected versions, yielding $d_v$-dimensional output values. These are concatenated and once again projected, resulting in the final values.</p>
+    <p><strong>Formula:</strong></p>
+    <p>$MultiHead(Q, K, V) = Concat(head_1, ..., head_h)W^O$</p>
+    <p>where $head_i = Attention(QW_i^Q, KW_i^K, VW_i^V)$</p>
+    <p><strong>Dimensions used in the paper:</strong> $h = 8$ parallel attention layers (heads). For each of these, $d_k = d_v = d_{model} / h = 512 / 8 = 64$. Because the dimension of each head is reduced, the total computational cost is similar to that of single-head attention with full dimensionality.</p>
+    <p><strong>Why Multi-Head?</strong> It allows the model to jointly attend to information from different representation subspaces at different positions. A single attention head would average this information out.</p>
+
+    <h3>3.3 How Attention is Used in the Model</h3>
+    <ul>
+      <li><strong>Encoder-Decoder Attention:</strong> Queries come from the previous decoder layer. Keys and Values come from the output of the encoder. This allows every position in the decoder to attend over all positions in the input sequence. (Mimics standard seq2seq attention).</li>
+      <li><strong>Encoder Self-Attention:</strong> In a self-attention layer, all of the keys, values, and queries come from the same place—the output of the previous layer in the encoder. Each position in the encoder can attend to all positions in the previous layer.</li>
+      <li><strong>Decoder Masked Self-Attention:</strong> Each position in the decoder can attend to all positions in the decoder up to and including that position. Future positions are masked out (set to $-\infty$ before the softmax) to preserve the auto-regressive property, ensuring predictions only depend on known past outputs.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>4. Position-wise Feed-Forward Networks (FFN)</h2>
+    <p>In addition to attention sub-layers, each of the layers in the encoder and decoder contains a fully connected feed-forward network, which is applied to each position separately and identically.</p>
+    <p><strong>Formula:</strong> $FFN(x) = max(0, xW_1 + b_1)W_2 + b_2$</p>
+    <p>This consists of two linear transformations with a ReLU activation in between. While the linear transformations are the same across different positions, they use different parameters from layer to layer. Another way to describe this is as two convolutions with kernel size 1.</p>
+    <p><strong>Dimensions:</strong> The input and output dimensionality is $d_{model} = 512$, and the inner layer has dimensionality $d_{ff} = 2048$.</p>
+  </section>
+
+  <section>
+    <h2>5. Embeddings and Softmax</h2>
+    <p>Similarly to other sequence transduction models, learned embeddings are used to convert the input tokens and output tokens to vectors of dimension $d_{model}$. A learned linear transformation and softmax function are used to convert the decoder output to predicted next-token probabilities.</p>
+    <p>The Transformer shares the same weight matrix between the two embedding layers (input and output) and the pre-softmax linear transformation. In the embedding layers, those weights are multiplied by $\sqrt{d_{model}}$.</p>
+  </section>
+
+  <section>
+    <h2>6. Positional Encoding</h2>
+    <p>Since the model contains absolutely no recurrence and no convolution, it has no inherent sense of sequence order. If the words in a sentence were shuffled, a purely attention-based model would process them identically.</p>
+    <p>To inject information about the relative or absolute position of the tokens, "positional encodings" are added to the input embeddings at the bottoms of the encoder and decoder stacks. The positional encodings have the same dimension $d_{model}$ as the embeddings, so they can be summed.</p>
+    <p>The paper uses sine and cosine functions of different frequencies:</p>
+    <p>$PE_{(pos, 2i)} = sin(pos / 10000^{2i/d_{model}})$</p>
+    <p>$PE_{(pos, 2i+1)} = cos(pos / 10000^{2i/d_{model}})$</p>
+    <p>Where $pos$ is the position and $i$ is the dimension. Each dimension of the positional encoding corresponds to a sinusoid. The wavelengths form a geometric progression from $2\pi$ to $10000 \cdot 2\pi$.</p>
+    <p><strong>Why this function?</strong> The authors hypothesized it would allow the model to easily learn to attend by relative positions, since for any fixed offset $k$, $PE_{pos+k}$ can be represented as a linear function of $PE_{pos}$. Furthermore, it allows the model to extrapolate to sequence lengths longer than the ones encountered during training.</p>
+  </section>
+
+  <section>
+    <h2>7. Why Self-Attention? (Complexity Comparison)</h2>
+    <p>The paper evaluates self-attention against recurrent and convolutional layers based on three desiderata:</p>
+    <ol>
+      <li><strong>Total computational complexity per layer.</strong></li>
+      <li><strong>Amount of computation that can be parallelized</strong> (measured by the minimum number of sequential operations required).</li>
+      <li><strong>Path length between long-range dependencies</strong> in the network.</li>
+    </ol>
+    <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; border-collapse: collapse; margin-top: 1rem; margin-bottom: 1rem;">
+      <thead>
+        <tr>
+          <th style="text-align:left">Layer Type</th>
+          <th style="text-align:left">Complexity per Layer</th>
+          <th style="text-align:left">Sequential Operations</th>
+          <th style="text-align:left">Maximum Path Length</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Self-Attention</td>
+          <td>$O(n^2 \cdot d)$</td>
+          <td>$O(1)$</td>
+          <td>$O(1)$</td>
+        </tr>
+        <tr>
+          <td>Recurrent</td>
+          <td>$O(n \cdot d^2)$</td>
+          <td>$O(n)$</td>
+          <td>$O(n)$</td>
+        </tr>
+        <tr>
+          <td>Convolutional</td>
+          <td>$O(k \cdot n \cdot d^2)$</td>
+          <td>$O(1)$</td>
+          <td>$O(log_k(n))$</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><em>(where $n$ is sequence length, $d$ is representation dimension, $k$ is kernel size)</em></p>
+    <p>When sequence length $n$ is smaller than the representation dimensionality $d$ (which is typical in state-of-the-art models like Word-Piece translations), self-attention is computationally faster than RNNs. Moreover, self-attention requires a constant $O(1)$ sequential operations, making it highly parallelizable, and connects all positions with an $O(1)$ path length, making it exceptionally good at learning long-range dependencies.</p>
+  </section>
+
+  <section>
+    <h2>8. Training Regimen and Regularization</h2>
+    
+    <h3>8.1 Optimizer</h3>
+    <p>The Adam optimizer was used with $\beta_1 = 0.9, \beta_2 = 0.98$, and $\epsilon = 10^{-9}$. They varied the learning rate over the course of training, according to the formula:</p>
+    <p>$lrate = d_{model}^{-0.5} \cdot \min(step\_num^{-0.5}, step\_num \cdot warmup\_steps^{-1.5})$</p>
+    <p>This corresponds to increasing the learning rate linearly for the first $warmup\_steps$ (set to 4000), and decreasing it thereafter proportionally to the inverse square root of the step number.</p>
+
+    <h3>8.2 Regularization</h3>
+    <p>Three types of regularization were employed:</p>
+    <ol>
+      <li><strong>Residual Dropout:</strong> Dropout ($P_{drop} = 0.1$) was applied to the output of each sub-layer, before it is added to the sub-layer input and normalized. It was also applied to the sums of the embeddings and the positional encodings in both the encoder and decoder stacks.</li>
+      <li><strong>Label Smoothing:</strong> During training, label smoothing of value $\epsilon_{ls} = 0.1$ was employed. This hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.</li>
+    </ol>
+    
+    <h3>8.3 Hardware and Schedule</h3>
+    <p>The base model was trained on 8 NVIDIA P100 GPUs for 100,000 steps or 12 hours. The big model ($d_{model} = 1024, h=16, d_{ff}=4096$) was trained for 300,000 steps (3.5 days).</p>
+  </section>
+
+  <section>
+    <h2>9. Results</h2>
+    <p>On the WMT 2014 English-to-German translation task, the big Transformer model achieved a new state-of-the-art BLEU score of <strong>28.4</strong>, outperforming the best previously reported models (including ensembles) by over 2.0 BLEU. The base model surpassed all previously published models and ensembles, at a fraction of the training cost of any of the competitive models.</p>
+    <p>On the WMT 2014 English-to-French translation task, the big model achieved a BLEU score of <strong>41.0</strong>, outperforming all previously published single models, at less than 1/4 the training cost of the previous state-of-the-art model.</p>
+  </section>
+
+  <section>
+    <h2>Summary: Why it Changed AI Forever</h2>
+    <p>By discarding sequential recurrence in favor of an architecture built entirely out of Multi-Head Self-Attention, "Attention Is All You Need" broke the sequential bottleneck of RNNs. This paradigm shift unlocked unprecedented scalability. Hardware (GPUs/TPUs) could now efficiently train massive models on gargantuan datasets because the computation was highly parallelizable.</p>
+    <p>This direct scalability gave birth to the era of LLMs (Large Language Models)—including BERT, GPT-2, GPT-3, GPT-4, Llama, and beyond. The Transformer is arguably the most impactful neural network architecture developed in the 21st century.</p>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering.html">Back to AI Engineering</a></small></p>
+</footer>
+
+  <script src="../../assets/site.js"></script>
+  <script src="../../assets/search.js" defer></script>
+</body>
+</html>

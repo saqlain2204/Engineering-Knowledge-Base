@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>SLMs | AI Engineering</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; SLMs</p>
+  </nav>
+  <h1>Small Language Models</h1>
+  <p>Compact models for edge deployment, cost control, and routing in multi-model systems.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>What SLMs Are</h2>
+    <p>Small language models (SLMs) are transformer LLMs with relatively few parameters, often from hundreds of millions to a few billion. Examples include Phi, Gemma 2B, Mistral 7B, and distilled variants of larger teachers. They trade peak capability for lower latency, smaller memory footprint, and cheaper inference at scale.</p>
+    <p>SLMs are not "toy models." When trained on high-quality data and aligned properly, they handle classification, extraction, routing, on-device assistants, and narrow domain tasks competitively with much larger models from prior generations.</p>
+  </section>
+
+  <section>
+    <h2>Why Teams Use SLMs</h2>
+    <ul>
+      <li><strong>Cost</strong> - fewer FLOPs per token means lower serving bills</li>
+      <li><strong>Latency</strong> - smaller matrices and KV caches improve time-to-first-token</li>
+      <li><strong>Privacy</strong> - on-prem or on-device inference keeps data local</li>
+      <li><strong>Reliability</strong> - simpler models in a pipeline reduce dependency on external APIs</li>
+      <li><strong>Specialization</strong> - fine-tuning a 3B model on domain data can beat a general 70B model on that niche</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Knowledge Distillation</h2>
+    <p>Distillation transfers behavior from a large teacher model to a smaller student. The student may learn from teacher-generated outputs (synthetic data), soft probability distributions (logits), or intermediate representations. Microsoft Phi models famously used textbook-quality synthetic data to punch above their size class.</p>
+    <p>Distillation is central to SLM strategy: you compress general capability from an API model or internal large checkpoint into a deployable small model for production hot paths.</p>
+    <div class="callout">
+      <strong>Quality check:</strong> Distilled models inherit teacher biases and hallucination patterns. Evaluate the student independently; do not assume parity because the teacher is strong.
+    </div>
+  </section>
+
+  <section>
+    <h2>Edge and On-Device Deployment</h2>
+    <p>Running SLMs on laptops, phones, or embedded hardware requires aggressive quantization (INT8, INT4), kernel optimizations, and sometimes hardware-specific runtimes (Core ML, NNAPI, ONNX Runtime). Models between 1B and 4B parameters quantized to 4-bit often fit consumer GPU or NPU memory budgets.</p>
+    <p>Constraints include battery, thermal limits, offline operation, and model update delivery. Products may ship a frozen SLM with periodic OTA updates rather than cloud-dynamic routing.</p>
+  </section>
+
+  <section>
+    <h2>Routing in Multi-Model Systems</h2>
+    <p>A common architecture uses an SLM as a router or first responder:</p>
+    
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2310.09444" rel="noopener noreferrer">FrugalGPT</a></small></p>
+    <pre><code>def route_query(query: str, slm, llm, confidence_threshold=0.85):
+    intent, confidence = slm.classify(query)
+    if confidence >= confidence_threshold and intent != "complex_reasoning":
+        return slm.generate(query)
+    return llm.generate(query)  # escalate to larger model</code></pre>
+    <ul>
+      <li>SLM handles intent classification, entity extraction, or simple replies</li>
+      <li>Complex queries escalate to a larger model</li>
+      <li>Caching and RAG retrieval run before any generation to shrink needed model size</li>
+    </ul>
+    <p>Routing policies can be rule-based, learned classifiers, or the SLM itself emitting a structured "escalate" signal. The goal is to minimize expensive large-model calls without hurting user-visible quality on hard tasks.</p>
+  </section>
+
+  <section>
+    <h2>Tradeoffs and When Not to Use an SLM</h2>
+    <p>SLMs struggle with multi-step reasoning across diverse domains, long-horizon planning, rare knowledge without RAG, and nuanced safety edge cases. For legal, medical, or high-stakes generation, larger models plus retrieval and human review remain common.</p>
+    <p>The engineering sweet spot is narrowing the task: structured JSON output, single-domain QA with good retrieval, or preprocessing stages in an agent pipeline where the SLM is one component, not the entire brain.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../../interview/Foundations-and-Architecture/ai-engineering-interview-slms.html">Interview questions on SLMs</a></p>
+    <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+
+

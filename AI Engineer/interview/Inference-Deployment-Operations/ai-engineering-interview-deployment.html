@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Deployment | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Deployment</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Deployment and Serving</h1>
+  <p>Getting a model into production reliably. <a href="../../learn/Inference-Deployment-Operations/ai-engineering-deployment.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Deployment & Serving</h2>
+<p>Getting a model into production reliably.</p>
+
+<details><summary>What are the main serving frameworks for LLMs and how do they differ?</summary>
+<div>
+<ul>
+<li><strong>vLLM</strong> - open-source, known for PagedAttention and continuous batching, very strong throughput for open-weight models, widely used default.</li>
+<li><strong>TGI (Text Generation Inference, Hugging Face)</strong> - production-ready serving with quantization support, good HF ecosystem integration.</li>
+<li><strong>NVIDIA Triton / TensorRT-LLM</strong> - highly optimized for NVIDIA hardware, strong for teams needing maximum raw throughput and willing to invest in tuning.</li>
+<li><strong>Managed APIs</strong> (OpenAI, Anthropic, Bedrock, Vertex) - no infra to manage at all, pay-per-token, best when you don't need a self-hosted open-weight model.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>When should you self-host a model vs use a managed API?</summary>
+<div><p>Self-hosting makes sense when you have high, predictable volume (cost amortization beats per-token API pricing), need data to never leave your infrastructure (compliance/privacy), need fine-grained control (custom fine-tunes, latency tuning), or need to avoid vendor rate limits. Managed APIs make sense for lower/unpredictable volume, faster time-to-market, access to frontier-quality models you couldn't feasibly host yourself, and avoiding the operational burden of GPU infra, scaling, and monitoring.</p></div>
+</details>
+
+<details><summary>How do you think about autoscaling for LLM inference workloads?</summary>
+<div><p>LLM inference has an unusually slow "cold start" (loading multi-gigabyte weights onto a GPU can take tens of seconds to minutes), so naive request-based autoscaling (like typical web services) causes severe latency spikes during scale-up. Common mitigations: keep a warm minimum pool of instances, predictive/scheduled scaling based on known traffic patterns, and separating scaling decisions from per-request signals by using queue depth or GPU utilization as the scaling trigger instead.</p></div>
+</details>
+
+<details><summary>How do you version and roll out changes to prompts, models, or fine-tunes safely?</summary>
+<div>
+<ul>
+<li>Version prompts and configs like code (git), not as strings scattered through application logic.</li>
+<li>Use canary/shadow deployments - route a small % of traffic to the new version and compare metrics before full rollout.</li>
+<li>Keep automated evaluation suites that run on every prompt/model change, not just at initial launch.</li>
+<li>Maintain the ability to instantly roll back to the previous known-good prompt/model version.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is a model gateway/router and why do production systems use one?</summary>
+<div><p>A gateway sits between application code and multiple LLM providers/models, handling routing (e.g. cheap model for easy queries, powerful model for hard ones), fallback (retry on a different provider if one is down/rate-limited), unified logging/cost tracking, and caching - decoupling application code from any single provider's API and enabling multi-model strategies without rewriting call sites.</p></div>
+</details>
+
+<details><summary>How do you handle rate limits and reliability when calling third-party LLM APIs at scale?</summary>
+<div><p>Use exponential backoff with jitter on retries, request queuing to smooth burst traffic, multiple API keys/provider fallback for redundancy, circuit breakers to fail fast during outages rather than compounding latency, and caching identical/near-identical requests to reduce call volume in the first place.</p></div>
+</details>
+
+
+<details><summary>How do you deploy LLMs on Kubernetes?</summary>
+<div><p>Package the serving runtime (vLLM, TGI) in containers with GPU node selectors, use HPA on queue depth or GPU utilization (not raw RPS), mount model weights from object storage or pre-baked images, and put a gateway in front for auth and routing. Use readiness probes that wait until weights are loaded to avoid cold-start traffic during rollouts.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

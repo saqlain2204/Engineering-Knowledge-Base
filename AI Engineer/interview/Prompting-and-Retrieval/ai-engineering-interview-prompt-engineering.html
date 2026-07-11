@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Prompt Engineering | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Prompt Engineering</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Prompt Engineering</h1>
+  <p>Getting reliable behavior without touching weights. <a href="../../learn/Prompting-and-Retrieval/ai-engineering-prompt-engineering.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Prompt Engineering</h2>
+<p>Getting reliable behavior without touching weights.</p>
+
+<details><summary>What is few-shot prompting and when does it help vs hurt?</summary>
+<div><p>Few-shot prompting gives the model example input-output pairs in the prompt itself so it infers the pattern/format without any weight updates. It helps most for formatting-sensitive or unusual tasks; it can hurt by consuming context budget, anchoring the model to the exact style of examples (reducing diversity), or introducing bias if examples aren't representative.</p></div>
+</details>
+
+<details><summary>Explain Chain-of-Thought (CoT) prompting and why it improves performance.</summary>
+<div><p>CoT asks the model to generate intermediate reasoning steps before the final answer ("let's think step by step"), rather than jumping straight to a conclusion. It helps because generating tokens sequentially gives the model a place to do computation via its own output - effectively more "thinking steps" - improving accuracy on multi-step reasoning, math, and logic tasks.</p></div>
+</details>
+
+<details><summary>What's the difference between zero-shot, few-shot, and CoT prompting?</summary>
+<div><p>Zero-shot gives only the instruction with no examples; few-shot adds example (input, output) pairs; CoT is orthogonal to both - it's about eliciting explicit reasoning steps and can be combined with zero-shot ("zero-shot CoT") or few-shot prompting.</p></div>
+</details>
+
+<details><summary>What is self-consistency prompting?</summary>
+<div><p>Instead of taking one CoT reasoning path, the model generates multiple independent reasoning paths (via sampling with temperature) for the same question, and the final answer is chosen by majority vote across paths - improving reliability on reasoning-heavy tasks at the cost of multiple generations.</p></div>
+</details>
+
+<details><summary>How do you design a robust system prompt for production?</summary>
+<div>
+<ul>
+<li>Be explicit about role, tone, and boundaries rather than assuming implicit understanding.</li>
+<li>Give concrete positive and negative examples, not just abstract rules.</li>
+<li>Specify output format precisely (e.g. exact JSON schema) if downstream code parses the output.</li>
+<li>Put the most important constraints near the start and end of the prompt (models weight the edges of context more reliably than the middle - the "lost in the middle" effect).</li>
+<li>Test against adversarial/edge-case inputs, not just happy-path examples.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is prompt injection and how do you defend against it?</summary>
+<div><p>Prompt injection is when untrusted input (e.g., a webpage or document the model reads) contains text designed to override the system's actual instructions ("ignore previous instructions and..."). Defenses include: clearly delimiting untrusted content, instructing the model to treat retrieved/tool content as data not commands, using a separate, more privileged system prompt channel where supported, output filtering, and least-privilege tool permissions so even a hijacked model can't cause damage.</p></div>
+</details>
+
+<details><summary>Why does temperature and top-p (nucleus) sampling matter, and how do you pick values?</summary>
+<div><p>Temperature scales the logits before softmax - low temperature (near 0) makes output deterministic and greedy, high temperature increases randomness/diversity. Top-p sampling restricts sampling to the smallest set of tokens whose cumulative probability exceeds <code>p</code>, avoiding low-probability "tail" tokens that greedy or high-temperature sampling might pick. For factual/deterministic tasks (extraction, code, classification) use low temperature (0-0.3); for creative tasks use higher temperature (0.7-1.0) - often combined with a moderate top-p (~0.9) rather than temperature alone.</p></div>
+</details>
+
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

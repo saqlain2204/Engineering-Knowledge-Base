@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Inference Optimization | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Inference Optimization</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Inference Optimization</h1>
+  <p>Making generation fast and cheap. <a href="../../learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Inference Optimization</h2>
+<p>Making generation fast and cheap.</p>
+
+<details><summary>Why is LLM inference memory-bandwidth-bound rather than compute-bound (usually)?</summary>
+<div><p>For autoregressive generation, the GPU must load the entire model's weights (and the growing KV cache) from memory for every single token generated, but only does a relatively small amount of compute per token (batch size of one token per step, per sequence). This means time is dominated by moving data from GPU memory to compute units, not by the FLOPs themselves - which is why techniques that reduce memory movement (quantization, better batching, smaller KV cache) give outsized speedups.</p></div>
+</details>
+
+<details><summary>What is the KV cache and why is it essential for efficient generation?</summary>
+<div><p>During autoregressive generation, each new token's attention needs the Key and Value vectors of all previous tokens. Without caching, you'd recompute K/V for the entire sequence at every new token (quadratic cost). The KV cache stores previously computed K/V vectors so each new token only computes its own K/V and reuses the rest, making generation linear instead of quadratic in sequence length - at the cost of memory that grows with sequence length and batch size.</p></div>
+</details>
+
+<details><summary>Explain quantization (INT8, INT4, GPTQ, AWQ) for inference.</summary>
+<div><p>Quantization represents model weights (and sometimes activations) in lower precision (8-bit or 4-bit integers instead of 16/32-bit floats), shrinking memory footprint and increasing memory-bandwidth-bound throughput, with some quality loss. <strong>GPTQ</strong> quantizes layer-by-layer to minimize output error introduced by quantization using a calibration dataset. <strong>AWQ</strong> (Activation-aware Weight Quantization) identifies and preserves the small subset of weights most important for activations at full precision, quantizing the rest more aggressively, generally giving better quality than naive quantization at the same bit-width.</p></div>
+</details>
+
+<details><summary>What is continuous (in-flight) batching and why does it beat static batching for LLM serving?</summary>
+<div><p>Static batching waits for a fixed batch of requests, processes them together, and only starts the next batch once every sequence in the current one has finished - wasting GPU cycles on requests that finished early while waiting for the longest one. Continuous batching (used by vLLM, TGI) dynamically adds new requests into the batch and removes completed ones at each generation step, keeping the GPU consistently full and dramatically improving throughput for real-world traffic with variable-length outputs.</p></div>
+</details>
+
+<details><summary>What is PagedAttention (as used in vLLM) and what problem does it solve?</summary>
+<div><p>Naively, KV caches are allocated as large contiguous blocks sized for the maximum possible sequence length, wasting significant GPU memory on unused space (internal fragmentation) and making memory management for many concurrent sequences inefficient. PagedAttention borrows the idea of OS virtual memory paging - the KV cache is split into small fixed-size blocks that are allocated on demand and can be non-contiguous, dramatically reducing wasted memory and allowing far higher batch sizes/throughput for the same GPU memory.</p></div>
+</details>
+
+<details><summary>What is speculative decoding?</summary>
+<div><p>A small, fast "draft" model generates several candidate tokens ahead, and the large target model verifies them all in a single forward pass (which is cheap because verification is parallelizable, unlike generation). Correct draft tokens are accepted for free; the first incorrect one is corrected by the target model. Because verification is much cheaper than generating token-by-token with the large model, this can significantly speed up generation with mathematically identical output distribution to using the large model alone.</p></div>
+</details>
+
+<details><summary>What is knowledge distillation and how does it differ from quantization?</summary>
+<div><p>Distillation trains a smaller "student" model to mimic a larger "teacher" model's outputs (or output distributions), transferring capability into a genuinely smaller architecture with fewer parameters. Quantization keeps the same architecture and parameter count but represents each weight with fewer bits. They're complementary - you can quantize a distilled model for further gains.</p></div>
+</details>
+
+<details><summary>What is prefill vs decode, and why do serving systems sometimes separate them onto different hardware?</summary>
+<div><p>Prefill is the initial pass that processes the entire input prompt at once (compute-bound, highly parallel, good GPU utilization). Decode is the token-by-token generation phase (memory-bandwidth-bound, low utilization per step). Because these phases have very different resource profiles, some high-throughput serving architectures separate them onto different GPU pools (prefill-decode disaggregation) so each can be optimized/scaled independently rather than sharing hardware inefficiently.</p></div>
+</details>
+
+<details><summary>How do you reduce latency for a chat application beyond model-level optimizations?</summary>
+<div>
+<ul>
+<li><strong>Streaming</strong> - send tokens to the user as they're generated instead of waiting for the full response, improving perceived latency (time-to-first-token) even if total generation time is unchanged.</li>
+<li><strong>Prompt caching</strong> - cache the KV state of a static/shared prefix (e.g. system prompt) across requests so it isn't recomputed every time.</li>
+<li><strong>Smaller/distilled models</strong> for latency-sensitive sub-tasks, reserving the largest model for what actually needs it.</li>
+<li><strong>Parallelizing independent sub-calls</strong> instead of chaining them sequentially where possible.</li>
+</ul>
+</div>
+</details>
+
+
+<details><summary>What is FlashAttention and why does it matter?</summary>
+<div><p>FlashAttention is an IO-aware attention implementation that tiles computation to reduce reads/writes between GPU HBM and SRAM. It produces the same output as standard attention but faster and with lower memory, enabling longer sequences and larger batches. FlashAttention-2/3 extend this for modern GPUs and is standard in training and inference stacks.</p></div>
+</details>
+
+<details><summary>What is KV cache quantization?</summary>
+<div><p>Storing KV cache in lower precision (INT8, FP8) cuts memory during decode, allowing more concurrent users per GPU. Quality impact is usually small compared to weight quantization. It pairs well with GQA/MQA since the cache is already smaller.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Fine-Tuning | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Fine-Tuning</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Fine-Tuning and PEFT</h1>
+  <p>Adapting a base model to a task or behavior. <a href="../../learn/Training-Pipeline/ai-engineering-fine-tuning.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Fine-Tuning & PEFT</h2>
+<p>Adapting a base model to a task or behavior.</p>
+
+<details><summary>Full fine-tuning vs PEFT - when do you choose each?</summary>
+<div><p>Full fine-tuning updates every parameter - best quality ceiling but expensive in compute/memory (needs optimizer states for the whole model) and risks catastrophic forgetting. PEFT (Parameter-Efficient Fine-Tuning) methods like LoRA update a small fraction of parameters, are far cheaper, allow swapping many task-specific adapters on one base model, and are the default choice unless you have a large compute budget and need to push absolute best performance on a very different domain/language.</p></div>
+</details>
+
+<details><summary>Explain LoRA in depth.</summary>
+<div><p>LoRA (Low-Rank Adaptation) freezes the original weight matrix <code>W</code> and instead learns a low-rank decomposition <code>?W = A�B</code> where A and B are much smaller matrices (rank r, typically 8-64), added to the frozen weight at inference: <code>W' = W + A�B</code>. Because the update is low-rank, the number of trainable parameters is a tiny fraction of the full model, memory and compute needs drop drastically, and multiple LoRA adapters can be trained and swapped in/out on the same frozen base model.</p></div>
+</details>
+
+<details><summary>What is QLoRA and how does it save even more memory?</summary>
+<div><p>QLoRA quantizes the frozen base model to 4-bit precision (using a specialized NF4 data type designed for normally-distributed weights) and keeps LoRA adapters in higher precision for training, along with techniques like double quantization and paged optimizers to manage memory spikes. This makes it possible to fine-tune very large models (e.g. 65B+) on a single high-memory consumer/prosumer GPU.</p></div>
+</details>
+
+<details><summary>What is catastrophic forgetting and how do you prevent it during fine-tuning?</summary>
+<div><p>Catastrophic forgetting is when fine-tuning on a narrow dataset degrades the model's general capabilities learned during pretraining. Mitigations: use a low learning rate, fewer epochs, mix in a small amount of general-purpose data alongside task-specific data, use PEFT (which touches fewer parameters), and evaluate on general benchmarks after fine-tuning, not just the target task.</p></div>
+</details>
+
+<details><summary>What is instruction tuning / SFT (Supervised Fine-Tuning)?</summary>
+<div><p>SFT trains the base (next-token-prediction) model on curated (instruction, response) pairs so it learns to follow instructions and produce helpful, well-formatted answers rather than just continuing text. It's the step that turns a raw pretrained model into something that behaves like an assistant, and it typically precedes RLHF/DPO.</p></div>
+</details>
+
+<details><summary>How do you choose LoRA rank and which layers to target?</summary>
+<div><p>Rank controls capacity of the adapter - low rank (4-8) is enough for narrow stylistic/format adaptation, higher rank (32-64) helps for larger domain shifts or new capabilities, at higher memory/compute cost. Applying LoRA to attention projection matrices (<code>q_proj</code>, <code>k_proj</code>, <code>v_proj</code>, <code>o_proj</code>) is the common baseline; extending to the MLP layers as well often improves quality further on harder tasks at additional cost - this is usually decided empirically via ablation.</p></div>
+</details>
+
+<details><summary>What data volume and format do you need for effective fine-tuning?</summary>
+<div><p>Quality and diversity matter far more than raw volume - a few thousand carefully curated, diverse, correctly-formatted examples often beat hundreds of thousands of noisy ones. Data should closely match the target deployment distribution (same style of prompts/tasks the model will actually see), be deduplicated, and formatted consistently with the prompt template that will be used at inference.</p></div>
+</details>
+
+
+<details><summary>What is DoRA and how does it differ from LoRA?</summary>
+<div><p>DoRA (Weight-Decomposed Low-Rank Adaptation) decomposes weight updates into magnitude and direction components, fine-tuning each separately. It often matches or beats LoRA quality at similar parameter counts, especially on reasoning tasks, with modest extra compute.</p></div>
+</details>
+
+<details><summary>When would you use full fine-tuning instead of LoRA?</summary>
+<div><p>When the domain shift is large (new language, entirely new modality), you need maximum quality and have GPU budget for optimizer states on all parameters, or LoRA ablations plateau. Full fine-tuning also avoids adapter serving complexity when you ship one static model.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

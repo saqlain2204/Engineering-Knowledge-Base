@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>LLMs | AI Engineering</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; LLMs</p>
+  </nav>
+  <h1>Large Language Models</h1>
+  <p>What defines an LLM, how scaling and training shape capability, and how to choose between open weights and APIs.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>What Makes a Model "Large"</h2>
+    <p>Large language models are transformer-based neural networks trained on massive text corpora to predict the next token. "Large" refers to both parameter count (billions to hundreds of billions) and training compute (FLOPs, GPU-hours). Scale unlocks emergent behaviors: in-context learning, chain-of-thought reasoning, tool use, and broad task generalization without task-specific training.</p>
+    <p>Capability is not only about parameters. Data quality, training duration, architecture choices (context length, MoE vs dense), and post-training alignment all shift the effective intelligence of a model at a given size.</p>
+    
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2203.15556" rel="noopener noreferrer">Chinchilla scaling laws</a></small></p>
+  </section>
+
+  <section>
+    <h2>Scaling Laws</h2>
+    <p>Empirical scaling laws show that loss decreases predictably as you increase model size, dataset size, and compute budget. The Chinchilla paper argued many models were under-trained: for a fixed compute budget, smaller models trained on more tokens often outperform larger models trained on fewer tokens.</p>
+    <pre><code># Chinchilla rule of thumb: train on ~20 tokens per parameter
+# Training FLOPs � 6 � N � D  (N = params, D = training tokens)
+
+params = 7_000_000_000
+tokens = 20 * params          # ~140B tokens for a 7B model
+</code></pre>
+    <p>Practical implications for engineering teams:</p>
+    <ul>
+      <li>Bigger is not always better per dollar at inference time</li>
+      <li>Training token count should scale with parameter count</li>
+      <li>Evaluation on target tasks matters more than parameter bragging rights</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Model Lifecycle</h2>
+    <p>A production-grade LLM typically moves through these stages:</p>
+    <ul>
+      <li><strong>Pretraining</strong> on broad internet, books, and code corpora</li>
+      <li><strong>Supervised fine-tuning (SFT)</strong> on instruction-response pairs</li>
+      <li><strong>Post-training alignment</strong> via RLHF, DPO, or similar preference optimization</li>
+      <li><strong>Evaluation</strong> on benchmarks and custom task suites</li>
+      <li><strong>Deployment</strong> behind APIs or on owned infrastructure</li>
+      <li><strong>Monitoring and iteration</strong> as usage patterns and failure modes surface</li>
+    </ul>
+    <div class="callout">
+      <strong>Base vs instruct vs chat:</strong> Base models predict continuation without instruction following. Instruct/chat variants are fine-tuned for conversational use and should be the default in product features unless you explicitly need raw completion behavior.
+    </div>
+  </section>
+
+  <section>
+    <h2>Open Weights vs API Models</h2>
+    <h3>API-hosted models</h3>
+    <p>Providers like OpenAI, Anthropic, and Google host models behind HTTP APIs. You get fast iteration, no GPU ops burden, and regular capability upgrades. Tradeoffs include data residency policies, per-token cost at scale, rate limits, and less control over weights or fine-tuning depth.</p>
+    <h3>Open-weight models</h3>
+    <p>Models such as LLaMA, Mistral, and Qwen ship downloadable weights. You control deployment, fine-tuning, and data flow. Tradeoffs include infrastructure cost, safety tuning responsibility, and keeping up with upstream releases.</p>
+    <p>Many products use a hybrid: API models for complex queries, open models for high-volume or privacy-sensitive paths.</p>
+  </section>
+
+  <section>
+    <h2>Context Windows and Modalities</h2>
+    <p>Context window is the maximum tokens a model can attend to in one forward pass. Long-context models (32K, 128K, 1M+) enable document QA, large codebases, and multi-turn agents without aggressive summarization. Long context increases KV cache memory and latency linearly (or worse without optimized attention).</p>
+    <p>Multimodal LLMs extend the same autoregressive core to images, audio, or video by encoding non-text inputs into token-like embeddings fused with text tokens. The engineering surface expands to preprocessing pipelines, modality-specific encoders, and combined safety filters.</p>
+  </section>
+
+  <section>
+    <h2>Choosing a Model for Your Product</h2>
+    <p>Match model to workload: latency-sensitive chat may need a smaller instruct model; offline batch summarization can use a larger model; code tasks benefit from code-heavy training data; regulated industries may require on-prem open weights. Evaluate on your own data early. Public leaderboard scores are a starting point, not a substitute for domain-specific eval sets.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../../interview/Foundations-and-Architecture/ai-engineering-interview-llms.html">Interview questions on LLMs</a></p>
+    <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+
+

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Reinforcement Learning | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Reinforcement Learning</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Reinforcement Learning</h1>
+  <p>MDPs, algorithms, policy gradients, PPO, and RL for LLM alignment. <a href="../../learn/Training-Pipeline/ai-engineering-reinforcement-learning.html">Read full learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Foundations</h2>
+
+<details><summary>What is an MDP? Define its components.</summary>
+<div><p>An MDP is $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$: states, actions, transition dynamics $P(s'|s,a)$, reward function, and discount factor. The Markov property says the next state depends only on the current state and action, not full history.</p></div>
+</details>
+
+<details><summary>What is the difference between $V^\pi(s)$ and $Q^\pi(s,a)$?</summary>
+<div><p>$V^\pi(s)$ is expected return starting in state $s$ and following policy $\pi$. $Q^\pi(s,a)$ is expected return starting in $s$, taking action $a$, then following $\pi$. $V^\pi(s) = \sum_a \pi(a|s) Q^\pi(s,a)$.</p></div>
+</details>
+
+<details><summary>State the Bellman expectation and Bellman optimality equations.</summary>
+<div><p>Expectation: $V^\pi(s) = \sum_a \pi(a|s) \sum_{s'} P(s'|s,a)[R + \gamma V^\pi(s')]$. Optimality: $V^*(s) = \max_a \sum_{s'} P(s'|s,a)[R + \gamma V^*(s')]$ and $Q^*(s,a) = \sum_{s'} P(s'|s,a)[R + \gamma \max_{a'} Q^*(s',a')]$.</p></div>
+</details>
+
+<details><summary>Why do we use a discount factor $\gamma$?</summary>
+<div><p>It bounds infinite returns in continuing tasks, models uncertainty about future interactions, and encodes preference for near-term reward. It also ensures contraction in Bellman operators for convergence proofs.</p></div>
+</details>
+
+<details><summary>What is the advantage function and why is it used?</summary>
+<div><p>$A^\pi(s,a) = Q^\pi(s,a) - V^\pi(s)$ measures how much better action $a$ is than average. Policy gradients use advantages instead of raw Q to reduce variance without biasing the gradient (when baseline does not depend on the sampled action).</p></div>
+</details>
+
+<h2>Tabular and Dynamic Programming</h2>
+
+<details><summary>Explain policy iteration vs value iteration.</summary>
+<div><p>Policy iteration alternates full (or partial) policy evaluation with greedy policy improvement until the policy stabilizes. Value iteration combines both by repeatedly applying the Bellman optimality operator; the policy is extracted at the end. Value iteration is often faster per iteration but policy iteration can converge in fewer iterations.</p></div>
+</details>
+
+<details><summary>What is the difference between SARSA and Q-learning?</summary>
+<div><p>SARSA is on-policy: bootstraps with $Q(S_{t+1}, A_{t+1})$ where $A_{t+1}$ comes from the behavior policy. Q-learning is off-policy: bootstraps with $\max_a Q(S_{t+1}, a)$, learning $Q^*$ while exploring with $\epsilon$-greedy.</p></div>
+</details>
+
+<details><summary>What is the TD error?</summary>
+<div><p>$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$, the surprise in the one-step prediction. TD learning moves estimates toward targets built from this error.</p></div>
+</details>
+
+<details><summary>MC vs TD: bias, variance, and when to use each.</summary>
+<div><p>MC uses full returns (unbiased for $V^\pi$, high variance). TD bootstraps (biased initially, lower variance). TD learns online before episode ends; MC needs complete episodes. TD is usually preferred in deep RL with function approximation.</p></div>
+</details>
+
+<h2>Deep RL</h2>
+
+<details><summary>What is the deadly triad in RL?</summary>
+<div><p>Instability from combining function approximation, bootstrapping, and off-policy learning. DQN mitigates with experience replay and target networks; SAC uses twin critics and entropy regularization.</p></div>
+</details>
+
+<details><summary>How does DQN work? Why replay buffer and target network?</summary>
+<div><p>DQN approximates $Q(s,a)$ with a neural net, trained on $(r + \gamma \max_{a'} Q(s',a'; w^-))$. Replay breaks temporal correlation and reuses data. Target network $w^-$ updated slowly stabilizes moving targets.</p></div>
+</details>
+
+<details><summary>What problem does Double DQN solve?</summary>
+<div><p>Standard DQN overestimates Q-values because max and noise are correlated. Double DQN selects action with online net, evaluates with target net, decoupling selection and evaluation reduces overestimation.</p></div>
+</details>
+
+<h2>Policy Gradients and PPO</h2>
+
+<details><summary>State the policy gradient theorem.</summary>
+<div><p>$\nabla_\theta J(\theta) = \mathbb{E}_\pi[\nabla_\theta \log \pi_\theta(A|S) \cdot Q^\pi(S,A)]$. Increase probability of actions that beat average return.</p></div>
+</details>
+
+<details><summary>Why subtract a baseline in REINFORCE?</summary>
+<div><p>Subtracting $b(S)$ (e.g., $V(S)$) reduces variance of gradient estimates without changing expected gradient, because $\mathbb{E}[\nabla \log \pi \cdot b(S)] = 0$.</p></div>
+</details>
+
+<details><summary>Explain GAE (Generalized Advantage Estimation).</summary>
+<div><p>GAE combines multi-step TD errors: $\hat{A}_t = \sum_{l=0}^\infty (\gamma\lambda)^l \delta_{t+l}$. $\lambda=0$ is one-step (low variance); $\lambda=1$ is MC-like (low bias). Used in PPO for credit assignment.</p></div>
+</details>
+
+<details><summary>Explain PPO clipped objective.</summary>
+<div><p>$L = \mathbb{E}[\min(r_t(\theta)\hat{A}_t, \text{clip}(r_t, 1-\epsilon, 1+\epsilon)\hat{A}_t)]$ where $r_t = \pi_\theta / \pi_{\theta_{old}}$. Prevents destructively large policy updates while staying simpler than TRPO's constrained optimization.</p></div>
+</details>
+
+<details><summary>TRPO vs PPO: key difference?</summary>
+<div><p>TRPO enforces hard KL constraint per update via conjugate gradient. PPO approximates trust region with clipped surrogate, easier to implement, similar practical performance, default for RLHF.</p></div>
+</details>
+
+<h2>Continuous Control and Exploration</h2>
+
+<details><summary>DDPG vs SAC: when to use which?</summary>
+<div><p>Both handle continuous actions. DDPG is deterministic off-policy actor-critic; can be brittle. SAC adds entropy maximization and twin critics, more stable, better sample efficiency, preferred for robotics.</p></div>
+</details>
+
+<details><summary>What is UCB1 and why does it work?</summary>
+<div><p>UCB1 picks arm $\arg\max \hat{\mu}_a + \sqrt{2\ln t / N(a)}$. Optimism under uncertainty: unexplored arms have high upper bounds, guaranteeing sublinear regret in bandits.</p></div>
+</details>
+
+<h2>Offline RL, Imitation, Advanced</h2>
+
+<details><summary>What makes offline RL hard?</summary>
+<div><p>Extrapolation error: Q-network assigns arbitrary values to out-of-distribution actions never seen in the dataset. Algorithms like CQL and IQL penalize or avoid querying OOD actions.</p></div>
+</details>
+
+<details><summary>Behavioral cloning failure mode: covariate shift.</summary>
+<div><p>BC trains on expert states but at test time visits different states due to compounding errors. Small mistakes lead to OOD states where BC has no data. DAgger fixes by querying expert on visited states.</p></div>
+</details>
+
+<details><summary>What is MCTS and where is it used?</summary>
+<div><p>Monte Carlo Tree Search: select (UCB), expand, simulate, backpropagate. Used in AlphaGo/AlphaZero and increasingly for LLM reasoning-time search over token trees.</p></div>
+</details>
+
+<h2>Environments and Rewards</h2>
+
+<details><summary>Explain Gymnasium reset/step API and terminated vs truncated.</summary>
+<div><p><code>reset()</code> starts episode; <code>step(a)</code> returns obs, reward, terminated, truncated, info. Terminated = true terminal (task done). Truncated = time limit, not a true terminal state, may still need bootstrap.</p></div>
+</details>
+
+<details><summary>What is reward shaping? When is it safe?</summary>
+<div><p>Adding auxiliary reward to speed learning. Potential-based shaping $F = \gamma\Phi(s') - \Phi(s)$ preserves optimal policy under standard conditions (Ng et al.). Arbitrary shaping can change optimal behavior.</p></div>
+</details>
+
+<details><summary>What is reward hacking? Give LLM and robotics examples.</summary>
+<div><p>Maximizing proxy reward without intended goal. Robotics: agent thrashes for survival bonus. LLMs: verbosity, sycophancy, format tricks to game reward models. Mitigate with KL penalties, human eval, verifiable rewards, RM ensembles.</p></div>
+</details>
+
+<h2>RL for LLMs</h2>
+
+<details><summary>How is text generation framed as RL?</summary>
+<div><p>State = prompt + generated tokens; action = next token; policy = language model; reward at sequence end (RM, verifier) or per step (PRM). Episodic generation until EOS or max length.</p></div>
+</details>
+
+<details><summary>Walk through RLHF end-to-end.</summary>
+<div><p>SFT on demos → train reward model on preference pairs (Bradley-Terry loss) → PPO fine-tuning to maximize RM score with KL penalty to SFT reference. Monitor KL, reward, human eval, capability benchmarks.</p></div>
+</details>
+
+<details><summary>Derive DPO from the RLHF optimal policy form.</summary>
+<div><p>Optimal policy: $\pi^*(y|x) \propto \pi_{ref}(y|x)\exp(r^*(x,y)/\beta)$. Invert: $r^* = \beta\log(\pi^*/\pi_{ref}) + \beta\log Z(x)$. Substitute into preference loss; partition function cancels → DPO loss on log-ratio margins between chosen/rejected.</p></div>
+</details>
+
+<details><summary>Why KL penalty in RLHF?</summary>
+<div><p>Prevents policy from drifting far from capable SFT model to exploit RM flaws. Equivalent to constrained RL: maximize reward s.t. KL ≤ δ. Without it: reward hacking, gibberish, capability collapse.</p></div>
+</details>
+
+<details><summary>What is GRPO and why no critic?</summary>
+<div><p>Group Relative Policy Optimization: sample multiple completions per prompt, normalize rewards within group for advantages, apply PPO-style clip. No value network; advantages from group baseline. Saves memory; works well with verifiable rewards (DeepSeek-R1).</p></div>
+</details>
+
+<details><summary>DPO vs PPO+RM: tradeoffs?</summary>
+<div><p>DPO: simpler, stable, no RM inference, good iteration speed. PPO+RM: more flexible reward (multi-objective, process rewards), can reach higher ceiling with careful tuning, but unstable, heavy infra (4 models), reward hacking risk.</p></div>
+</details>
+
+<details><summary>What is a Process Reward Model (PRM)?</summary>
+<div><p>Scores intermediate reasoning steps, not just final answer. Enables step-level credit assignment for CoT. Used with best-of-N or tree search. Harder to label than outcome-only preferences.</p></div>
+</details>
+
+<details><summary>What is RLVR (verifiable rewards)?</summary>
+<div><p>Rewards from deterministic checkers: unit tests, math verifiers, formal proof assistants. Reduces RM hacking, enables scalable self-improvement on code and math reasoning tasks.</p></div>
+</details>
+
+<details><summary>What is alignment tax?</summary>
+<div><p>Capability regression after safety/preference tuning (worse on MMLU, coding). Mitigate with mixed SFT data, conservative KL, eval gates, and not over-optimizing imperfect reward models.</p></div>
+</details>
+
+<details><summary>How do you debug a failing PPO / RLHF run?</summary>
+<div><p>Check: reward scale/normalization, KL drift, advantage clipping, done masking, entropy collapse, reference model frozen, RM overoptimization on train prompts, eval on held-out human data. Compare to SFT baseline on diverse prompts.</p></div>
+</details>
+
+<h2>Algorithm Selection</h2>
+
+<details><summary>Which RL algorithm would you pick for: CartPole, Atari, robot arm, LLM alignment?</summary>
+<div><p>CartPole: Q-learning or PPO. Atari: DQN/Rainbow. Robot arm: SAC or TD3 + sim training. LLM alignment: DPO for speed, PPO+RM for max quality, GRPO/RLOO with verifiers for reasoning/code.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../learn/Training-Pipeline/ai-engineering-reinforcement-learning.html">Learning notes</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

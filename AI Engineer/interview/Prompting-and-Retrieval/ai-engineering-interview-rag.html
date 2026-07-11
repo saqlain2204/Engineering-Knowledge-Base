@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>RAG | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; RAG</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Retrieval-Augmented Generation</h1>
+  <p>Grounding LLM outputs in external knowledge. <a href="../../learn/Prompting-and-Retrieval/ai-engineering-rag.html">Read learning notes</a>.</p>
+</header><main>
+<section>
+
+<h2>Retrieval-Augmented Generation (RAG)</h2>
+<p>Grounding LLM outputs in external knowledge.</p>
+
+<details><summary>What problem does RAG solve that fine-tuning doesn't?</summary>
+<div><p>Fine-tuning bakes knowledge into weights - expensive to update, prone to hallucination when the model is uncertain, and gives no way to cite sources. RAG retrieves relevant, current documents at query time and feeds them into the prompt as context, so the model can ground answers in verifiable, easily-updatable external knowledge without retraining - and can cite exactly which document supported an answer.</p></div>
+</details>
+
+<details><summary>Walk through a standard RAG pipeline end-to-end.</summary>
+<div>
+<ul>
+<li><strong>1. Ingestion</strong> - load and parse source documents.</li>
+<li><strong>2. Chunking</strong> - split documents into retrievable pieces.</li>
+<li><strong>3. Embedding</strong> - convert chunks to vectors with an embedding model.</li>
+<li><strong>4. Indexing</strong> - store vectors (+ metadata) in a vector database.</li>
+<li><strong>5. Retrieval</strong> - embed the incoming query, search for top-k similar chunks (optionally hybrid + filters).</li>
+<li><strong>6. Reranking</strong> (optional) - reorder candidates with a more precise (often cross-encoder) model.</li>
+<li><strong>7. Generation</strong> - inject retrieved chunks into the LLM prompt as context, generate the answer, ideally with citations.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>How do you choose chunk size and overlap, and why does it matter so much?</summary>
+<div><p>Chunks too small lose context needed to answer the question (a fact split across chunk boundaries); chunks too large dilute relevance (embedding averages over irrelevant content, and you waste context window with noise). Typical starting points are a few hundred tokens per chunk with 10-20% overlap to avoid cutting sentences/facts at boundaries - but the right size is highly content-dependent (dense legal text vs conversational transcripts need very different chunking) and should be tuned against retrieval-quality metrics, not chosen arbitrarily.</p></div>
+</details>
+
+<details><summary>What is semantic chunking and how does it differ from fixed-size chunking?</summary>
+<div><p>Fixed-size chunking splits text every N tokens regardless of content structure, which can cut sentences or ideas in half. Semantic chunking splits at natural boundaries (paragraphs, sections, or points where embedding similarity between consecutive sentences drops significantly, indicating a topic shift), producing chunks that are more self-contained and coherent, generally improving retrieval quality at the cost of more preprocessing complexity.</p></div>
+</details>
+
+<details><summary>What is reranking and why add it after initial retrieval?</summary>
+<div><p>Initial retrieval (via ANN vector search) is optimized for speed over a huge corpus and uses relatively cheap similarity metrics; a reranker (often a cross-encoder that jointly processes the query and each candidate document, rather than encoding them independently) is more accurate but too slow to run over the full corpus. The standard pattern is retrieve a larger candidate set (e.g. top-50) cheaply, then rerank down to the final top-k (e.g. top-5) with the more accurate model before passing to the LLM.</p></div>
+</details>
+
+<details><summary>What is the "lost in the middle" problem and how does it affect RAG design?</summary>
+<div><p>LLMs tend to attend most reliably to information at the very start and end of their context window, with reduced recall for facts buried in the middle - even when technically within the context limit. This means simply stuffing more retrieved chunks into the prompt doesn't guarantee the model will use the most relevant one; practical mitigations include limiting to fewer, higher-relevance chunks, ordering the most important chunk last (closest to the question), and using reranking to ensure the best chunk isn't buried in the middle.</p></div>
+</details>
+
+<details><summary>How do you evaluate a RAG system?</summary>
+<div>
+<ul>
+<li><strong>Retrieval metrics</strong> - recall@k, precision@k, MRR (mean reciprocal rank) against a labeled set of (query, relevant-document) pairs.</li>
+<li><strong>Generation/faithfulness metrics</strong> - does the answer actually stay grounded in the retrieved context (faithfulness/groundedness), or does it hallucinate beyond it?</li>
+<li><strong>Answer relevance</strong> - does the final answer actually address the user's question, independent of context quality.</li>
+<li><strong>Frameworks</strong> like RAGAS and TruLens automate several of these using an LLM-as-judge approach against your own test set.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is query rewriting / query expansion in RAG, and why is it needed?</summary>
+<div><p>Raw user queries are often short, ambiguous, or phrased differently from how the answer is written in source documents (vocabulary mismatch). Query rewriting uses the LLM itself to reformulate the query (expand with synonyms, break multi-part questions into sub-queries, resolve pronouns using conversation history) before embedding it for retrieval, improving recall of relevant chunks that a literal match would miss.</p></div>
+</details>
+
+<details><summary>What is HyDE (Hypothetical Document Embeddings)?</summary>
+<div><p>Instead of embedding the raw query, HyDE prompts an LLM to generate a hypothetical answer to the question first, then embeds that hypothetical answer and uses it for similarity search. Because the hypothetical answer is stylistically closer to the actual documents you're searching over than a short question is, this often improves retrieval relevance, at the cost of an extra LLM call per query.</p></div>
+</details>
+
+<details><summary>Agentic RAG / multi-hop RAG - how does it differ from single-pass RAG?</summary>
+<div><p>Single-pass RAG retrieves once and generates once. Agentic/multi-hop RAG lets the model decide it needs more information, issue additional retrieval queries based on intermediate reasoning (e.g. answer part of a question, realize it needs a follow-up fact, retrieve again), and iterate - useful for complex questions that can't be answered from a single retrieval step, at the cost of higher latency and more LLM calls.</p></div>
+</details>
+
+<details><summary>How do you keep a RAG knowledge base fresh, and how do you handle conflicting/outdated documents?</summary>
+<div><p>Freshness typically requires an incremental ingestion pipeline (detect new/changed documents, re-chunk and re-embed only what changed, delete stale vectors) rather than full reprocessing. Conflicting information is handled by attaching recency/authority metadata to chunks and instructing the model (or a filtering step) to prefer the most recent/authoritative source, and by surfacing source citations so the end user can judge for themselves.</p></div>
+</details>
+
+
+<details><summary>What is GraphRAG and when is it better than chunk RAG?</summary>
+<div><p>GraphRAG builds a knowledge graph from documents (entities and relationships) and retrieves subgraphs or community summaries for global questions ("What are the main themes across these reports?"). Plain chunk RAG wins on local factual lookup; GraphRAG helps holistic queries over large corpora.</p></div>
+</details>
+
+<details><summary>What is contextual retrieval (Anthropic-style)?</summary>
+<div><p>Before embedding each chunk, prepend a short LLM-generated summary of the parent document so the chunk carries global context in its vector. This reduces retrieval failures when chunks lack surrounding context. Cost: one LLM call per chunk at index time.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

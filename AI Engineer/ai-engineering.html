@@ -1,5 +1,6 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,103 +8,45 @@
   <title>AI Engineering</title>
   <link rel="stylesheet" href="../styles.css">
 </head>
+
 <body>
 
-<header>
-  <nav aria-label="Breadcrumb">
-    <p><a href="../index.html">Home</a> &rsaquo; AI Engineering</p>
-  </nav>
-  <h1>AI Engineering</h1>
-  <p>Learn the full stack, then drill interview questions when you are ready.</p>
-</header>
+  <header>
+    <nav aria-label="Breadcrumb">
+      <p><a href="../index.html">Home</a> &rsaquo; AI Engineering</p>
+    </nav>
+    <h1>AI Engineering</h1>
+    <p>Learn the full stack, then drill interview questions when you are ready.</p>
+  </header>
 
-<main>
+  <main>
 
-  <div class="hub-tracks">
-    <div class="hub-track hub-track-learn">
-      <h2>Learn</h2>
-      <p>Concepts, how things work, pipelines, and engineering tradeoffs. This is your reference material.</p>
-      <p><a href="#learn">Browse all topics below</a></p>
+    <div class="hub-tracks">
+      <div class="hub-track hub-track-learn">
+        <h2>Learn</h2>
+        <p>Concepts, how things work, pipelines, and engineering tradeoffs. This is your reference material.</p>
+        <p><a href="learn/ai-engineering-learn.html"><strong>Open Learn section</strong></a></p>
+      </div>
+      <div class="hub-track hub-track-interview">
+        <h2>Interview Prep</h2>
+        <p>Expandable Q&amp;A for revision and interviews. Separate from the learning notes.</p>
+        <p><a href="interview/ai-engineering-interview.html"><strong>Open Interview Prep section</strong></a></p>
+      </div>
+      <div class="hub-track hub-track-research">
+        <h2>Research</h2>
+        <p>In-depth breakdowns of foundational and cutting-edge AI research papers.</p>
+        <p><a href="research/research-hub.html"><strong>Open Research section</strong></a></p>
+      </div>
     </div>
-    <div class="hub-track hub-track-interview">
-      <h2>Interview Prep</h2>
-      <p>Expandable Q&amp;A for revision and interviews. Separate from the learning notes.</p>
-      <p><a href="interview/ai-engineering-interview.html"><strong>Open Interview Prep section</strong></a></p>
-    </div>
-  </div>
 
-  <section id="learn">
-    <h2>Foundations and Architecture</h2>
-    <ul>
-      <li><a href="learn/ai-engineering-foundations.html"><strong>Foundations</strong></a><br>Neural networks, loss, optimizers, normalization.</li>
-      <li><a href="learn/ai-engineering-transformers.html"><strong>Transformers</strong></a><br>Attention, blocks, RoPE, MoE, GQA.</li>
-      <li><a href="learn/ai-engineering-tokenization.html"><strong>Tokenization</strong></a><br>Subword tokenizers and vocabulary design.</li>
-      <li><a href="learn/ai-engineering-llms.html"><strong>LLMs</strong></a><br>Large models, scaling, lifecycle, open vs API.</li>
-      <li><a href="learn/ai-engineering-slms.html"><strong>SLMs</strong></a><br>Small models, edge, distillation, routing.</li>
-    </ul>
-  </section>
+  </main>
 
-  <section>
-    <h2>Training Pipeline</h2>
-    <ul>
-      <li><a href="learn/ai-engineering-pretraining.html"><strong>Pretraining</strong></a><br>Data, objectives, scaling laws, stability.</li>
-      <li><a href="learn/ai-engineering-distributed-training.html"><strong>Distributed Training</strong></a><br>Parallelism, ZeRO, FSDP, clusters.</li>
-      <li><a href="learn/ai-engineering-fine-tuning.html"><strong>Fine-Tuning</strong></a><br>SFT, LoRA, QLoRA, adapters.</li>
-      <li><a href="learn/ai-engineering-post-training.html"><strong>Post-Training</strong></a><br>RLHF, DPO, alignment, preferences.</li>
-    </ul>
-  </section>
+  <footer>
+    <p><small><a href="../index.html">Back to Home</a></small></p>
+  </footer>
 
-  <section>
-    <h2>Prompting and Retrieval</h2>
-    <ul>
-      <li><a href="learn/ai-engineering-prompt-engineering.html"><strong>Prompt Engineering</strong></a><br>System prompts, CoT, sampling, injection.</li>
-      <li><a href="learn/ai-engineering-embeddings.html"><strong>Embeddings</strong></a><br>Vectors, contrastive training, hybrid search.</li>
-      <li><a href="learn/ai-engineering-vector-databases.html"><strong>Vector Databases</strong></a><br>ANN indexes, tuning, product comparison.</li>
-      <li><a href="learn/ai-engineering-rag.html"><strong>RAG</strong></a><br>Ingestion, chunking, retrieval, generation.</li>
-      <li><a href="learn/ai-engineering-prompt-compression.html"><strong>Prompt Compression</strong></a><br>LLMLingua, Headroom, when to compress, pros and cons.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Inference, Deployment, Operations</h2>
-    <ul>
-      <li><a href="learn/ai-engineering-inference-optimization.html"><strong>Inference Optimization</strong></a><br>KV cache, quantization, batching.</li>
-      <li><a href="learn/ai-engineering-deployment.html"><strong>Deployment</strong></a><br>Serving stacks, scaling, gateways.</li>
-      <li><a href="learn/ai-engineering-llmops-monitoring.html"><strong>LLMOps and Monitoring</strong></a><br>Logs, guardrails, cost, drift.</li>
-      <li><a href="learn/ai-engineering-evaluation.html"><strong>Evaluation</strong></a><br>Benchmarks, metrics, eval sets.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Agents and Protocols</h2>
-    <ul>
-      <li><a href="learn/ai-engineering-agents.html"><strong>Agents</strong></a><br>Tool use, ReAct, memory, multi-agent.</li>
-      <li><a href="learn/ai-engineering-mcp.html"><strong>MCP</strong></a><br>Model Context Protocol architecture.</li>
-    </ul>
-  </section>
-
-  <section id="frameworks">
-    <h2>Frameworks</h2>
-    <ul>
-      <li><a href="learn/ai-engineering-frameworks-langchain.html"><strong>LangChain</strong></a><br>LCEL, runnables, prompts, RAG primitives, tools, and provider integrations.</li>
-      <li><a href="learn/ai-engineering-frameworks-langgraph.html"><strong>LangGraph</strong></a><br>Stateful graphs, checkpoints, interrupts, streaming, and agent runtime.</li>
-      <li><a href="learn/ai-engineering-frameworks-langfuse.html"><strong>Langfuse</strong></a><br>Tracing, scores, prompt management, datasets, experiments, and LLMOps analytics.</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>Safety and System Design</h2>
-    <ul>
-      <li><a href="learn/ai-engineering-safety.html"><strong>Safety</strong></a><br>Hallucination, jailbreaks, bias, PII.</li>
-      <li><a href="learn/ai-engineering-system-design.html"><strong>System Design</strong></a><br>End-to-end AI product architecture.</li>
-    </ul>
-  </section>
-
-</main>
-
-<footer>
-  <p><small><a href="../index.html">Back to Home</a></small></p>
-</footer>
-
+  <script src="../assets/site.js"></script>
+  <script src="../assets/search.js" defer></script>
 </body>
+
 </html>

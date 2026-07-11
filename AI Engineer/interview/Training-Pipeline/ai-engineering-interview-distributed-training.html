@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Distributed Training | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Distributed Training</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Distributed Training</h1>
+  <p>How training scales across hundreds or thousands of GPUs. <a href="../../learn/Training-Pipeline/ai-engineering-distributed-training.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Distributed Training</h2>
+<p>How training scales across hundreds/thousands of GPUs.</p>
+
+<details><summary>Data parallelism vs model parallelism vs pipeline parallelism - explain each.</summary>
+<div>
+<ul>
+<li><strong>Data parallelism</strong>: full model copied on every GPU, each processes a different data shard, gradients are averaged (all-reduce) - simple but requires the model to fit on one device.</li>
+<li><strong>Tensor/model parallelism</strong>: individual layers/matrices are split across GPUs (e.g., splitting a weight matrix column-wise) - needed when a single layer doesn't fit on one device, requires high-bandwidth interconnect due to frequent communication.</li>
+<li><strong>Pipeline parallelism</strong>: different layers are placed on different GPUs, and micro-batches flow through them like an assembly line - reduces communication vs tensor parallelism but introduces "bubble" idle time.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is ZeRO (Zero Redundancy Optimizer) and what do its stages do?</summary>
+<div><p>ZeRO eliminates the memory redundancy of standard data parallelism (where every GPU holds a full copy of optimizer states, gradients, and parameters) by sharding them across GPUs instead. Stage 1 shards optimizer states, Stage 2 additionally shards gradients, Stage 3 additionally shards the model parameters themselves (this is what FSDP implements) - each stage trades more communication for dramatically lower per-GPU memory, enabling much larger models to be trained on the same hardware.</p></div>
+</details>
+
+<details><summary>What is gradient accumulation and when do you need it?</summary>
+<div><p>Gradient accumulation runs several forward/backward passes on smaller micro-batches, summing their gradients before a single optimizer step - simulating a larger effective batch size than would fit in GPU memory at once. It's used when the desired batch size for stable training exceeds available memory.</p></div>
+</details>
+
+<details><summary>What is gradient checkpointing (activation checkpointing)?</summary>
+<div><p>Instead of storing all intermediate activations for the backward pass, only a subset of activations are kept and the rest are recomputed on-the-fly during backpropagation. This trades extra compute (roughly 20-30% slower) for a large reduction in memory usage, letting you train bigger models or larger batch sizes on the same hardware.</p></div>
+</details>
+
+<details><summary>Why does interconnect bandwidth (NVLink, InfiniBand) matter so much for large-scale training?</summary>
+<div><p>Distributed training requires frequent synchronization (all-reduce for gradients, all-gather for sharded parameters), and as GPU count grows this communication can dominate wall-clock time if bandwidth is low. High-bandwidth interconnects (NVLink within a node, InfiniBand across nodes) keep GPUs compute-bound rather than communication-bound, which is why cluster network topology is as important as raw GPU count for training efficiency.</p></div>
+</details>
+
+
+<details><summary>What is FSDP and how does it compare to DeepSpeed ZeRO?</summary>
+<div><p>FSDP (Fully Sharded Data Parallel) is PyTorch's native ZeRO-3 style sharding: parameters, gradients, and optimizer states are sharded across GPUs and all-gathered only when needed. DeepSpeed offers ZeRO stages plus pipeline/tensor parallelism and mature config for very large clusters. Choice often comes down to ecosystem fit (pure PyTorch vs DeepSpeed config) and team familiarity.</p></div>
+</details>
+
+<details><summary>What is tensor parallelism vs pipeline parallelism?</summary>
+<div><p><strong>Tensor parallelism</strong> splits individual weight matrices across GPUs within a layer (high communication, low latency per step). <strong>Pipeline parallelism</strong> assigns different layers to different GPUs and streams micro-batches (lower communication, but pipeline bubbles). Large models often combine data + tensor + pipeline parallelism (3D parallelism).</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+

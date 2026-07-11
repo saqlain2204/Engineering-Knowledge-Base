@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Pretraining | AI Engineering</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Pretraining</p>
+  </nav>
+  <h1>Pretraining</h1>
+  <p>Building base model capability from raw corpora through next-token prediction at scale.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>Objective and Outcome</h2>
+    <p>Pretraining teaches a model general language understanding by predicting the next token in a sequence. Given tokens t<sub>1</sub>...t<sub>n</sub>, the model learns P(t<sub>n+1</sub> | t<sub>1</sub>...t<sub>n</sub>). Minimizing cross-entropy over trillions of tokens produces a base model that encodes grammar, facts, reasoning patterns, and world knowledge implicitly in its weights.</p>
+    <p>The base model is not yet a helpful assistant. It completes text rather than following instructions. Downstream fine-tuning and alignment reshape behavior, but pretraining sets the ceiling for knowledge breadth and reasoning capacity.</p>
+  </section>
+
+  <section>
+    <h2>Data Pipeline</h2>
+    <p>Pretraining data is the dominant quality lever. Typical sources include web crawls, books, academic papers, code repositories, and licensed datasets. The pipeline usually involves:</p>
+    <ul>
+      <li><strong>Crawling and ingestion</strong> at web scale</li>
+      <li><strong>Deduplication</strong> (exact and fuzzy) to avoid memorization and wasted compute</li>
+      <li><strong>Quality filtering</strong> via heuristics, classifiers, and perplexity thresholds</li>
+      <li><strong>PII and toxic content removal</strong> for safety and compliance</li>
+      <li><strong>Domain mixing</strong> with tuned sampling ratios (e.g., more code for coding models)</li>
+    </ul>
+    <div class="callout">
+      <strong>Data quality over quantity:</strong> A smaller, cleaner corpus can outperform a larger noisy crawl. Teams increasingly invest in curators, synthetic augmentation, and re-filtering as models scale.
+    </div>
+    
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2107.06499" rel="noopener noreferrer">The Pile dataset paper</a></small></p>
+  </section>
+
+  <section>
+    <h2>Training Configuration</h2>
+    <h3>Hyperparameters that matter</h3>
+    <ul>
+      <li><strong>Learning rate schedule</strong> - warmup then cosine or linear decay</li>
+      <li><strong>Batch size</strong> - often maximized within memory, sometimes with gradient accumulation</li>
+      <li><strong>Sequence length</strong> - context window baked in at pretrain time (or extended later)</li>
+      <li><strong>Precision</strong> - mixed FP16/BF16 training with loss scaling where needed</li>
+      <li><strong>Tokenizer</strong> - fixed before training; changing it requires retraining embeddings</li>
+    </ul>
+    <p>Training runs for a defined number of tokens seen per parameter (Chinchilla-optimal ratios are a common reference point). Checkpointing, validation loss tracking, and divergence detection are critical on multi-week runs.</p>
+    <pre><code># Hugging Face Trainer � typical pretraining knobs
+training_args = TrainingArguments(
+    output_dir="./checkpoints",
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=8,
+    learning_rate=3e-4,
+    warmup_ratio=0.01,
+    lr_scheduler_type="cosine",
+    bf16=True,
+    max_steps=100_000,
+    save_steps=1000,
+    logging_steps=10,
+)</code></pre>
+  </section>
+
+  <section>
+    <h2>Scaling Laws and Compute Planning</h2>
+    <p>Loss improves as a power law with model size, data, and compute until hitting diminishing returns. Planning a pretrain run means estimating FLOPs, GPU count, network bandwidth, storage for checkpoints, and failure recovery time. A single node failure on a thousand-GPU job must not corrupt the entire run.</p>
+    <p>Most product teams do not pretrain from scratch. They fine-tune open base models. Pretraining knowledge still matters for evaluating base checkpoints, understanding data contamination in benchmarks, and deciding when custom pretraining is worth the cost.</p>
+  </section>
+
+  <section>
+    <h2>Stability and Failure Modes</h2>
+    <p>Large training runs can diverge (loss spikes), underflow in low precision, or develop repetitive generation (mode collapse in sampling). Mitigations include gradient clipping, careful initialization, z-loss regularization, and monitoring activation norms per layer. Data bugs (e.g., leaked eval sets, duplicated epochs) show up as suspiciously good benchmark scores later.</p>
+  </section>
+
+  <section>
+    <h2>From Base Model to Product</h2>
+    <p>After pretraining, the checkpoint is evaluated on perplexity and downstream benchmarks, then passed to supervised fine-tuning for instruction following and post-training for alignment. Understanding pretraining helps you interpret why a base model hallucinates confidently, why code performance correlates with code token fraction, and why extending context may require continued pretraining or specialized long-context fine-tuning.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../../interview/Training-Pipeline/ai-engineering-interview-pretraining.html">Interview questions on Pretraining</a></p>
+    <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+
+

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Embeddings | AI Engineering</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Embeddings</p>
+  </nav>
+  <h1>Embeddings</h1>
+  <p>Dense vector representations of text for semantic search, clustering, and retrieval pipelines.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>What Embeddings Represent</h2>
+    <p>An embedding model maps text (words, sentences, passages) to fixed-dimensional vectors in a continuous space. Semantically similar texts land near each other; dissimilar texts are farther apart. Unlike generative LLMs, embedding models are trained for representation quality, not open-ended generation.</p>
+    <p>Typical dimensions range from 384 to 3072 depending on model. Higher dimensions can capture finer distinctions but increase storage and search cost in vector databases.</p>
+  </section>
+
+  <section>
+    <h2>How Embedding Models Are Trained</h2>
+    <h3>Contrastive learning</h3>
+    <p>Models learn by pulling positive pairs (query and relevant passage) together and pushing negatives apart in vector space. Loss functions include InfoNCE, triplet loss, and multi-negative cross-entropy across in-batch negatives.</p>
+    <h3>Dual encoders</h3>
+    <p>Separate encoders for queries and documents (or shared weights) produce embeddings independently. At search time you precompute document vectors and only encode the query live, enabling fast retrieval at scale.</p>
+    <pre><code>from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("BAAI/bge-small-en-v1.5")
+
+doc_embeddings = model.encode(
+    passages, normalize_embeddings=True, batch_size=64
+)
+query_embedding = model.encode(
+    "query: " + user_query, normalize_embeddings=True
+)
+
+# cosine similarity � dot product when vectors are normalized
+scores = query_embedding @ doc_embeddings.T</code></pre>
+    <h3>Matryoshka and flexible dimensions</h3>
+    <p>Some models support truncating vectors to fewer dimensions with modest quality loss, letting you tune the cost-quality tradeoff without retraining separate models.</p>
+  </section>
+
+  <section>
+    <h2>Similarity Metrics</h2>
+    <p>Cosine similarity is standard for normalized embeddings: it measures angle between vectors and is insensitive to magnitude. Dot product is equivalent when vectors are unit-normalized but faster on some hardware when norms vary. Euclidean distance is less common at scale but appears in clustering workflows.</p>
+    <p>Always use the same similarity metric at index time and query time. Mixing normalized cosine indexed vectors with raw dot product queries silently degrades ranking.</p>
+  </section>
+
+  <section>
+    <h2>Choosing and Evaluating Models</h2>
+    <p>General-purpose models (OpenAI text-embedding-3, Cohere embed, open models like e5, bge, gte) work across domains. Domain-specific fine-tuned embedders win on specialized corpora (legal, medical, code).</p>
+    <p>Evaluate on your data with:</p>
+    <ul>
+      <li>Recall@k and MRR on labeled query-document pairs</li>
+      <li>Latency and throughput for your batch sizes</li>
+      <li>Multilingual coverage if queries span languages</li>
+      <li>Max sequence length vs your chunk sizes</li>
+    </ul>
+    <div class="callout">
+      <strong>Common mistake:</strong> Using a generative LLM's hidden states as embeddings without a model trained for retrieval. Results are often worse than dedicated embedding models at the same size.
+    </div>
+  </section>
+
+  <section>
+    <h2>Hybrid Search</h2>
+    <p>Pure vector search misses exact keyword matches (SKUs, error codes, rare names). Hybrid search combines:</p>
+    <ul>
+      <li><strong>Dense retrieval</strong> via embeddings</li>
+      <li><strong>Sparse retrieval</strong> via BM25 or SPLADE learned sparse vectors</li>
+    </ul>
+    <p>Scores are fused with reciprocal rank fusion (RRF) or learned rerankers. Hybrid is the default recommendation for production RAG over heterogeneous documents.</p>
+    <pre><code>def reciprocal_rank_fusion(dense_ranks, sparse_ranks, k=60):
+    scores = {}
+    for ranks in (dense_ranks, sparse_ranks):
+        for rank, doc_id in enumerate(ranks):
+            scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)
+    return sorted(scores, key=scores.get, reverse=True)</code></pre>
+  </section>
+
+  <section>
+    <h2>Pipeline Integration</h2>
+    <p>Embed documents at ingestion, store vectors with metadata (source, ACL, timestamp), and embed queries at request time. Batch embedding jobs should be idempotent and versioned: when you change embedding models, re-embed the corpus or maintain separate indexes per model version.</p>
+    <p>Prefix instructions matter for models trained with them (e.g., "query: " vs "passage: " in e5 family). Apply the correct prefix or retrieval quality drops sharply.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../../interview/Prompting-and-Retrieval/ai-engineering-interview-embeddings.html">Interview questions on Embeddings</a></p>
+    <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+
+

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>SLMs | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; SLMs</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Small Language Models (SLMs)</h1>
+  <p>When smaller models beat larger ones, and how to build efficient on-device or edge AI. <a href="../../learn/Foundations-and-Architecture/ai-engineering-slms.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Small Language Models</h2>
+<p>Efficiency, distillation, and deployment patterns for sub-billion to few-billion parameter models.</p>
+
+<details><summary>When should you choose an SLM over a frontier LLM?</summary>
+<div>
+<ul>
+<li><strong>Latency-sensitive</strong> apps (on-device assistants, real-time autocomplete).</li>
+<li><strong>High volume, narrow domain</strong> tasks where a fine-tuned 1-3B model matches a 70B general model.</li>
+<li><strong>Privacy/offline</strong> requirements (mobile, embedded, air-gapped).</li>
+<li><strong>Cost caps</strong> where per-token API pricing does not scale.</li>
+</ul>
+<p>Use frontier LLMs when you need broad reasoning, rare knowledge, or complex multi-step tasks without heavy customization.</p>
+</div>
+</details>
+
+<details><summary>What SLM sizes are common in production today?</summary>
+<div><p>Rough tiers: &lt;1B for mobile/edge (Phi, Gemma 2B), 1-8B for server-side efficient inference (Mistral 7B, Llama 3 8B), 8-15B as a sweet spot for quality vs cost on a single GPU. Below 1B, quality drops sharply for open-ended chat but can work for classification, extraction, and routing.</p></div>
+</details>
+
+<details><summary>How do you make an SLM perform like a larger model on a specific task?</summary>
+<div>
+<ul>
+<li><strong>Distillation</strong> from a teacher LLM on task-specific outputs.</li>
+<li><strong>Targeted SFT/LoRA</strong> on high-quality domain data.</li>
+<li><strong>RAG</strong> to supply knowledge instead of memorizing it in weights.</li>
+<li><strong>Prompting + tools</strong> so the SLM orchestrates rather than reasons from scratch.</li>
+<li><strong>Model cascading</strong>: SLM handles easy queries, escalates hard ones to a larger model.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is knowledge distillation in the SLM context?</summary>
+<div><p>A large teacher model generates labels or soft probability distributions on inputs; the smaller student is trained to match those outputs. This transfers reasoning patterns and style more efficiently than training only on hard labels. Common for building compact models that retain much of a 70B teacher's behavior on a narrow task.</p></div>
+</details>
+
+<details><summary>What quantization levels work well for SLMs on consumer hardware?</summary>
+<div><p>4-bit (GPTQ, AWQ, GGUF Q4_K_M) often gives acceptable chat quality for 7B models on 8-16GB VRAM. 8-bit is safer for critical tasks. On CPU/mobile, GGUF with aggressive quantization (Q4, Q5) is standard. Always eval on your task after quantization; math and code degrade more than summarization.</p></div>
+</details>
+
+<details><summary>SLM on-device vs cloud SLM serving: tradeoffs?</summary>
+<div><p><strong>On-device</strong>: zero network latency, offline, data stays local, but limited RAM, thermal throttling, and harder updates. <strong>Cloud SLM</strong>: easier updates, batching, GPU acceleration, centralized logging, but network dependency and privacy considerations. Hybrid patterns run a tiny on-device model for drafts/routing and cloud for heavy generation.</p></div>
+</details>
+
+<details><summary>What is model routing and how does it pair SLMs with LLMs?</summary>
+<div><p>A classifier or heuristic scores incoming requests (complexity, domain, safety) and routes simple ones to a cheap SLM and complex ones to a frontier LLM. This can cut cost 5-10x while preserving quality on hard queries. The router itself can be a tiny model or embedding similarity to known "hard" query clusters.</p></div>
+</details>
+
+<details><summary>How do you evaluate whether an SLM is good enough to ship?</summary>
+<div><p>Compare against your current LLM baseline on a task-specific eval set (not just MMLU). Measure quality, latency p50/p99, tokens/sec, memory, and cost per 1K requests. SLMs often fail on edge cases; explicitly test failure modes and define escalation to a larger model when confidence is low.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+
+

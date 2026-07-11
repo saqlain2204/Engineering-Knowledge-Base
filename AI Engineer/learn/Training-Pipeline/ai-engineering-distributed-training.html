@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Distributed Training | AI Engineering</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Distributed Training</p>
+  </nav>
+  <h1>Distributed Training</h1>
+  <p>Parallelism strategies, memory optimizations, and cluster design for training models that do not fit on one GPU.</p>
+</header>
+<main class="article">
+
+  <section>
+    <h2>Why Distribution Is Required</h2>
+    <p>A 70B parameter model in FP16 needs roughly 140 GB just for weights, before optimizer states, gradients, and activations. No single consumer GPU holds that. Even smaller models benefit from distribution to shorten training time by processing larger effective batch sizes across many devices.</p>
+    <p>Distributed training splits work across GPUs, nodes, and datacenters while preserving mathematical equivalence (or controlled approximation) to single-device training.</p>
+  </section>
+
+  <section>
+    <h2>Parallelism Dimensions</h2>
+    <h3>Data parallelism (DP)</h3>
+    <p>Each GPU holds a full model copy and processes different micro-batches. Gradients are all-reduced and averaged before the optimizer step. Simple and widely used, but memory per GPU still holds the full model.</p>
+    <h3>Tensor parallelism (TP)</h3>
+    <p>Individual layers are sharded across GPUs. Attention and MLP matrix multiplies split along hidden or head dimensions. Requires fast NVLink-style interconnect because activations cross devices every layer.</p>
+    <h3>Pipeline parallelism (PP)</h3>
+    <p>Layers are grouped into stages on different GPUs. Micro-batches flow through the pipeline. Bubble time (idle GPUs) is reduced with techniques like 1F1B scheduling. Useful when model depth exceeds what TP alone can shard efficiently.</p>
+    <h3>Expert parallelism (EP)</h3>
+    <p>For MoE models, different expert FFNs live on different GPUs. Tokens route to remote experts with all-to-all communication. Load imbalance across experts is a first-class ops problem.</p>
+    <p>Large pretraining jobs combine 3D parallelism: DP + TP + PP, tuned to cluster topology.</p>
+    
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1909.08053" rel="noopener noreferrer">Megatron-LM</a> � <a href="https://www.deepspeed.ai/tutorials/zero/" rel="noopener noreferrer">DeepSpeed ZeRO</a></small></p>
+  </section>
+
+  <section>
+    <h2>Memory Optimizations</h2>
+    <h3>ZeRO (Zero Redundancy Optimizer)</h3>
+    <p>DeepSpeed ZeRO partitions optimizer states (Stage 1), gradients (Stage 2), and parameters (Stage 3) across data parallel ranks instead of replicating everything. Stage 3 enables training models far larger than per-GPU memory at the cost of more communication.</p>
+    <h3>FSDP (Fully Sharded Data Parallel)</h3>
+    <p>PyTorch-native sharding similar to ZeRO-3. Parameters are sharded across ranks and all-gathered just-in-time for each forward/backward layer. Popular for fine-tuning large models on moderate clusters.</p>
+    <pre><code>from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+model = FSDP(
+    model,
+    auto_wrap_policy=transformer_auto_wrap_policy,
+    mixed_precision=MixedPrecision(param_dtype=torch.bfloat16),
+    device_id=torch.cuda.current_device(),
+)</code></pre>
+    <h3>Gradient checkpointing</h3>
+    <p>Recomputes activations during backward instead of storing them, trading compute for memory. Essential for long sequences or large batches on memory-constrained GPUs.</p>
+    <div class="callout">
+      <strong>Rule of thumb:</strong> Use FSDP or ZeRO for memory relief; add TP/PP when a single rank cannot hold even one layer shard at your target batch size.
+    </div>
+  </section>
+
+  <section>
+    <h2>Communication and Hardware</h2>
+    <p>All-reduce bandwidth limits data parallel scaling. Tensor parallel groups should sit on the same node with NVLink. Cross-node training depends on InfiniBand or RoCE latency and topology-aware job schedulers.</p>
+    <p>Fault tolerance matters at scale: checkpoint to distributed storage frequently, use elastic training where supported, and design restarts so a single straggler node does not waste an entire week's compute.</p>
+  </section>
+
+  <section>
+    <h2>Fine-Tuning vs Pretraining Distribution</h2>
+    <p>Fine-tuning often uses LoRA/QLoRA on fewer GPUs: base weights frozen or quantized, only adapter matrices trained. QLoRA keeps the base model in 4-bit NF4 while adapters train in higher precision, democratizing 70B fine-tunes on single high-end GPUs or small pods.</p>
+    <p>Full fine-tuning of large models still needs FSDP multi-GPU setups similar to pretraining but for shorter durations and smaller datasets.</p>
+  </section>
+
+  <section>
+    <h2>Frameworks and Operations</h2>
+    <p>Common stack: PyTorch + DeepSpeed or FSDP + Megatron-LM patterns for TP/PP + NCCL for collective ops. Kubernetes, Slurm, or cloud ML platforms schedule multi-node jobs. Observability includes per-GPU utilization, gradient norm spikes, throughput (tokens/sec), and communication overhead ratios.</p>
+    <p>Even if you only fine-tune, understanding distributed training explains why certain open models ship only with specific parallel configs, why context length extensions are expensive, and how serving-time tensor parallel in inference mirrors training-time sharding.</p>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../../interview/Training-Pipeline/ai-engineering-interview-distributed-training.html">Interview questions on Distributed Training</a></p>
+    <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>
+
+

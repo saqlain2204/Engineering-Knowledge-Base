@@ -34,35 +34,37 @@
   </section>
 
   <section id="contributing">
-    <h2>Contribution guidelines</h2>
-    <p>Contributions are welcome. This repo is static HTML and CSS only, with no build step.</p>
+    <h2>Contributing</h2>
+    <p>This project is static HTML and CSS with optional client-side search. Contributions are welcome via GitHub pull request.</p>
+    <p>Full documentation: <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/README.md" rel="noopener noreferrer">README.md</a></p>
 
-    <h3>What you can contribute</h3>
+    <h3>What to contribute</h3>
     <ul>
-      <li><strong>New subjects:</strong> a subject folder with a hub page, plus <code>learn/</code> and <code>interview/</code> tracks.</li>
-      <li><strong>Learn pages:</strong> concepts, pipelines, tradeoffs, and short code examples.</li>
+      <li><strong>New subjects:</strong> subject folder, hub page, and <code>learn/</code> / <code>interview/</code> tracks.</li>
+      <li><strong>Learn pages:</strong> concepts, tradeoffs, and short code examples where useful.</li>
       <li><strong>Interview Q&amp;A:</strong> expandable <code>&lt;details&gt;</code> questions paired with learn topics.</li>
-      <li><strong>Fixes:</strong> typos, outdated facts, broken links, and clearer explanations.</li>
+      <li><strong>Fixes:</strong> typos, broken links, outdated facts, and clearer explanations.</li>
     </ul>
 
-    <h3>How to contribute</h3>
+    <h3>Workflow</h3>
     <ol>
       <li>Fork <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">Engineering-Knowledge-Base</a> on GitHub.</li>
-      <li>Create a branch with a clear name (e.g. <code>add-rag-interview-questions</code>).</li>
-      <li>Make your changes and open a pull request against <code>main</code>.</li>
-      <li>In the PR description, explain what changed and why.</li>
+      <li>Create a branch (for example <code>add-rag-interview-questions</code>).</li>
+      <li>Make changes and open a pull request against <code>main</code>.</li>
+      <li>Describe what changed and why in the PR.</li>
     </ol>
 
     <h3>Conventions</h3>
     <ul>
-      <li>Keep shared files at the repo root: <code>index.html</code>, <code>styles.css</code>, and <code>assets/</code>.</li>
-      <li>Put each subject in its own folder (e.g. <code>AI Engineer/</code>).</li>
-      <li>Match existing pages: breadcrumb nav, <code>learn-page</code> on learn articles, footer links to the subject hub.</li>
-      <li>Use relative paths for links and styles (e.g. <code>../../styles.css</code> from learn pages).</li>
-      <li>For diagrams, use small <code>refer-link</code> citations to external sources.</li>
+      <li>Shared root files: <code>index.html</code>, <code>styles.css</code>, <code>assets/</code>, <code>scripts/</code>.</li>
+      <li>One folder per subject (for example <code>AI Engineer/</code>).</li>
+      <li>Match existing layout: breadcrumbs, <code>learn-page</code> on learn articles, footer hub links.</li>
+      <li>After adding or renaming pages, run <code>powershell -File scripts/build-search-index.ps1</code> and commit the updated index files.</li>
+      <li>Use relative paths for styles and links (see README for depth table).</li>
+      <li>Use <code>refer-link</code> for external diagram and paper citations.</li>
     </ul>
 
-    <p>Questions or ideas? Open an <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/issues" rel="noopener noreferrer">issue</a> on GitHub.</p>
+    <p>Questions or bugs: open a <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/issues" rel="noopener noreferrer">GitHub issue</a>.</p>
   </section>
 
 </main>
@@ -71,5 +73,7 @@
   <p><small><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">Engineering-Knowledge-Base</a> &middot; <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a> &middot; <a href="#contributing">Contribute</a></small></p>
 </footer>
 
+  <script src="assets/site.js"></script>
+  <script src="assets/search.js" defer></script>
 </body>
 </html>
