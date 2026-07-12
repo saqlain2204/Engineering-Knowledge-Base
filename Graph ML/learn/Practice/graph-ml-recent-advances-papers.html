@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Recent Advances &amp; Papers | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Recent Advances</p>
+  </nav>
+  <h1>Recent Advances &amp; Key Papers</h1>
+  <p>Landmark papers, 2020–2026 trends, theses to read, code repos, and open problems.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#foundational">Foundational Papers (Must Read)</a></li>
+    <li><a href="#benchmarks">Benchmarks &amp; Ecosystem</a></li>
+    <li><a href="#expressiveness">Expressiveness &amp; Limits</a></li>
+    <li><a href="#transformers">Graph Transformers Era</a></li>
+    <li><a href="#self-supervised">Self-Supervised &amp; Foundation Models</a></li>
+    <li><a href="#molecules">Molecules &amp; Equivariant GNNs</a></li>
+    <li><a href="#llm-graph">LLM + Graph (2024–2026)</a></li>
+    <li><a href="#theses">Theses &amp; Books</a></li>
+    <li><a href="#open">Open Problems</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="foundational">
+    <h2>1. Foundational Papers (Must Read)</h2>
+    <table>
+      <thead><tr><th>Year</th><th>Paper</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>2014</td><td><a href="https://arxiv.org/abs/1312.6203" rel="noopener noreferrer">Bruna  -  Spectral Networks</a></td><td>First spectral GNN  -  started the field</td></tr>
+        <tr><td>2016</td><td><a href="https://arxiv.org/abs/1606.09375" rel="noopener noreferrer">Defferrard  -  ChebNet</a></td><td>Localized spectral filters</td></tr>
+        <tr><td>2017</td><td><a href="https://arxiv.org/abs/1609.02907" rel="noopener noreferrer">Kipf &amp; Welling  -  GCN</a></td><td>The model everyone starts with</td></tr>
+        <tr><td>2017</td><td><a href="https://arxiv.org/abs/1704.01212" rel="noopener noreferrer">Gilmer  -  MPNN</a></td><td>Unified message passing framework</td></tr>
+        <tr><td>2017</td><td><a href="https://arxiv.org/abs/1706.02216" rel="noopener noreferrer">Hamilton  -  GraphSAGE</a></td><td>Inductive learning at scale</td></tr>
+        <tr><td>2018</td><td><a href="https://arxiv.org/abs/1710.10903" rel="noopener noreferrer">Veličković  -  GAT</a></td><td>Attention on graphs</td></tr>
+        <tr><td>2019</td><td><a href="https://arxiv.org/abs/1810.00826" rel="noopener noreferrer">Xu  -  GIN / WL power</a></td><td>Expressiveness upper bound</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="benchmarks">
+    <h2>2. Benchmarks &amp; Ecosystem</h2>
+    <ul>
+      <li><a href="https://arxiv.org/abs/2005.00687" rel="noopener noreferrer">Hu et al.  -  Open Graph Benchmark (OGB, 2020)</a>  -  standardized datasets and evaluators</li>
+      <li><a href="https://arxiv.org/abs/2104.13478" rel="noopener noreferrer">Bronstein et al.  -  Geometric Deep Learning Blueprint (2021)</a>  -  theoretical unification</li>
+      <li><a href="https://pytorch-geometric.readthedocs.io/" rel="noopener noreferrer">PyTorch Geometric</a>  -  main research library</li>
+      <li><a href="https://www.dgl.ai/" rel="noopener noreferrer">DGL</a>  -  scalable graph deep learning</li>
+    </ul>
+  </section>
+
+  <section id="expressiveness">
+    <h2>3. Expressiveness &amp; Limits</h2>
+    <ul>
+      <li><a href="https://arxiv.org/abs/2111.08110" rel="noopener noreferrer">Topping et al.  -  Over-Squashing (2022)</a></li>
+      <li><a href="https://arxiv.org/abs/1901.00596" rel="noopener noreferrer">Zhu et al.  -  Beyond Homophily (2020)</a></li>
+      <li><a href="https://arxiv.org/abs/2201.07955" rel="noopener noreferrer">Zhang et al.  -  NGNN / Subgraph GNNs (2022)</a>  -  beat 1-WL limit</li>
+      <li><a href="https://arxiv.org/abs/2202.10142" rel="noopener noreferrer">Bevilacqua et al.  -  ESAN (2022)</a></li>
+    </ul>
+  </section>
+
+  <section id="transformers">
+    <h2>4. Graph Transformers Era</h2>
+    <ul>
+      <li><a href="https://arxiv.org/abs/2106.05234" rel="noopener noreferrer">Ying et al.  -  Graphormer (2021)</a></li>
+      <li><a href="https://arxiv.org/abs/2205.12454" rel="noopener noreferrer">Rampášek et al.  -  GPS (2022)</a></li>
+      <li><a href="https://arxiv.org/abs/2302.00840" rel="noopener noreferrer">Ma et al.  -  Graph Inductive Biases in Transformers (GRIT, 2023)</a></li>
+      <li><a href="https://arxiv.org/abs/2305.05227" rel="noopener noreferrer">Kreuzer et al.  -  SAN (2021)</a></li>
+    </ul>
+  </section>
+
+  <section id="self-supervised">
+    <h2>5. Self-Supervised &amp; Foundation Models</h2>
+    <ul>
+      <li><a href="https://arxiv.org/abs/2205.10803" rel="noopener noreferrer">Hou et al.  -  GraphMAE (2022)</a>  -  masked autoencoder for graphs</li>
+      <li><a href="https://arxiv.org/abs/2304.15020" rel="noopener noreferrer">Liu et al.  -  GraphGPT (2023)</a></li>
+      <li><a href="https://arxiv.org/abs/2310.12150" rel="noopener noreferrer">Liu et al.  -  OneForAll (2023)</a>  -  one model many graph tasks</li>
+      <li><a href="https://arxiv.org/abs/2402.02249" rel="noopener noreferrer">GFM survey (2024)</a>  -  graph foundation models overview</li>
+    </ul>
+  </section>
+
+  <section id="molecules">
+    <h2>6. Molecules &amp; Equivariant GNNs</h2>
+    <ul>
+      <li><a href="https://arxiv.org/abs/1704.01212" rel="noopener noreferrer">Gilmer  -  MPNN on molecules</a></li>
+      <li><a href="https://arxiv.org/abs/2102.09844" rel="noopener noreferrer">Satorras et al.  -  EGNN (2021)</a>  -  E(n) equivariance</li>
+      <li><a href="https://arxiv.org/abs/1806.03146" rel="noopener noreferrer">Schütt et al.  -  SchNet (2018)</a></li>
+      <li><a href="https://arxiv.org/abs/2006.15107" rel="noopener noreferrer">Yang et al.  -  MoleculeNet benchmarks</a></li>
+    </ul>
+  </section>
+
+  <section id="llm-graph">
+    <h2>7. LLM + Graph (2024–2026)</h2>
+    <ul>
+      <li><a href="https://arxiv.org/abs/2404.16130" rel="noopener noreferrer">Edge et al.  -  GraphRAG (Microsoft, 2024)</a></li>
+      <li><a href="https://arxiv.org/abs/2310.01089" rel="noopener noreferrer">Chen et al.  -  Text-Attributed Graphs survey</a></li>
+      <li><a href="https://arxiv.org/abs/2402.10793" rel="noopener noreferrer">Think-on-Graph (2024)</a>  -  LLM reasoning with KG</li>
+      <li><a href="https://arxiv.org/abs/2308.14355" rel="noopener noreferrer">G-Retriever (2024)</a>  -  RAG with textual graphs</li>
+      <li><a href="https://arxiv.org/abs/2405.02417" rel="noopener noreferrer">GraphLLM (2024)</a></li>
+    </ul>
+    <p>Full index: <a href="../../research/papers-hub.html">Papers Hub</a></p>
+  </section>
+
+  <section id="theses">
+    <h2>8. Theses &amp; Books</h2>
+    <ul>
+      <li><strong>Graph Representation Learning</strong>  -  William L. Hamilton (book, <a href="https://www.cs.mcgill.ca/~wlh/grl_book/" rel="noopener noreferrer">free online</a>)  -  best textbook, read cover to cover</li>
+      <li><strong>Hamilton PhD thesis</strong> (Stanford)  -  GraphSAGE and large-scale learning</li>
+      <li><strong>Xu Keyulu PhD thesis</strong> (MIT)  -  expressiveness of GNNs, GIN</li>
+      <li><strong>Geometric Deep Learning</strong>  -  Bronstein, Bruna, Cohen, Veličković (<a href="https://geometricdeeplearning.com/" rel="noopener noreferrer">geometricdeeplearning.com</a>)</li>
+      <li><strong>Graph Neural Networks: Foundations, Frontiers, and Applications</strong>  -  Zhou et al. (Springer)</li>
+    </ul>
+  </section>
+
+  <section id="open">
+    <h2>9. Open Problems</h2>
+    <ol>
+      <li><strong>Scaling laws for GNNs</strong>  -  do they follow LLM-style power laws?</li>
+      <li><strong>True graph foundation models</strong>  -  one pretrained model for any graph domain?</li>
+      <li><strong>Over-squashing cure</strong>  -  practical fix without $O(n^2)$ attention</li>
+      <li><strong>Heterophily at scale</strong>  -  production models on web-scale heterophilous graphs</li>
+      <li><strong>Dynamic graphs + LLMs</strong>  -  streaming KG updates with frozen LLM</li>
+      <li><strong>Theory of depth</strong>  -  principled layer count selection</li>
+      <li><strong>Fairness and bias</strong> on graph recommendations</li>
+      <li><strong>Explainability</strong>  -  which subgraph caused the prediction?</li>
+    </ol>
+
+    <div class="page-footer-nav">
+      <p>Finished the learning path?</p>
+      <a class="interview-link" href="../../interview/graph-ml-interview.html">Start Interview Prep →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>When to Use GNNs | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; When to Use</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: When to Use GNNs</h1>
+  <p><a href="../../learn/Practice/graph-ml-when-to-use-evaluation.html">Read learning notes</a>.</p>
+</header>
+<main><section>
+<h2>When to Use GNNs</h2>
+<details><summary>When should you use a GNN?</summary>
+<div><p>When data has meaningful relational structure, labels/features of a node depend on its neighbors, you have node features and edges, and simpler baselines (MLP, label propagation) are beaten by structure-aware models.</p></div></details>
+<details><summary>When should you NOT use a GNN?</summary>
+<div><p>i.i.d. tabular data with no real relationships, invented k-NN graphs with no semantic meaning, tiny graphs, when MLP on features already wins, strict latency on 100M-node graphs without sampling infrastructure.</p></div></details>
+<details><summary>GNN vs XGBoost on tabular data with a graph?</summary>
+<div><p>If graph structure adds signal beyond features (citation topic, social influence), GNN wins. If features are sufficient and edges are weak, XGBoost often wins with less complexity. Always ablate: GNN vs MLP vs XGBoost.</p></div></details>
+<details><summary>What metrics for link prediction?</summary>
+<div><p>AUC-ROC, Average Precision (AP), MRR (mean reciprocal rank), Hits@K (fraction where true link ranks in top K). Report on filtered setting (hide other true edges when ranking).</p></div></details>
+<details><summary>What is the OGB benchmark?</summary>
+<div><p>Open Graph Benchmark  -  standardized datasets, splits, and evaluators for fair comparison. Use their splits and report mean ± std over multiple seeds. Leaderboard at ogb.stanford.edu.</p></div></details>
+<details><summary>What ablations should every GNN paper include?</summary>
+<div><p>MLP baseline (no graph), number of layers, aggregator type, with/without edge features, with/without positional encodings. Honest comparison builds trust.</p></div></details>
+</section></main>
+<footer><p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p></footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Helm &amp; Observability | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Helm &amp; Observability</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Helm &amp; Observability</h1>
+  <p>Helm packaging, Prometheus metrics, Grafana dashboards, logging, tracing, and resource quotas. <a href="../../learn/Kubernetes/kubernetes-helm-observability.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Helm &amp; Observability</h2>
+<p>Chart templating, release management, and the three pillars of observability in Kubernetes clusters.</p>
+
+<details><summary>What is Helm and how do charts differ from releases?</summary>
+<div><p><strong>Helm</strong> is the package manager for Kubernetes. A <strong>chart</strong> is a versioned package of templated YAML manifests (<code>Chart.yaml</code>, <code>values.yaml</code>, <code>templates/</code>). A <strong>release</strong> is a deployed instance of a chart in a cluster  -  you can install the same chart multiple times with different release names. Helm 3 stores release state as Secrets in the target namespace (no Tiller). Use <code>helm upgrade --install</code> for idempotent deployments.</p></div>
+</details>
+
+<details><summary>How do Helm templates and values.yaml work together?</summary>
+<div><p>Templates in <code>templates/</code> are Go templates with Sprig functions. <code>values.yaml</code> provides defaults; overrides come from <code>-f values-prod.yaml</code>, <code>--set key=value</code>, or <code>--set-file</code>. Access values with <code>{{ .Values.replicaCount }}</code>, release metadata with <code>{{ .Release.Name }}</code>, and reusable snippets via <code>{{ include "mychart.fullname" . }}</code>. Preview rendered output with <code>helm template</code> before applying.</p></div>
+</details>
+
+<details><summary>What is the typical Helm deploy, upgrade, and rollback workflow?</summary>
+<div><p><code>helm install my-api ./mychart -f values-prod.yaml</code> creates revision 1. <code>helm upgrade my-api ./mychart --set image.tag=2.4.0</code> creates revision 2. <code>helm history my-api</code> lists revisions; <code>helm rollback my-api 1</code> reverts. Use <code>helm upgrade --install</code> in CI/CD for idempotency. Dry-run with <code>helm install --dry-run --debug</code> to inspect rendered manifests and catch template errors early.</p></div>
+</details>
+
+<details><summary>What are Helm hooks and when would you use them?</summary>
+<div><p>Helm hooks run Kubernetes Jobs or other resources at lifecycle points: <code>pre-install</code>, <code>post-install</code>, <code>pre-upgrade</code>, <code>pre-delete</code>, etc. Annotate with <code>helm.sh/hook</code>, <code>helm.sh/hook-weight</code> (execution order), and <code>helm.sh/hook-delete-policy</code>. Common uses: database migrations before upgrade, smoke tests after install, backup before delete. Hooks run outside the normal release manifest ordering.</p></div>
+</details>
+
+<details><summary>How does Prometheus collect metrics in a Kubernetes cluster?</summary>
+<div><p><strong>Prometheus</strong> pulls (scrapes) metrics from HTTP endpoints on an interval. In K8s, use the <strong>kube-prometheus-stack</strong> Helm chart for Prometheus, Alertmanager, and node-exporter. Expose app metrics at <code>/metrics</code> and discover targets via <strong>ServiceMonitor</strong> CRDs (Prometheus Operator) or Pod annotations (<code>prometheus.io/scrape</code>). Key categories: cluster health (node CPU, pending Pods), workload RED metrics (rate, errors, duration), and resource utilization vs requests/limits.</p></div>
+</details>
+
+<details><summary>What is a ServiceMonitor and how does it differ from annotation-based discovery?</summary>
+<div><p>A <strong>ServiceMonitor</strong> is a Prometheus Operator CRD that declaratively defines which Services to scrape (selector, namespace, port, path, interval). Annotation-based discovery (<code>prometheus.io/scrape: "true"</code>) is simpler but less flexible. ServiceMonitors support TLS, bearer tokens, relabeling, and multi-namespace selection  -  preferred in production Prometheus Operator setups installed via Helm.</p></div>
+</details>
+
+<details><summary>How do you use Grafana effectively with Prometheus in Kubernetes?</summary>
+<div><p>Install Grafana alongside Prometheus via <code>kube-prometheus-stack</code> or the Loki stack. Pre-built dashboards cover cluster, node, and workload views. Import community dashboards from grafana.com (IDs 315, 6417, 12006). Manage dashboards as code with ConfigMaps labeled <code>grafana_dashboard: "1"</code> or the Grafana Operator. Set up alerts in Grafana or Alertmanager for SLO burn rates, Pod crash loops, and PVC capacity thresholds.</p></div>
+</details>
+
+<details><summary>How do you aggregate logs from Kubernetes without a built-in log system?</summary>
+<div><p>Kubernetes captures container stdout/stderr per Pod but does not aggregate cluster-wide. Common stacks: <strong>EFK</strong> (Elasticsearch, Fluent Bit, Kibana), <strong>Loki</strong> (label-based, pairs with Grafana), or cloud-native (CloudWatch, Cloud Logging). Deploy log agents as DaemonSets. Best practices: log JSON to stdout, include correlation IDs, avoid file-based logging inside containers, and set retention policies per environment.</p></div>
+</details>
+
+<details><summary>What is distributed tracing and how does OpenTelemetry fit in Kubernetes?</summary>
+<div><p><strong>Distributed tracing</strong> tracks requests across microservices with trace IDs and spans. <strong>OpenTelemetry</strong> is the vendor-neutral instrumentation standard (SDK + collector). Export traces to Jaeger, Grafana Tempo, or Zipkin. Deploy an OpenTelemetry Collector as a DaemonSet or sidecar to receive, batch, and forward telemetry. Correlate traces with logs (trace ID in log lines) and metrics (exemplars) for faster incident response.</p></div>
+</details>
+
+<details><summary>What are ResourceQuotas and LimitRanges, and when do you need them?</summary>
+<div><p>A <strong>ResourceQuota</strong> caps total resources a namespace can consume (CPU, memory, Pod count, PVC count, Services). A <strong>LimitRange</strong> sets defaults and min/max per Pod or container in a namespace. Use quotas on multi-tenant clusters to prevent one team from exhausting cluster capacity. Combine with <code>requests</code> and <code>limits</code> on every container; without requests, quotas cannot enforce fairly.</p></div>
+</details>
+
+<details><summary>What metrics and alerts would you set up for a production API service?</summary>
+<div><p>Metrics: request rate, error rate (5xx), p95/p99 latency, Pod restarts, CPU/memory vs requests, HPA current/desired replicas. Alerts: error rate &gt; 1% for 5 min, latency p99 &gt; SLO threshold, Pods not Ready, deployment replica mismatch, certificate expiry. Use the RED method (Rate, Errors, Duration) for services and USE method (Utilization, Saturation, Errors) for infrastructure. Route alerts through Alertmanager with severity tiers and runbooks.</p></div>
+</details>
+
+<details><summary>How do you debug a failed Helm release?</summary>
+<div><p>Run <code>helm status my-release</code> and <code>helm history my-release</code> for revision state. Inspect rendered templates: <code>helm get manifest my-release</code>. Check Kubernetes events: <code>kubectl get events</code>. For hook failures, find hook Jobs with <code>kubectl get jobs</code>. Use <code>helm rollback</code> if the new revision is broken. Lint before deploy: <code>helm lint ./mychart</code>. In CI, always run <code>helm template</code> and <code>kubeconform</code> or <code>helm unittest</code> to catch errors pre-deploy.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

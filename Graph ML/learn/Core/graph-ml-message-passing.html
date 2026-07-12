@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Message Passing Framework | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Message Passing</p>
+  </nav>
+  <h1>Message Passing Framework</h1>
+  <p>The single idea behind almost every GNN: nodes send messages along edges, aggregate them, and update themselves.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why-mp">Why Message Passing?</a></li>
+    <li><a href="#permutation">Permutation Invariance and Equivariance</a></li>
+    <li><a href="#mpnn">The MPNN Framework</a></li>
+    <li><a href="#receptive-field">Receptive Field and Depth</a></li>
+    <li><a href="#readout">Graph-Level Readout</a></li>
+    <li><a href="#matrix-view">Matrix Form View</a></li>
+    <li><a href="#batching">Batching Multiple Graphs</a></li>
+    <li><a href="#implementation">PyG Implementation</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="why-mp">
+    <h2>1. Why Message Passing?</h2>
+    <p>We cannot feed a graph into an MLP as a raw adjacency matrix because:</p>
+    <ol>
+      <li>Graphs have <strong>different sizes</strong> ($n$ varies)</li>
+      <li>There is <strong>no fixed node order</strong>  -  node 3 in one labeling might be node 7 in another</li>
+      <li>What matters is <strong>structure</strong>, not the arbitrary IDs</li>
+    </ol>
+    <p>Message passing solves this by processing each node locally using its neighbors  -  the same rule applies regardless of graph size or node naming.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Each node asks its neighbors "what do you know?" and combines their answers to update its own belief. After $L$ rounds, information has spread $L$ hops.
+    </div>
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1704.01212" rel="noopener noreferrer">Gilmer et al.  -  Neural Message Passing for Quantum Chemistry (MPNN)</a></small></p>
+  </section>
+
+  <section id="permutation">
+    <h2>2. Permutation Invariance and Equivariance</h2>
+    <p>Let $\mathbf{P}$ be any permutation matrix (reorders nodes). It reorders adjacency: $\mathbf{A}' = \mathbf{P}\mathbf{A}\mathbf{P}^T$ and features: $\mathbf{X}' = \mathbf{P}\mathbf{X}$.</p>
+
+    <h3>Permutation equivariance (node-level output)</h3>
+    <p>A function $f$ is <strong>equivariant</strong> if reordering input reorders output the same way:</p>
+    $$f(\mathbf{P}\mathbf{A}\mathbf{P}^T, \mathbf{P}\mathbf{X}) = \mathbf{P}\, f(\mathbf{A}, \mathbf{X})$$
+    <p>Each GNN layer should be equivariant  -  node $i$'s embedding depends on its neighborhood structure, not its index.</p>
+
+    <h3>Permutation invariance (graph-level output)</h3>
+    <p>A function $g$ is <strong>invariant</strong> if:</p>
+    $$g(\mathbf{P}\mathbf{A}\mathbf{P}^T, \mathbf{P}\mathbf{X}) = g(\mathbf{A}, \mathbf{X})$$
+    <p>Graph classification needs invariance  -  achieved by <strong>readout</strong> (sum/mean over nodes  -  symmetric function).</p>
+
+    <div class="callout callout-derivation">
+      <strong>Why sum aggregation is invariant:</strong> $\sum_i \mathbf{h}_i = \sum_i (\mathbf{P}\mathbf{h})_i$ because permutation only reorders terms in the sum. Same for mean and max.
+    </div>
+  </section>
+
+  <section id="mpnn">
+    <h2>3. The MPNN Framework</h2>
+    <p>Gilmer et al. (2017) unified GNNs into three steps at layer $l$:</p>
+
+    <h3>Step 1  -  Message</h3>
+    $$\mathbf{m}_{ij}^{(l+1)} = \phi^{(l)}\left(\mathbf{h}_i^{(l)}, \mathbf{h}_j^{(l)}, \mathbf{e}_{ij}\right)$$
+    <p>Build a message from sender $j$ to receiver $i$ using both embeddings and optional edge features.</p>
+
+    <h3>Step 2  -  Aggregate</h3>
+    $$\bar{\mathbf{m}}_i^{(l+1)} = \bigoplus_{j \in \mathcal{N}(i)} \mathbf{m}_{ij}^{(l+1)}$$
+    <p>$\bigoplus$ is a permutation-invariant aggregator: sum, mean, max, or attention-weighted sum.</p>
+
+    <h3>Step 3  -  Update</h3>
+    $$\mathbf{h}_i^{(l+1)} = \gamma^{(l)}\left(\mathbf{h}_i^{(l)}, \bar{\mathbf{m}}_i^{(l+1)}\right)$$
+    <p>Combine old embedding with aggregated messages. Often an MLP or GRU.</p>
+
+    <p>Initial embedding $\mathbf{h}_i^{(0)} = \mathbf{x}_i$ (raw features).</p>
+
+    <table>
+      <thead><tr><th>Model</th><th>Message $\phi$</th><th>Aggregate $\bigoplus$</th><th>Update $\gamma$</th></tr></thead>
+      <tbody>
+        <tr><td>GCN</td><td>normalized $h_j$</td><td>sum</td><td>linear + ReLU</td></tr>
+        <tr><td>GraphSAGE</td><td>$h_j$</td><td>mean/max/LSTM</td><td>concat + MLP</td></tr>
+        <tr><td>GAT</td><td>attention-weighted $h_j$</td><td>weighted sum</td><td>linear + ELU</td></tr>
+        <tr><td>GIN</td><td>$h_j$</td><td>sum</td><td>MLP$(h_i + \sum h_j)$</td></tr>
+      </tbody>
+    </table>
+    <p>Full details per model: <a href="graph-ml-classic-architectures.html">Classic Architectures</a>.</p>
+  </section>
+
+  <section id="receptive-field">
+    <h2>4. Receptive Field and Depth</h2>
+    <p>After $L$ message passing layers, node $i$'s embedding depends on its <strong>$L$-hop neighborhood</strong> (all nodes within $L$ edges).</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Layer 1 = direct neighbors. Layer 2 = neighbors of neighbors. Deeper = wider context but also more oversmoothing risk.
+    </div>
+    <p><strong>Why not 100 layers?</strong> On most graphs, 2–4 layers work best. Deeper layers mix all nodes toward similar embeddings (oversmoothing) and suffer over-squashing (bottleneck edges lose information). See <a href="../Advanced/graph-ml-deep-gnns-limitations.html">Deep GNNs &amp; Limitations</a>.</p>
+  </section>
+
+  <section id="readout">
+    <h2>5. Graph-Level Readout</h2>
+    <p>For graph classification, pool node embeddings into one vector:</p>
+    $$\mathbf{h}_G = \text{READOUT}\left(\{\mathbf{h}_i^{(L)} : i \in V\}\right)$$
+    <p>Common READOUT functions:</p>
+    <ul>
+      <li><strong>Sum:</strong> $\sum_i \mathbf{h}_i$  -  preserves size information (GIN uses this)</li>
+      <li><strong>Mean:</strong> $\frac{1}{n}\sum_i \mathbf{h}_i$  -  size-invariant</li>
+      <li><strong>Max:</strong> $\max_i \mathbf{h}_i$ per dimension  -  captures strongest signal</li>
+      <li><strong>Attention pooling:</strong> learn weights per node</li>
+      <li><strong>Jumping Knowledge:</strong> combine embeddings from multiple layers</li>
+    </ul>
+  </section>
+
+  <section id="matrix-view">
+    <h2>6. Matrix Form View</h2>
+    <p>One GCN-style layer can be written for all nodes at once:</p>
+    $$\mathbf{H}^{(l+1)} = \sigma\left(\tilde{\mathbf{D}}^{-1/2}\tilde{\mathbf{A}}\tilde{\mathbf{D}}^{-1/2}\mathbf{H}^{(l)}\mathbf{W}^{(l)}\right)$$
+    <p>where $\tilde{\mathbf{A}} = \mathbf{A} + \mathbf{I}$. This is exactly "multiply by adjacency (spread messages), then linear transform." Sparse matrix multiply makes this efficient.</p>
+  </section>
+
+  <section id="batching">
+    <h2>7. Batching Multiple Graphs</h2>
+    <p>PyG batches graphs by creating one <strong>disjoint union</strong>  -  stack all nodes and edges, offset edge indices, add a <code>batch</code> vector labeling which graph each node belongs to.</p>
+    <pre><code>from torch_geometric.loader import DataLoader
+loader = DataLoader(dataset, batch_size=32, shuffle=True)
+for batch in loader:
+    out = model(batch.x, batch.edge_index, batch.batch)</code></pre>
+    <p>For single large graphs (Cora, OGBN-Arxiv), use <code>NeighborLoader</code> to sample local subgraphs instead.</p>
+  </section>
+
+  <section id="implementation">
+    <h2>8. PyG Implementation</h2>
+    <pre><code>from torch_geometric.nn import MessagePassing
+
+class CustomMP(MessagePassing):
+    def __init__(self, in_ch, out_ch):
+        super().__init__(aggr='add')  # sum aggregation
+        self.lin = torch.nn.Linear(in_ch, out_ch)
+
+    def forward(self, x, edge_index):
+        return self.propagate(edge_index, x=x)
+
+    def message(self, x_j):
+        # x_j: features of source nodes j for each edge
+        return x_j
+
+    def update(self, aggr_out):
+        return self.lin(aggr_out).relu()</code></pre>
+    <p><code>message</code> defines $\phi$, <code>aggr</code> defines $\bigoplus$, <code>update</code> defines $\gamma$.</p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-classic-architectures.html">Classic GNN Architectures (GCN, GAT, GIN…) →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

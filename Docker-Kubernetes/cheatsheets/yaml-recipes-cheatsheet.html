@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+  <title>YAML Recipes Cheat Sheet | Docker &amp; Kubernetes</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="docker-kubernetes-cheatsheets.html">Cheat Sheets</a> &rsaquo; YAML Recipes</p>
+  </nav>
+  <h1>YAML Recipes Cheat Sheet</h1>
+  <p>Copy-paste Kubernetes manifest templates for common production patterns.</p>
+</header>
+
+<main class="article">
+
+  <section>
+    <h2>Deployment with Probes</h2>
+    <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: production
+  labels:
+    app: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      serviceAccountName: api-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: api
+          image: mycompany/api:2.3.1
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          envFrom:
+            - configMapRef:
+                name: api-config
+            - secretRef:
+                name: api-secrets</code></pre>
+  </section>
+
+  <section>
+    <h2>Service + Ingress</h2>
+    <pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: production
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: production
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [api.example.com]
+      secretName: api-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80</code></pre>
+  </section>
+
+  <section>
+    <h2>HorizontalPodAutoscaler</h2>
+    <pre><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70</code></pre>
+  </section>
+
+  <section>
+    <h2>PVC + StatefulSet</h2>
+    <pre><code>apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-creds
+                  key: password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 50Gi</code></pre>
+  </section>
+
+  <section>
+    <h2>ConfigMap + Secret</h2>
+    <pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+data:
+  LOG_LEVEL: info
+  APP_ENV: production
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secrets
+type: Opaque
+stringData:
+  DB_PASSWORD: changeme
+  API_KEY: secret-key</code></pre>
+  </section>
+
+  <section>
+    <h2>RBAC (Role + RoleBinding)</h2>
+    <pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: production
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: production
+subjects:
+  - kind: ServiceAccount
+    name: api-sa
+    namespace: production
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io</code></pre>
+  </section>
+
+  <section>
+    <h2>NetworkPolicy</h2>
+    <pre><code>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-ingress-only
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 8080</code></pre>
+  </section>
+
+  <section>
+    <h2>Job &amp; CronJob</h2>
+    <pre><code>apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: mycompany/api:2.3.1
+          command: ["python", "manage.py", "migrate"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-backup
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: mycompany/backup:1.0
+              command: ["./backup.sh"]</code></pre>
+  </section>
+
+  <section>
+    <h2>ResourceQuota + LimitRange</h2>
+    <pre><code>apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: prod-quota
+  namespace: production
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    pods: "50"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: production
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi</code></pre>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="docker-kubernetes-cheatsheets.html">Back to Cheat Sheets</a> &middot; <a href="../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../assets/site.js"></script>
+<script src="../../assets/search.js" defer></script>
+</body>
+</html>

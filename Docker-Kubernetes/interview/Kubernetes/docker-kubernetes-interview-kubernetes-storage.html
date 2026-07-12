@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Storage | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Storage</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Kubernetes Storage</h1>
+  <p>Persistent volumes, access modes, CSI drivers, and StatefulSet storage patterns. <a href="../../learn/Kubernetes/kubernetes-storage.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Kubernetes Storage</h2>
+<p>Volume types, PV/PVC lifecycle, dynamic provisioning, and backup strategies for stateful workloads.</p>
+
+<details><summary>What is the difference between ephemeral and persistent volumes in Kubernetes?</summary>
+<div><p><strong>Ephemeral volumes</strong> (<code>emptyDir</code>, <code>configMap</code>, <code>secret</code>, <code>projected</code>) live and die with the Pod  -  data is lost when the Pod is deleted. <strong>Persistent volumes</strong> (via PVC) survive Pod restarts and rescheduling because storage is provisioned independently through PV/PVC binding. Use ephemeral volumes for scratch space and config; use PVCs for databases, file stores, and any data that must outlive a single Pod.</p></div>
+</details>
+
+<details><summary>When would you use emptyDir vs hostPath vs a PVC?</summary>
+<div><p><code>emptyDir</code> is ideal for temporary data shared between containers in the same Pod (sidecar log processing, build caches). <code>hostPath</code> mounts a path on the node filesystem  -  useful only for node-level daemons (log agents, CNI plugins); avoid it for application data because Pods are not tied to nodes. A <strong>PVC</strong> is the right choice when data must persist across Pod lifecycle events and be portable across nodes via cloud or network storage.</p></div>
+</details>
+
+<details><summary>Explain the PV and PVC relationship. Who creates each?</summary>
+<div><p>A <strong>PersistentVolume (PV)</strong> is a cluster-level storage resource representing actual capacity (NFS share, EBS volume, Ceph RBD). A <strong>PersistentVolumeClaim (PVC)</strong> is a namespace-scoped request for storage. The control plane binds a matching PVC to an available PV. With <strong>dynamic provisioning</strong>, the StorageClass provisioner creates the PV automatically when a PVC is created  -  admins no longer pre-provision disks manually.</p></div>
+</details>
+
+<details><summary>What are the four access modes and when do you choose each?</summary>
+<div><p><code>ReadWriteOnce (RWO)</code>  -  one node mounts read-write; standard for block storage (EBS, Azure Disk). <code>ReadOnlyMany (ROX)</code>  -  many nodes read-only; config distribution. <code>ReadWriteMany (RWX)</code>  -  many nodes read-write; requires shared filesystems (NFS, EFS, CephFS). <code>ReadWriteOncePod (RWOP)</code>  -  exclusive to a single Pod (K8s 1.22+). Mismatch between PVC access mode and StorageClass capability is a common binding failure.</p></div>
+</details>
+
+<details><summary>What is a StorageClass and how does dynamic provisioning work?</summary>
+<div><p>A <strong>StorageClass</strong> defines the provisioner (e.g. <code>ebs.csi.aws.com</code>), parameters (disk type, IOPS, encryption), reclaim policy, and binding mode. When a PVC references a StorageClass, the provisioner creates a PV and binds it automatically. Set <code>storageclass.kubernetes.io/is-default-class: "true"</code> so PVCs without an explicit class still get storage. <code>allowVolumeExpansion: true</code> enables online PVC resizing.</p></div>
+</details>
+
+<details><summary>What is volumeBindingMode and why does WaitForFirstConsumer matter?</summary>
+<div><p><code>Immediate</code> provisions and binds a PV as soon as the PVC is created  -  fast but may place storage in the wrong availability zone. <code>WaitForFirstConsumer</code> delays provisioning until a Pod using the PVC is scheduled, then creates storage in the same AZ as the node. This is the recommended setting for cloud block storage to avoid cross-AZ attach failures and unnecessary data transfer costs.</p></div>
+</details>
+
+<details><summary>What are PV reclaim policies: Retain, Delete, and Recycle?</summary>
+<div><p><code>Delete</code> (default for dynamic provisioning) removes the PV and underlying cloud volume when the PVC is deleted. <code>Retain</code> keeps the PV and data after PVC deletion  -  you must manually reclaim and clean up; use for production databases where accidental deletion is catastrophic. <code>Recycle</code> is deprecated. Always verify reclaim policy before deleting PVCs in production.</p></div>
+</details>
+
+<details><summary>What is CSI and how does it replace in-tree volume plugins?</summary>
+<div><p>The <strong>Container Storage Interface (CSI)</strong> is a standard gRPC API for storage vendors. CSI drivers run as Pods in the cluster and implement create, attach, mount, snapshot, and resize operations. In-tree plugins (built into kubelet) are deprecated; cloud providers ship CSI drivers (e.g. <code>ebs.csi.aws.com</code>, <code>pd.csi.storage.gke.io</code>). CSI also enables <strong>VolumeSnapshots</strong> for point-in-time backups independent of application logic.</p></div>
+</details>
+
+<details><summary>How does StatefulSet storage differ from a Deployment with a PVC?</summary>
+<div><p>A Deployment with a single shared PVC causes all replicas to compete for one volume (only works with RWX). <strong>StatefulSets</strong> use <code>volumeClaimTemplates</code> to create a dedicated PVC per replica (<code>data-postgres-0</code>, <code>data-postgres-1</code>, …) with stable Pod identity. Each replica gets its own RWO volume. PVCs persist even if the StatefulSet is deleted  -  scale-down does not auto-delete PVCs, so you must clean up orphans manually.</p></div>
+</details>
+
+<details><summary>How do you back up and restore Kubernetes persistent data?</summary>
+<div><p>Three common approaches: (1) <strong>CSI VolumeSnapshots</strong>  -  cluster-native, fast, storage-backend dependent; restore via PVC <code>dataSource</code> referencing the snapshot. (2) <strong>Application-level backup</strong>  -  <code>pg_dump</code>, Velero with restic for file-level backup across clusters. (3) <strong>Storage-array replication</strong>  -  async replication to another region. For disaster recovery, test restore procedures regularly; snapshots alone are not backups if they live in the same failure domain.</p></div>
+</details>
+
+<details><summary>A Pod is stuck in ContainerCreating with a volume mount error. How do you debug?</summary>
+<div><p>Check the chain: <code>kubectl describe pvc</code> (Bound? Capacity? Access mode?), <code>kubectl describe pod</code> (Events tab  -  attach failures, permission denied), CSI driver Pods in <code>kube-system</code>, and node attach limits. Common causes: PVC pending (no matching StorageClass or quota), RWO volume already attached to another node, insufficient IAM permissions for CSI driver, or AZ mismatch with Immediate binding mode.</p></div>
+</details>
+
+<details><summary>How do you expand a PVC without downtime?</summary>
+<div><p>Requirements: StorageClass with <code>allowVolumeExpansion: true</code>, CSI driver supporting resize, and a filesystem that supports online growth. Patch the PVC: <code>kubectl patch pvc my-pvc -p '{"spec":{"resources":{"requests":{"storage":"100Gi"}}}}'</code>. The CSI driver expands the volume; you may need to restart the Pod or run <code>resize2fs</code>/<code>xfs_growfs</code> inside the container if the filesystem does not auto-expand. Verify with <code>kubectl get pvc</code> and <code>df -h</code> in the Pod.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

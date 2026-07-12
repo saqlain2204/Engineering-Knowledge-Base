@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>When to Use GNNs &amp; Evaluation | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; When to Use GNNs</p>
+  </nav>
+  <h1>When to Use GNNs &amp; Evaluation</h1>
+  <p>Honest decision guide  -  GNN vs tabular ML vs LLM, metrics, baselines, and common evaluation mistakes.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#decision">Decision Framework</a></li>
+    <li><a href="#when-not">When NOT to Use GNNs</a></li>
+    <li><a href="#vs-others">GNN vs MLP vs LLM</a></li>
+    <li><a href="#metrics">Metrics</a></li>
+    <li><a href="#baselines">Baselines You Must Beat</a></li>
+    <li><a href="#ogb">OGB and Fair Comparison</a></li>
+    <li><a href="#ablation">Ablation Studies</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="decision">
+    <h2>1. Decision Framework</h2>
+    <p>Ask these questions in order:</p>
+    <ol>
+      <li><strong>Is there relational structure?</strong> If rows are independent (customer churn with no links), use XGBoost/MLP first.</li>
+      <li><strong>Do labels depend on neighbors?</strong> If yes (homophily or structured heterophily), GNN is a strong candidate.</li>
+      <li><strong>Do you have node features?</strong> Structure-only → random walk embeddings or label propagation may suffice.</li>
+      <li><strong>Graph size?</strong> Small → full-batch GCN. Large → GraphSAGE + neighbor sampling.</li>
+      <li><strong>Dynamic?</strong> Static → standard GNN. Streaming edges → TGN.</li>
+      <li><strong>Multiple types?</strong> Heterogeneous → R-GCN/HGT.</li>
+      <li><strong>Text on nodes?</strong> Consider LLM embeddings + GNN, or GraphRAG  -  see <a href="graph-ml-gnns-and-llms.html">GNNs &amp; LLMs</a>.</li>
+    </ol>
+  </section>
+
+  <section id="when-not">
+    <h2>2. When NOT to Use GNNs</h2>
+    <ul>
+      <li><strong>i.i.d. tabular data</strong> with no meaningful edges (invented k-NN graphs often hurt)</li>
+      <li><strong>Tiny graphs</strong> (&lt; 50 nodes)  -  not enough data to learn message passing</li>
+      <li><strong>Noisy/random graphs</strong>  -  structure is meaningless</li>
+      <li><strong>Strict latency + huge graphs</strong>  -  2-hop sampling on 100M nodes is hard; consider embeddings + MLP</li>
+      <li><strong>When a simpler baseline wins</strong>  -  if label propagation matches your GNN, ship the simpler model</li>
+    </ul>
+    <div class="callout callout-intuition">
+      <strong>Rule of thumb:</strong> Always run an MLP on node features and label propagation on edges. Your GNN must beat both to justify complexity.
+    </div>
+  </section>
+
+  <section id="vs-others">
+    <h2>3. GNN vs MLP vs LLM</h2>
+    <table>
+      <thead><tr><th>Approach</th><th>Wins when</th><th>Loses when</th></tr></thead>
+      <tbody>
+        <tr><td>MLP / XGBoost</td><td>Features carry most signal, no neighbor effect</td><td>Structure is key (citations, molecules)</td></tr>
+        <tr><td>GNN</td><td>Local structure predicts labels, inductive generalization on graphs</td><td>Long text reasoning, no graph</td></tr>
+        <tr><td>LLM alone</td><td>Text-heavy, few-shot reasoning, no reliable graph</td><td>Large structured graphs, combinatorial structure</td></tr>
+        <tr><td>LLM + GNN</td><td>Text-attributed graphs, KG + language queries</td><td>Simple homophilous node cls with bag-of-words features</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="metrics">
+    <h2>4. Metrics</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Metrics</th></tr></thead>
+      <tbody>
+        <tr><td>Node classification</td><td>Accuracy, F1 (macro for imbalanced), AUC-ROC</td></tr>
+        <tr><td>Link prediction</td><td>AUC-ROC, AP, MRR, Hits@10, Hits@50</td></tr>
+        <tr><td>Graph classification</td><td>Accuracy, F1, AUC</td></tr>
+        <tr><td>Graph regression</td><td>MAE, RMSE, $R^2$</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Hits@K:</strong> fraction of true edges where the correct target ranks in top $K$ predictions.</p>
+  </section>
+
+  <section id="baselines">
+    <h2>5. Baselines You Must Beat</h2>
+    <ul>
+      <li><strong>MLP:</strong> node features only, no graph</li>
+      <li><strong>Label propagation:</strong> spread labels along edges (semi-supervised classic)</li>
+      <li><strong>Node2Vec / DeepWalk:</strong> random walk embeddings + logistic regression</li>
+      <li><strong>Logistic regression on hand features</strong> (degree, clustering coeff)</li>
+    </ul>
+  </section>
+
+  <section id="ogb">
+    <h2>6. OGB and Fair Comparison</h2>
+    <p><a href="https://ogb.stanford.edu/" rel="noopener noreferrer">Open Graph Benchmark</a> provides fixed splits, evaluators, and leaderboards. Use their splits  -  do not invent your own when comparing to published numbers.</p>
+    <p>Report: mean ± std over multiple seeds (at least 3, preferably 10).</p>
+  </section>
+
+  <section id="ablation">
+    <h2>7. Ablation Studies</h2>
+    <p>Test what actually matters:</p>
+    <ul>
+      <li>Remove edge features  -  how much do they help?</li>
+      <li>Replace GNN with MLP  -  does structure help?</li>
+      <li>1 vs 2 vs 3 layers</li>
+      <li>With vs without positional encodings</li>
+      <li>Different aggregators (mean vs sum vs attention)</li>
+    </ul>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-gnns-and-llms.html">GNNs in the LLM Era →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

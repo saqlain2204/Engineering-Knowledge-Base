@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+  <title>Docker CLI Cheat Sheet | Docker &amp; Kubernetes</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="docker-kubernetes-cheatsheets.html">Cheat Sheets</a> &rsaquo; Docker CLI</p>
+  </nav>
+  <h1>Docker CLI Cheat Sheet</h1>
+  <p>Essential Docker commands for images, containers, networking, volumes, and Compose.</p>
+</header>
+
+<main class="article">
+
+  <section>
+    <h2>Images</h2>
+    <pre><code>docker pull nginx:1.25-alpine
+docker images
+docker image ls --filter "dangling=true"
+docker rmi myapp:1.0
+docker image prune -a              # remove unused images
+docker build -t myapp:1.0 .
+docker build -t myapp:1.0 --target production .
+docker build --no-cache -t myapp:1.0 .
+docker build --build-arg VERSION=1.0 -t myapp:1.0 .
+docker tag myapp:1.0 registry.example.com/myapp:1.0
+docker push registry.example.com/myapp:1.0
+docker history myapp:1.0
+docker inspect myapp:1.0
+docker save myapp:1.0 -o myapp.tar
+docker load -i myapp.tar
+docker scout cves myapp:1.0          # vulnerability scan</code></pre>
+  </section>
+
+  <section>
+    <h2>Containers</h2>
+    <pre><code>docker run -d --name web -p 8080:80 nginx:alpine
+docker run -it --rm ubuntu:22.04 bash
+docker run -d --restart unless-stopped myapp:1.0
+docker run -d --memory=512m --cpus=1.5 myapp:1.0
+docker run -d --read-only -v app-data:/data myapp:1.0
+docker run -d --user 10001:10001 myapp:1.0
+docker run -d --init myapp:1.0       # tini as PID 1
+
+docker ps
+docker ps -a
+docker stop web
+docker start web
+docker restart web
+docker rm web
+docker rm -f web                   # force remove running
+docker container prune             # remove stopped containers
+
+docker logs web
+docker logs -f --tail 100 web
+docker exec -it web sh
+docker exec web cat /etc/nginx/nginx.conf
+docker cp web:/app/logs.txt ./logs.txt
+docker inspect web
+docker top web
+docker stats
+docker stats web --no-stream</code></pre>
+  </section>
+
+  <section>
+    <h2>Networks</h2>
+    <pre><code>docker network ls
+docker network create app-net
+docker network create --driver bridge --subnet 172.20.0.0/16 app-net
+docker network inspect app-net
+docker network connect app-net web
+docker network disconnect app-net web
+docker network rm app-net
+docker network prune
+
+# Run on custom network (containers resolve by name)
+docker run -d --name api --network app-net myapi:1.0
+docker run -d --name db --network app-net postgres:16</code></pre>
+  </section>
+
+  <section>
+    <h2>Volumes</h2>
+    <pre><code>docker volume create pgdata
+docker volume ls
+docker volume inspect pgdata
+docker volume rm pgdata
+docker volume prune
+
+docker run -d -v pgdata:/var/lib/postgresql/data postgres:16
+docker run -d -v $(pwd)/src:/app/src myapp:dev     # bind mount
+docker run -d -v $(pwd)/config:/app/config:ro myapp:1.0
+
+# Backup volume
+docker run --rm -v pgdata:/data -v $(pwd):/backup alpine \
+  tar czf /backup/pgdata.tar.gz -C /data .</code></pre>
+  </section>
+
+  <section>
+    <h2>Dockerfile Quick Reference</h2>
+    <pre><code>FROM python:3.12-slim-bookworm
+ARG VERSION=1.0
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN useradd -r -u 10001 appuser
+USER 10001
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost:8080/health || exit 1
+ENTRYPOINT ["python"]
+CMD ["app.py"]</code></pre>
+  </section>
+
+  <section>
+    <h2>Docker Compose</h2>
+    <pre><code>docker compose up -d
+docker compose up -d --build
+docker compose down
+docker compose down -v             # remove volumes too
+docker compose ps
+docker compose logs -f api
+docker compose exec api sh
+docker compose restart api
+docker compose pull
+docker compose config              # validate and render
+docker compose -f compose.yml -f compose.prod.yml up -d</code></pre>
+  </section>
+
+  <section>
+    <h2>System &amp; Debugging</h2>
+    <pre><code>docker info
+docker version
+docker system df                   # disk usage
+docker system prune -a             # clean everything unused
+docker events
+docker context ls
+docker context use desktop-linux
+
+# Debug container that exits immediately
+docker run --rm myapp:1.0
+docker logs $(docker ps -lq)
+
+# Enter namespaces of running container
+docker run -it --rm --pid container:web --net container:web nicolaka/netshoot</code></pre>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="docker-kubernetes-cheatsheets.html">Back to Cheat Sheets</a> &middot; <a href="../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../assets/site.js"></script>
+<script src="../../assets/search.js" defer></script>
+</body>
+</html>

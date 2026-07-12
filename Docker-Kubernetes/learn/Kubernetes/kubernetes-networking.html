@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Networking &amp; Services | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Kubernetes networking: ClusterIP, NodePort, LoadBalancer, Ingress, DNS, Network Policies, CNI, and service meshes.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Networking &amp; Services</p>
+  </nav>
+  <h1>Kubernetes Networking &amp; Services</h1>
+  <p>How Pods communicate inside the cluster, how traffic reaches them from outside, and how to secure east-west traffic.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#networking-model">The Kubernetes Networking Model</a></li>
+    <li><a href="#services">Services</a></li>
+    <li><a href="#ingress">Ingress &amp; Gateway API</a></li>
+    <li><a href="#dns">Cluster DNS</a></li>
+    <li><a href="#network-policies">Network Policies</a></li>
+    <li><a href="#cni">CNI Plugins</a></li>
+    <li><a href="#service-mesh">Service Meshes</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="networking-model">
+    <h2>1. The Kubernetes Networking Model</h2>
+    <p>Kubernetes enforces four fundamental networking requirements:</p>
+    <ol>
+      <li>Every Pod gets its own IP address and can communicate with every other Pod without NAT.</li>
+      <li>Nodes can communicate with all Pods without NAT.</li>
+      <li>The IP a Pod sees itself as is the same IP others see it as.</li>
+      <li>Services provide stable virtual IPs that load-balance across Pod backends.</li>
+    </ol>
+    <p>This flat, routable Pod network is implemented by a <strong>CNI (Container Network Interface)</strong> plugin on each node. Common choices: Calico, Cilium, Flannel, AWS VPC CNI, Azure CNI.</p>
+    <pre><code>┌─────────────────────────────────────────────────────────────────┐
+│  Node 10.0.1.5                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ Pod 10.244.1.3│  │ Pod 10.244.1.4│  │ Pod 10.244.1.5│          │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
+│         └─────────────────┴─────────────────┘                    │
+│                           │ bridge / overlay (CNI)              │
+│                    kubelet + container runtime                  │
+└─────────────────────────────────────────────────────────────────┘
+         Pod-to-Pod traffic routes across nodes via CNI overlay or
+         cloud VPC routing  -  no port mapping required.</code></pre>
+    <div class="callout">
+      <strong>Key distinction:</strong> A Service is a stable abstraction (virtual IP + DNS name). Pods are ephemeral  -  their IPs change on every restart. Always route traffic to Services, not directly to Pod IPs.
+    </div>
+  </section>
+
+  <section id="services">
+    <h2>2. Services</h2>
+    <p>A <strong>Service</strong> is a stable network endpoint that selects Pods by label and load-balances traffic to them. kube-proxy programs iptables or IPVS rules on every node to implement the Service virtual IP (ClusterIP).</p>
+
+    <h3>Service types</h3>
+    <table>
+      <thead><tr><th>Type</th><th>Reachable from</th><th>Typical use</th></tr></thead>
+      <tbody>
+        <tr><td><code>ClusterIP</code> (default)</td><td>Inside cluster only</td><td>Internal microservices, databases</td></tr>
+        <tr><td><code>NodePort</code></td><td>External via <code>&lt;NodeIP&gt;:&lt;port&gt;</code></td><td>Dev, bare-metal without cloud LB</td></tr>
+        <tr><td><code>LoadBalancer</code></td><td>External via cloud LB</td><td>Production public APIs on EKS/GKE/AKS</td></tr>
+        <tr><td><code>ExternalName</code></td><td>DNS CNAME to external host</td><td>Proxy to SaaS or legacy systems</td></tr>
+        <tr><td><code>Headless</code> (<code>clusterIP: None</code>)</td><td>Direct Pod DNS records</td><td>StatefulSets, client-side LB</td></tr>
+      </tbody>
+    </table>
+
+    <h3>ClusterIP Service</h3>
+    <pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: production
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+    tier: backend
+  ports:
+    - name: http
+      port: 80          # Service port (what clients connect to)
+      targetPort: 8080  # Container port (where app listens)
+      protocol: TCP
+  sessionAffinity: None  # or ClientIP for sticky sessions</code></pre>
+
+    <h3>NodePort Service</h3>
+    <pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: api-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: api
+  ports:
+    - port: 80
+      targetPort: 8080
+      nodePort: 30080   # must be 30000–32767; auto-assigned if omitted</code></pre>
+
+    <h3>LoadBalancer Service</h3>
+    <pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: api-lb
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  selector:
+    app: api
+  ports:
+    - port: 443
+      targetPort: 8443</code></pre>
+
+    <h3>Headless Service (StatefulSet pattern)</h3>
+    <pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  clusterIP: None   # headless  -  no virtual IP
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+# DNS returns individual Pod A records:
+# postgres-0.postgres.default.svc.cluster.local
+# postgres-1.postgres.default.svc.cluster.local</code></pre>
+
+    <h3>Endpoints and EndpointSlices</h3>
+    <p>When you create a Service, Kubernetes automatically creates <strong>Endpoints</strong> (or <strong>EndpointSlices</strong> in newer clusters) listing the IP:port of every matching Pod. If no Pods match the selector, the Endpoints object is empty and the Service has no backends.</p>
+    <pre><code>kubectl get endpoints api -o wide
+kubectl get endpointslices -l kubernetes.io/service-name=api
+kubectl describe svc api</code></pre>
+  </section>
+
+  <section id="ingress">
+    <h2>3. Ingress &amp; Gateway API</h2>
+    <p><strong>Ingress</strong> exposes HTTP/HTTPS routes from outside the cluster to Services. It requires an <strong>Ingress Controller</strong> (nginx-ingress, Traefik, AWS ALB Ingress Controller, etc.) to actually program the load balancer or reverse proxy.</p>
+
+    <pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: api-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80
+    - host: admin.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-ui
+                port:
+                  number: 80</code></pre>
+
+    <h3>pathType values</h3>
+    <ul>
+      <li><code>Prefix</code>  -  matches path prefix (most common)</li>
+      <li><code>Exact</code>  -  exact path match only</li>
+      <li><code>ImplementationSpecific</code>  -  behaviour depends on the controller</li>
+    </ul>
+
+    <h3>Gateway API (successor to Ingress)</h3>
+    <p>The <strong>Gateway API</strong> is a newer, more expressive standard with separate <code>Gateway</code>, <code>HTTPRoute</code>, and <code>GRPCRoute</code> resources. It supports advanced traffic splitting, header-based routing, and cross-namespace references. Use it on new clusters when your CNI/ingress stack supports it.</p>
+    <pre><code>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+spec:
+  parentRefs:
+    - name: main-gateway
+  hostnames:
+    - api.example.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+      backendRefs:
+        - name: api
+          port: 80
+          weight: 90
+        - name: api-canary
+          port: 80
+          weight: 10</code></pre>
+  </section>
+
+  <section id="dns">
+    <h2>4. Cluster DNS</h2>
+    <p>Every cluster runs <strong>CoreDNS</strong> (or kube-dns) as a cluster add-on. Pods are configured with DNS settings so they can resolve Services by name.</p>
+    <pre><code># DNS naming convention:
+# &lt;service&gt;.&lt;namespace&gt;.svc.cluster.local
+# Short names work within the same namespace:
+#   curl http://api:80
+# Cross-namespace:
+#   curl http://api.production.svc.cluster.local
+
+# Pod DNS (StatefulSet):
+# &lt;pod-name&gt;.&lt;headless-service&gt;.&lt;namespace&gt;.svc.cluster.local</code></pre>
+    <pre><code># Debug DNS from a debug pod
+kubectl run -it --rm debug --image=busybox:1.36 --restart=Never -- sh
+nslookup api.production.svc.cluster.local
+wget -qO- http://api.production:80/health
+
+# Check CoreDNS
+kubectl get pods -n kube-system -l k8s-app=kube-dns
+kubectl logs -n kube-system -l k8s-app=kube-dns --tail=50</code></pre>
+    <p>Custom DNS policies per Pod:</p>
+    <pre><code>spec:
+  dnsPolicy: ClusterFirst   # default  -  cluster DNS, then upstream
+  # dnsPolicy: Default      # inherit node DNS
+  # dnsPolicy: None         # use dnsConfig explicitly
+  dnsConfig:
+    nameservers:
+      - 1.1.1.1
+    searches:
+      - custom.svc.cluster.local
+    options:
+      - name: ndots
+        value: "2"</code></pre>
+  </section>
+
+  <section id="network-policies">
+    <h2>5. Network Policies</h2>
+    <p>By default, all Pods can talk to all Pods. <strong>NetworkPolicy</strong> resources restrict ingress and egress traffic using label selectors  -  like a firewall for Pods.</p>
+    <div class="callout">
+      <strong>Requires a CNI that supports NetworkPolicy</strong> (Calico, Cilium, Weave). Flannel alone does not enforce policies.
+    </div>
+
+    <h3>Deny all ingress, allow only from frontend</h3>
+    <pre><code>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-ingress-only
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 8080</code></pre>
+
+    <h3>Namespace-scoped policy</h3>
+    <pre><code>  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+        - podSelector:
+            matchLabels:
+              app: prometheus</code></pre>
+
+    <h3>Egress restriction (allow DNS + database only)</h3>
+    <pre><code>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-egress-restrict
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53</code></pre>
+  </section>
+
+  <section id="cni">
+    <h2>6. CNI Plugins</h2>
+    <table>
+      <thead><tr><th>CNI</th><th>Overlay</th><th>NetworkPolicy</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Calico</td><td>Optional (VXLAN/IP-in-IP)</td><td>Yes</td><td>Popular, BGP routing, eBPF dataplane option</td></tr>
+        <tr><td>Cilium</td><td>Optional</td><td>Yes (eBPF)</td><td>High performance, Hubble observability, L7 policies</td></tr>
+        <tr><td>Flannel</td><td>Yes (VXLAN)</td><td>No (alone)</td><td>Simple, good for basic clusters</td></tr>
+        <tr><td>AWS VPC CNI</td><td>No (native VPC IPs)</td><td>Via Calico addon</td><td>Pods get real VPC IPs on EKS</td></tr>
+        <tr><td>kind default</td><td>Yes</td><td>Calico addon</td><td>kindnet CNI for local dev</td></tr>
+      </tbody>
+    </table>
+    <pre><code># Check CNI on a node
+ls /etc/cni/net.d/
+cat /etc/cni/net.d/*.conflist
+
+# Cilium connectivity test
+cilium connectivity test</code></pre>
+  </section>
+
+  <section id="service-mesh">
+    <h2>7. Service Meshes</h2>
+    <p>A <strong>service mesh</strong> adds a sidecar proxy (Envoy in Istio/Linkerd) to every Pod, providing:</p>
+    <ul>
+      <li>mTLS between all services (zero-trust networking)</li>
+      <li>Advanced traffic management (canary, circuit breaking, retries, timeouts)</li>
+      <li>Observability (distributed tracing, golden metrics per service)</li>
+      <li>L7 routing and authorization policies</li>
+    </ul>
+    <table>
+      <thead><tr><th>Mesh</th><th>Proxy</th><th>Complexity</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td>Istio</td><td>Envoy sidecar</td><td>High</td><td>Large orgs, full L7 control</td></tr>
+        <tr><td>Linkerd</td><td>Linkerd-proxy</td><td>Low</td><td>Simpler mTLS + observability</td></tr>
+        <tr><td>Cilium Service Mesh</td><td>eBPF (no sidecar)</td><td>Medium</td><td>Performance-sensitive clusters</td></tr>
+      </tbody>
+    </table>
+    <pre><code># Istio  -  inject sidecar into namespace
+kubectl label namespace production istio-injection=enabled
+
+# Canary with Istio VirtualService (90/10 split)
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: api
+spec:
+  hosts:
+    - api
+  http:
+    - route:
+        - destination:
+            host: api
+            subset: stable
+          weight: 90
+        - destination:
+            host: api
+            subset: canary
+          weight: 10</code></pre>
+  </section>
+
+  <section id="troubleshooting">
+    <h2>8. Troubleshooting</h2>
+    <pre><code># Service has no endpoints?
+kubectl get pods -l app=api          # do labels match Service selector?
+kubectl describe svc api             # check selector and endpoints
+
+# Pod can't reach another Pod?
+kubectl run -it --rm netshoot --image=nicolaka/netshoot --restart=Never -- bash
+curl -v telnet://api.production:80
+traceroute 10.244.1.5
+
+# Check kube-proxy
+kubectl get pods -n kube-system -l k8s-app=kube-proxy
+kubectl logs -n kube-system -l k8s-app=kube-proxy --tail=20
+
+# Ingress not routing?
+kubectl describe ingress app-ingress
+kubectl get ingressclass
+kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx
+
+# NetworkPolicy blocking traffic?
+kubectl describe networkpolicy -n production
+# Temporarily remove policies to isolate the issue (dev only)</code></pre>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>9. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>List Services</td><td><code>kubectl get svc -A</code></td></tr>
+        <tr><td>Port-forward to Service</td><td><code>kubectl port-forward svc/api 8080:80</code></td></tr>
+        <tr><td>Test DNS</td><td><code>kubectl run tmp --rm -it --image=busybox -- nslookup api</code></td></tr>
+        <tr><td>Check Endpoints</td><td><code>kubectl get endpoints api</code></td></tr>
+        <tr><td>Describe Ingress</td><td><code>kubectl describe ingress app-ingress</code></td></tr>
+        <tr><td>Apply NetworkPolicy</td><td><code>kubectl apply -f deny-all.yaml</code></td></tr>
+        <tr><td>Service DNS</td><td><code>&lt;svc&gt;.&lt;ns&gt;.svc.cluster.local</code></td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheet: <a href="../../cheatsheets/kubectl-cheatsheet.html">kubectl Cheat Sheet</a></p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="kubernetes-storage.html">Kubernetes Storage →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

@@ -20,7 +20,7 @@ Get-ChildItem -Path $root -Filter "*.html" -Recurse | ForEach-Object {
   $html = Get-Content $_.FullName -Raw -Encoding UTF8
 
   if ($html -match '<title>([^<]+)</title>') { $title = $Matches[1].Trim() } else { $title = $_.BaseName }
-  $title = $title -replace '\s*\|\s*Interview Prep\s*$', '' -replace '\s*\|\s*AI Engineering\s*$', '' -replace '\s*-\s*AI Engineering\s*$', ''
+  $title = $title -replace '\s*\|\s*Interview Prep\s*$', '' -replace '\s*\|\s*AI Engineering\s*$', '' -replace '\s*\|\s*Docker & Kubernetes\s*$', '' -replace '\s*\|\s*Graph Machine Learning\s*$', '' -replace '\s*-\s*AI Engineering\s*$', ''
 
   $desc = ''
   if ($html -match '<header>\s*[\s\S]*?<p>([^<]+)</p>') { $desc = $Matches[1].Trim() }
@@ -40,7 +40,7 @@ Get-ChildItem -Path $root -Filter "*.html" -Recurse | ForEach-Object {
   if ($rel -match '/learn/') { $type = 'learn' }
   elseif ($rel -match '/interview/') { $type = 'interview' }
   elseif ($rel -match '/research/') { $type = 'research' }
-  elseif ($rel -match 'index\.html$' -or $rel -match 'ai-engineering\.html$' -or $rel -match 'research-hub\.html$' -or $rel -match 'ai-engineering-interview\.html$') {
+  elseif ($rel -match 'index\.html$' -or $rel -match 'ai-engineering\.html$' -or $rel -match 'docker-kubernetes\.html$' -or $rel -match 'graph-ml\.html$' -or $rel -match 'research-hub\.html$' -or $rel -match 'papers-hub\.html$' -or $rel -match 'ai-engineering-interview\.html$' -or $rel -match 'docker-kubernetes-interview\.html$' -or $rel -match 'graph-ml-interview\.html$' -or $rel -match 'docker-kubernetes-cheatsheets\.html$' -or $rel -match 'graph-ml-formulas\.html$') {
     $type = 'hub'
   }
 

@@ -24,49 +24,205 @@
 <p>Knowing if the model/system is actually good.</p>
 
 <details><summary>What's the difference between intrinsic and extrinsic evaluation of an LLM?</summary>
-<div><p>Intrinsic evaluation measures properties of the model itself in isolation - perplexity, benchmark accuracy (MMLU, HellaSwag, GSM8K). Extrinsic evaluation measures how well the model performs on the actual downstream task/product it's deployed in (e.g. does it resolve support tickets correctly), which is what ultimately matters but is more expensive and slower to measure.</p></div>
+<div><p>Intrinsic evaluation measures properties of the model itself in isolation — perplexity, benchmark accuracy (MMLU, HellaSwag, GSM8K), refusal rate on red-team sets. Extrinsic evaluation measures how well the full system performs on the actual downstream product task (e.g. does the support bot resolve tickets without escalation), which ultimately matters for business outcomes but is slower, noisier, and requires proprietary data. Use intrinsic eval for model shopping; use extrinsic (or a calibrated golden-set proxy) for ship decisions.</p></div>
 </details>
 
 <details><summary>What is perplexity and what are its limitations as a quality metric?</summary>
-<div><p>Perplexity measures how "surprised" the model is by held-out text - lower means the model assigns higher probability to the actual next tokens, roughly indicating fluency/predictive power. Its limitation is that it doesn't directly measure helpfulness, correctness, or alignment with human preference - a model can have low perplexity on generic text while still being unhelpful, unsafe, or factually wrong on specific tasks.</p></div>
+<div><p>Perplexity measures how "surprised" the model is by held-out text — lower means the model assigns higher probability to the actual next tokens, roughly indicating fluency and predictive power. Its limitation is that it doesn't directly measure helpfulness, correctness, or alignment with human preference — a model can have low perplexity on generic text while still being unhelpful, unsafe, or factually wrong on specific tasks. Never use perplexity alone as a product quality signal.</p></div>
 </details>
 
-<details><summary>What is LLM-as-judge and what are its pitfalls?</summary>
-<div><p>LLM-as-judge uses a strong LLM to score or compare outputs against criteria (helpfulness, correctness, safety) at a scale human evaluation can't match. Pitfalls include: position bias (judges tend to favor the first/second option presented, mitigated by swapping order), verbosity bias (favoring longer answers even if not better), self-preference bias (a model favoring outputs similar to its own style), and the judge inheriting the same blind spots/errors as the model being evaluated - so it should be validated against human judgments periodically, not trusted blindly.</p></div>
+<details><summary>What is the evaluation lifecycle for a production LLM system?</summary>
+<div>
+<ol>
+<li><strong>Define success criteria</strong> — correctness, helpfulness, safety, latency, cost, and hard constraints (JSON schema, regulatory language).</li>
+<li><strong>Build eval assets</strong> — golden prompts from logs, rubrics, automatic scorers, and baselines on current production config.</li>
+<li><strong>Pre-deployment validation</strong> — run full suite on candidates; compare to baseline with statistical tests; manually review failure buckets.</li>
+<li><strong>Controlled rollout</strong> — canary or A/B test with online guardrail metrics and automatic rollback on threshold breach.</li>
+<li><strong>Continuous improvement</strong> — feed production failures into the eval set, deprecate stale items, re-baseline after major changes.</li>
+</ol>
+<p>Evaluation is not a one-time gate — it runs on every model, prompt, retrieval, or tool change.</p>
+</div>
 </details>
 
-<details><summary>How do you build a good evaluation set for a production LLM application?</summary>
+<details><summary>How do you build a good golden evaluation set for a production LLM application?</summary>
 <div>
 <ul>
-<li>Sample real (or realistic) production queries, not just easy synthetic examples.</li>
-<li>Include edge cases and known failure modes deliberately, not just average-case inputs.</li>
-<li>Keep it versioned and separate from any fine-tuning/training data to avoid contamination.</li>
-<li>Pair automated metrics (LLM-as-judge, retrieval recall) with periodic human review to catch what automated metrics miss.</li>
-<li>Re-evaluate whenever the model, prompt, or retrieval pipeline changes - evaluation isn't a one-time step.</li>
+<li>Sample real (or realistic) production queries — PII-redacted and consent-checked — not just easy synthetic examples.</li>
+<li>Include edge cases, escalated support tickets, and known failure modes deliberately, not only average-case inputs.</li>
+<li>Balance categories to match production mix, or overweight high-risk slices (legal, medical, non-English).</li>
+<li>Version and changelog every addition; keep dev, test, and a secret holdout split to prevent prompt overfitting.</li>
+<li>Pair automated metrics (LLM-as-judge, retrieval recall, schema checks) with periodic human review.</li>
+<li>Size tiers: 20–50 items for PR smoke, 200–1,000 for nightly regression, 1,000+ for major model migrations.</li>
 </ul>
 </div>
 </details>
 
-<details><summary>What is contamination in benchmark evaluation and why is it a serious problem?</summary>
-<div><p>Contamination happens when benchmark test data (or close paraphrases of it) leaks into a model's pretraining corpus, making the model appear to "reason" well when it may just be recalling memorized answers. It inflates reported benchmark scores in ways that don't reflect real-world capability, which is why decontamination filtering during data curation and using fresh/held-out benchmarks are important for trustworthy evaluation.</p></div>
+<details><summary>What is contamination in benchmark evaluation and how do you detect and mitigate it?</summary>
+<div>
+<p>Contamination happens when benchmark test data (or close paraphrases) leaks into pretraining, fine-tuning, prompt iteration, or even the judge model's training corpus — inflating scores without improving real capability. Types include pretraining leakage, fine-tuning leakage (eval prompts in SFT/DPO data), prompt leakage (engineers tuning against the test set), judge leakage, and pipeline leakage (retrieval index containing benchmark answers).</p>
+<p>Detection: n-gram overlap against training shards, min-hash dedup, canary strings, perturbation tests (large score drops on rephrased questions suggest memorization), and fresh/private benchmarks (e.g. LiveCodeBench). Mitigation: decontamination filtering, strict dev/test splits, private holdouts, dynamic benchmarks, and reporting contamination audits alongside leaderboard numbers.</p>
+</div>
 </details>
 
 <details><summary>Name common LLM benchmarks and what each measures.</summary>
 <div>
 <ul>
-<li><strong>MMLU</strong> - broad multiple-choice knowledge across many academic subjects.</li>
-<li><strong>GSM8K / MATH</strong> - grade-school to competition-level math reasoning.</li>
-<li><strong>HumanEval / MBPP</strong> - code generation correctness.</li>
-<li><strong>HellaSwag</strong> - commonsense sentence completion.</li>
-<li><strong>TruthfulQA</strong> - resistance to generating popular misconceptions.</li>
-<li><strong>MT-Bench / AlpacaEval / Chatbot Arena</strong> - open-ended instruction-following and conversational quality, often via human or LLM-judge preference.</li>
+<li><strong>MMLU / MMLU-Pro / GPQA</strong> — broad and graduate-level multiple-choice knowledge.</li>
+<li><strong>GSM8K / MATH</strong> — grade-school to competition-level math reasoning.</li>
+<li><strong>HumanEval / MBPP / SWE-bench</strong> — code generation correctness; SWE-bench tests real GitHub issue resolution.</li>
+<li><strong>HellaSwag / BBH / ARC-Challenge</strong> — commonsense and challenging reasoning.</li>
+<li><strong>TruthfulQA</strong> — resistance to generating popular misconceptions.</li>
+<li><strong>MT-Bench / AlpacaEval / Arena-Hard</strong> — open-ended instruction-following and chat quality via human or LLM-judge preference.</li>
+<li><strong>IFEval</strong> — verifiable instruction constraints (word count, JSON format).</li>
+<li><strong>HotpotQA / RAGAS / LongBench</strong> — multi-hop QA, RAG faithfulness, and long-context tasks.</li>
+<li><strong>HarmBench / AdvBench</strong> — jailbreak resistance and adversarial attack success rate.</li>
 </ul>
 </div>
 </details>
 
+<details><summary>What automated metrics should you use for different LLM task types?</summary>
+<div>
+<ul>
+<li><strong>Programmatic first</strong> — if you can verify with unit tests, SQL execution, regex, or JSON schema, use that as primary.</li>
+<li><strong>Short-form QA</strong> — exact match or token F1; semantic similarity (BERTScore) for paraphrases.</li>
+<li><strong>Structured extraction</strong> — schema validity rate plus per-field exact match.</li>
+<li><strong>Code</strong> — pass@k with executable unit tests.</li>
+<li><strong>Summarization</strong> — ROUGE/BLEU as sanity checks only; LLM judge + faithfulness to source as primary.</li>
+<li><strong>RAG</strong> — faithfulness, answer relevancy, context precision/recall, citation accuracy.</li>
+<li><strong>Agents</strong> — task success, tool selection accuracy, argument schema compliance, steps to success.</li>
+<li><strong>Always report operational metrics</strong> — latency p50/p95, tokens in/out, cost per successful task, and error rate alongside quality.</li>
+</ul>
+</div>
+</details>
 
-<details><summary>What is A/B testing for LLM features?</summary>
-<div><p>Route a fraction of traffic to variant B (new prompt, model, or RAG pipeline), compare business and quality metrics (task success, thumbs down, latency, cost), and require statistical significance before full rollout. Always log prompt version and model ID per request so results are attributable.</p></div>
+<details><summary>What is LLM-as-judge and what are its pitfalls?</summary>
+<div>
+<p>LLM-as-judge uses a strong LLM to score, rank, or critique outputs against a rubric at a scale human evaluation can't match. Common patterns: pointwise scoring (1–10), pairwise preference (A vs B), binary checklists for CI gates, chain-of-thought judging, and reference-guided comparison.</p>
+<p>Pitfalls: position bias (favors first option — mitigate by swapping order), verbosity bias (favors longer answers — use length-controlled prompts), self-preference bias (judge favors its own model family — use a different judge family), anchoring on reference quirks, and sycophancy (agrees with flawed reasoning). Calibrate monthly against 200+ dual-human-rated items (target Pearson r &gt; 0.7); never trust the judge blindly.</p>
+</div>
+</details>
+
+<details><summary>What is G-Eval and how does it differ from a simple LLM judge prompt?</summary>
+<div>
+<p>G-Eval is a chain-of-thought LLM-as-judge method where the judge first generates evaluation steps for a rubric dimension (e.g. coherence, relevance), then produces a score informed by that reasoning. This structured deliberation typically correlates better with human judgments than a single-shot "rate 1–5" prompt. Use it for subjective tasks like summarization quality or open-ended support responses. Still apply standard judge mitigations: temperature 0, bias corrections, and periodic human calibration — G-Eval reduces but doesn't eliminate judge blind spots.</p>
+</div>
+</details>
+
+<details><summary>How do you evaluate a RAG pipeline, and what does RAGAS measure?</summary>
+<div>
+<p>RAG fails in two independent places — retrieval (wrong context) and generation (misuse of context) — so evaluate both plus end-to-end quality. Retrieval metrics: Recall@k, Precision@k, MRR, nDCG@k (requires relevance labels). Generation metrics: faithfulness (every claim supported by context), answer relevancy, hallucination under empty context, and citation precision.</p>
+<p><strong>RAGAS</strong> is a framework/library that automates RAG metrics — faithfulness, answer relevancy, context precision, and context recall — using LLM-based scorers on your own corpus. Run it on labeled (question, answer, contexts, ground_truth) rows; investigate rows where faithfulness drops below threshold manually. Workflow: retrieval-only eval when changing embeddings/chunking; generation eval when changing model/prompt; full pipeline eval before release. Debug retrieval first — roughly 40% of RAG failures are retrieval misses, not generation errors.</p>
+</div>
+</details>
+
+<details><summary>How do you evaluate LLM agents beyond the final answer?</summary>
+<div>
+<p>Agents loop through plan → tool call → observation → repeat, so you must evaluate <strong>trajectory quality</strong>, not only final text. Key dimensions:</p>
+<ul>
+<li><strong>Task success</strong> — goal achieved (binary or partial-credit rubric).</li>
+<li><strong>Tool selection</strong> — correct tool rate, unnecessary calls, forbidden tool violations.</li>
+<li><strong>Argument correctness</strong> — valid JSON args matching schemas.</li>
+<li><strong>Step efficiency</strong> — steps and tokens to success within budget.</li>
+<li><strong>Recovery</strong> — handles API errors within N steps.</li>
+<li><strong>Safety</strong> — no destructive actions without confirmation.</li>
+</ul>
+<p>Use sandbox APIs with replay buffers for deterministic regression tests; log every tool call, observation, and planner decision. Benchmarks like SWE-bench (unit tests pass after patch), WebArena (goal state in simulated sites), GAIA, and τ-bench (multi-turn tool use) provide standardized agent eval. Final-answer-only eval hides compounding errors in the trace.</p>
+</div>
+</details>
+
+<details><summary>How do you evaluate safety and run red-team testing?</summary>
+<div>
+<p>Safety eval measures refusal of harmful requests, jailbreak resistance, PII leakage, fairness across demographic slices, over-refusal on benign queries, and prompt-injection resistance in RAG docs. Report <strong>attack success rate (ASR)</strong> on red-team sets and <strong>false refusal rate</strong> on a benign control set — optimizing only for refusal scores fails the product.</p>
+<p>Red-team categories: direct harmful requests, indirect elicitation (hypothetical framing), multi-turn escalation, tool abuse (SQL injection via agent), and encoded/multilingual attacks. Evaluate the <strong>full stack</strong> — input classifier, system prompt, output filter, and human review queue — not just the base model. Use standardized sets (HarmBench, AdvBench) plus custom attacks from production. Safety regressions are release blockers; gate CI on ASR thresholds for critical slices.</p>
+</div>
+</details>
+
+<details><summary>What is the difference between offline and online evaluation?</summary>
+<div>
+<p><strong>Offline eval</strong> runs on versioned golden sets in a controlled harness — reproducible, cheap, safe for destructive agent tests, and fast enough for CI. Weaknesses: dataset staleness, distribution shift from live traffic, and risk of overfitting prompts to the golden set.</p>
+<p><strong>Online eval</strong> measures real user interactions: thumbs up/down, implicit signals (copy, regenerate, abandon), task outcomes (ticket resolved, code merged), escalation rate, and live latency/cost. Weaknesses: noisy, slower, and requires careful experiment design.</p>
+<p>Mature teams use both: offline catches regressions before users see them; online catches what offline missed. Bridge them by correlating offline golden scores with online thumbs-down weekly, refreshing the golden set when correlation drops, and using <strong>shadow mode</strong> (run candidate on live inputs, show baseline to user, log both for comparison).</p>
+</div>
+</details>
+
+<details><summary>How do CI gates and regression testing work for LLM systems?</summary>
+<div>
+<p>CI gates block merges or deployments when eval scores drop below thresholds — turning evaluation from a report into enforcement. Typical tiers:</p>
+<ul>
+<li><strong>PR smoke</strong> — 20–50 golden items, 3–8 minutes, every pull request.</li>
+<li><strong>Nightly</strong> — 500+ items across all slices, 1–3 hours.</li>
+<li><strong>Pre-release</strong> — full golden + safety red-team, 4–12 hours.</li>
+<li><strong>Post-deploy</strong> — online guardrail metrics on canary traffic.</li>
+</ul>
+<p>Gate criteria examples: overall task success ≥ baseline − 1%; no slice drops more than 3%; safety ASR ≤ baseline + 0.5%; p95 latency ≤ baseline + 10%. Handle stochastic flake: temperature 0, n=3 samples with majority vote on borderline items, confidence intervals on pass rates (gate on lower bound), and cached responses when only prompts change. Anti-pattern: disabling gates after one false alarm — fix statistics instead.</p>
+</div>
+</details>
+
+<details><summary>What should an eval harness architecture include?</summary>
+<div>
+<p>An eval harness is reproducible infrastructure — a first-class service, not a one-off notebook. Core components:</p>
+<ul>
+<li><strong>Dataset loader</strong> — versioned golden sets with slice/tag filters.</li>
+<li><strong>Runner</strong> — invokes model + RAG + tools with frozen config (model ID, prompt hash, index version).</li>
+<li><strong>Scorer registry</strong> — pluggable metrics (exact match, JSON schema, RAGAS, LLM judge).</li>
+<li><strong>Result store</strong> — JSON/Parquet per run with git SHA and config fingerprint.</li>
+<li><strong>Comparator</strong> — diffs vs baseline, highlights regressions by slice.</li>
+<li><strong>Reporter</strong> — dashboards, PR comments, Slack alerts.</li>
+</ul>
+<p>Design requirements: deterministic config capture, parallel execution with rate limiting and retry, resume/checkpoint support for long suites, idempotent run IDs, and PII scrubbing before shared storage. Start in-repo with Python; graduate to Langfuse, Braintrust, or W&amp;B when you need UI, dataset collaboration, and cross-team visibility.</p>
+</div>
+</details>
+
+<details><summary>What eval platform tools and frameworks would you choose for different needs?</summary>
+<div>
+<ul>
+<li><strong>Langfuse / LangSmith</strong> — tracing, datasets, evals, prompt management; LangSmith is LangChain-native.</li>
+<li><strong>Braintrust</strong> — eval loops, CI integration, human review UI; strong for eval-driven dev.</li>
+<li><strong>Promptfoo</strong> — YAML-driven red-team and regression tests in CLI/CI.</li>
+<li><strong>RAGAS</strong> — RAG faithfulness, context precision/recall metrics library.</li>
+<li><strong>DeepEval</strong> — pytest-style LLM unit tests for developer-local testing.</li>
+<li><strong>lm-eval-harness / inspect-ai</strong> — 100+ academic benchmarks and composable agent sandboxes.</li>
+<li><strong>Phoenix (Arize)</strong> — embedding drift and trace analysis for RAG debugging.</li>
+<li><strong>W&amp;B</strong> — experiment tracking and eval tables for research + production.</li>
+</ul>
+<p>Selection criteria: production trace linking, provider support (OpenAI, Anthropic, vLLM, Bedrock), CI gate thresholds, PII/access control, and JSON export/self-host escape hatch.</p>
+</div>
+</details>
+
+<details><summary>What is eval-driven development (EDD) and how does it change team workflow?</summary>
+<div>
+<p>Eval-driven development mirrors test-driven development: capture a failure as a golden item, write pass criteria before changing the system, confirm baseline fails, fix (prompt/retrieval/model), verify the new item passes and regression suite still passes, then commit the eval item and fix in the same PR. Culture practices: every bug becomes an eval, eval review in PRs, weekly scorecards, eval budget in sprints, and PM-owned success criteria. Failed golden items can become SFT examples or DPO preference pairs — but keep train and eval sets strictly disjoint to avoid fine-tuning leakage. North star: a new engineer breaks production only by failing an eval, not by lacking tribal knowledge about sacred prompts.</p>
+</div>
+</details>
+
+<details><summary>What is A/B testing for LLM features and what statistical pitfalls should you avoid?</summary>
+<div>
+<p>Route a fraction of traffic to variant B (new prompt, model, or RAG pipeline), compare a pre-registered primary metric (e.g. escalation rate) and guardrail metrics (safety ASR, latency p95, cost, thumbs-down), and require statistical significance before full rollout. Every request log must include experiment ID, variant, model, prompt hash, retrieval index version, and user/session ID for consistent attribution.</p>
+<p>Statistical considerations: avoid peeking (use fixed horizon or sequential testing), correct for multiple comparisons on secondary metrics (Bonferroni/FDR), use cluster randomization for network effects, and CUPED for variance reduction. LLM-specific pitfalls: length confound (verbose variant looks better), novelty effect, heterogeneous treatment effects across query complexity, and cost masking (2% quality gain, 40% cost increase). Ship only when primary metric improves at p &lt; 0.05, guardrails hold, and the effect size justifies operational complexity.</p>
+</div>
+</details>
+
+<details><summary>How do you determine statistical significance for offline eval comparisons?</summary>
+<div>
+<p>With sufficient sample size, treat pass rates as proportions and compute confidence intervals (Wilson or bootstrap) on the difference between candidate and baseline. Gate on the <strong>lower bound</strong> of the improvement (or upper bound of degradation) rather than a point estimate — e.g. block merge if lower bound of task-success delta is below −1%. For small golden sets, use McNemar's test on paired items (same prompt, two systems) since items are matched. Account for stochastic outputs: run n=3 samples at temperature 0 where supported and majority-vote per item before computing rates. Report effect size alongside p-values — a statistically significant 0.1% lift may not justify a model swap. Stratify by slice so average gains don't hide catastrophic drops on legal or JSON-schema items.</p>
+</div>
+</details>
+
+<details><summary>How do you debug when eval scores drop or users report regressions?</summary>
+<div>
+<p>Map symptoms to layers before random prompt edits:</p>
+<ul>
+<li>Wrong static facts → base model / knowledge cutoff.</li>
+<li>Ignores instructions → prompt / system message (check IFEval, schema rate).</li>
+<li>Answers without doc support → RAG generation (faithfulness, empty-context test).</li>
+<li>Missing relevant info → retrieval (Recall@k, chunk overlap).</li>
+<li>Wrong API called → agent planner (tool selection accuracy).</li>
+<li>Cost spike → inference config (tokens per request, loop detection).</li>
+<li>Jailbreaks after deploy → safety stack (red-team ASR, guardrail logs).</li>
+<li>One locale fails → stratified eval by language slice.</li>
+</ul>
+<p>Playbook: reproduce with frozen config, inspect retrieved context and tool traces, compare baseline vs candidate side-by-side on the failure bucket, cluster failures by embedding similarity to find root causes, add 5–10 representative failures to the golden set before fixing, then verify on the bucket AND full regression suite. Watch for eval-system failures too: stale golden sets, judge drift after judge-model upgrades, metric gaming, and the average trap hiding 0% pass on critical slices.</p>
+</div>
 </details>
 
 </section>
@@ -80,4 +236,3 @@
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-

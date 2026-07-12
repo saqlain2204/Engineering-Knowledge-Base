@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Agent and LLM Memory | AI Engineering</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Agent Memory</p>
+  </nav>
+  <h1>Agent and LLM Memory: Complete Reference</h1>
+  <p>How agents remember across turns, sessions, and users: taxonomy, context budgeting, vector and structured stores, extraction pipelines, retrieval strategies, framework primitives, security, evaluation, and production patterns with code.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why-memory">Why Memory Matters</a></li>
+    <li><a href="#taxonomy">Memory Taxonomy</a></li>
+    <li><a href="#context-economics">Context Economics</a></li>
+    <li><a href="#short-term-patterns">Short-Term Memory Patterns</a></li>
+    <li><a href="#summarization">Summarization and Compression</a></li>
+    <li><a href="#vector-memory">Vector Memory</a></li>
+    <li><a href="#structured-memory">Structured Memory</a></li>
+    <li><a href="#extraction-consolidation">Extraction and Consolidation</a></li>
+    <li><a href="#retrieval-strategies">Retrieval Strategies</a></li>
+    <li><a href="#session-vs-persistent">Session vs Persistent Memory</a></li>
+    <li><a href="#rag-vs-agent-memory">RAG vs Agent Memory</a></li>
+    <li><a href="#langchain-memory">LangChain Memory</a></li>
+    <li><a href="#langgraph-checkpoints">LangGraph Checkpoints</a></li>
+    <li><a href="#multi-agent-memory">Multi-Agent Memory</a></li>
+    <li><a href="#security-pii">Security and PII</a></li>
+    <li><a href="#memory-eval">Memory Evaluation</a></li>
+    <li><a href="#production-patterns">Production Patterns</a></li>
+    <li><a href="#python-walkthrough">Python Walkthrough</a></li>
+    <li><a href="#failure-modes">Failure Modes</a></li>
+    <li><a href="#decision-guide">Memory Decision Guide</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="why-memory">
+    <h2>1. Why Memory Matters</h2>
+    <p>Large language models are stateless functions: each API call receives a context window and produces tokens. Without an explicit memory layer, the model cannot recall prior sessions, user preferences, or outcomes of tool calls unless you resend that information every turn. Agents that plan over dozens of steps, collaborate across sub-agents, or serve returning users need memory to bridge the gap between finite context and long-horizon tasks.</p>
+
+    <h3>What breaks without memory</h3>
+    <ul>
+      <li><strong>Repeated questions:</strong> users re-explain preferences every session.</li>
+      <li><strong>Lost tool context:</strong> intermediate SQL results, API payloads, or file paths vanish after truncation.</li>
+      <li><strong>Inconsistent personas:</strong> tone, role, and constraints drift when system prompts compete with truncated history.</li>
+      <li><strong>Failed multi-step tasks:</strong> agents forget sub-goals after summarization errors or window overflow.</li>
+      <li><strong>No learning from outcomes:</strong> successful trajectories are not distilled into reusable knowledge.</li>
+    </ul>
+
+    <h3>Memory as a systems problem</h3>
+    <p>Memory is not "store everything in the prompt." It is a pipeline: <em>write</em> (what to remember), <em>store</em> (where and in what shape), <em>retrieve</em> (what to inject now), and <em>forget</em> (TTL, dedup, user deletion). Each stage has cost, latency, and privacy implications. Production agents treat memory as infrastructure alongside auth, logging, and eval.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Context window is RAM: fast but small. Persistent memory is disk: larger but slower and needs indexing. Good agent design pages data in and out of RAM deliberately rather than hoping the model "remembers."
+    </div>
+
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2308.11432" rel="noopener noreferrer">Generative Agents (Park et al.)</a> · <a href="https://langchain-ai.github.io/langgraph/concepts/memory/" rel="noopener noreferrer">LangGraph memory concepts</a> · <a href="ai-engineering-agents.html">AI Agents overview</a></small></p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="taxonomy">
+    <h2>2. Memory Taxonomy</h2>
+    <p>Memory types overlap in practice, but separating them clarifies design decisions and eval scenarios.</p>
+
+    <table>
+      <thead><tr><th>Type</th><th>Scope</th><th>Typical store</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Working memory</strong></td><td>Current turn / step</td><td>In-context scratchpad, tool outputs</td><td>Current plan, last API response, draft code</td></tr>
+        <tr><td><strong>Short-term (episodic)</strong></td><td>Session / thread</td><td>Message list, rolling summary</td><td>Conversation so far, task state this visit</td></tr>
+        <tr><td><strong>Long-term (semantic)</strong></td><td>Cross-session</td><td>Vector DB, knowledge graph</td><td>User likes dark mode, prior ticket resolutions</td></tr>
+        <tr><td><strong>Procedural</strong></td><td>Agent / org</td><td>Prompts, playbooks, fine-tuned weights</td><td>How to file expenses, escalation policy</td></tr>
+        <tr><td><strong>Shared / collective</strong></td><td>Team or product</td><td>Document index, wiki RAG</td><td>Product docs, runbooks, codebase embeddings</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Human memory analogies (use carefully)</h3>
+    <ul>
+      <li><strong>Episodic:</strong> "What happened in our chat Tuesday" - timestamps and narrative.</li>
+      <li><strong>Semantic:</strong> "User is allergic to shellfish" - facts without source episode required.</li>
+      <li><strong>Procedural:</strong> "Always verify OTP before refund" - how to act, not what was said.</li>
+    </ul>
+    <p>Analogies help stakeholders; implementations should use explicit schemas and retrieval policies, not metaphor alone.</p>
+
+    <h3>Read vs write paths</h3>
+    <ul>
+      <li><strong>Implicit read:</strong> full message history in context (no separate retrieval).</li>
+      <li><strong>Explicit read:</strong> query memory store each turn (vector search, SQL, graph traversal).</li>
+      <li><strong>Implicit write:</strong> append messages to thread (automatic).</li>
+      <li><strong>Explicit write:</strong> model or pipeline calls <code>save_memory</code> with structured facts (gated).</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Design rule:</strong> Separate <em>conversation log</em> (audit trail, replay) from <em>memory index</em> (curated facts for retrieval). Not every message should become a retrievable memory.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="context-economics">
+    <h2>3. Context Economics</h2>
+    <p>Every token in context has a price: API cost, latency, and attention dilution. Memory design is budget allocation across system prompt, tools, retrieved chunks, summaries, and recent messages.</p>
+
+    <h3>Token budget layers</h3>
+    <ol>
+      <li><strong>Reserved:</strong> system instructions, safety policies, tool schemas (often 2k-8k+ tokens).</li>
+      <li><strong>Working:</strong> latest user message, current tool results, agent scratchpad.</li>
+      <li><strong>Retrieved:</strong> RAG chunks, long-term memory hits, similar past episodes.</li>
+      <li><strong>Historical:</strong> raw messages or compressed summary of older turns.</li>
+      <li><strong>Output reserve:</strong> headroom for model completion (critical for long tool JSON).</li>
+    </ol>
+
+    <h3>Cost drivers</h3>
+    <table>
+      <thead><tr><th>Factor</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>Context length</td><td>Linear to superlinear cost on many providers; slower prefill</td></tr>
+        <tr><td>Retrieval width</td><td>More chunks = better recall risk, worse precision and cost</td></tr>
+        <tr><td>Re-summarization</td><td>Extra LLM calls each N turns; amortize with incremental summaries</td></tr>
+        <tr><td>Embedding index size</td><td>Storage + search cost; not billed per LLM token but affects infra</td></tr>
+        <tr><td>Checkpoint frequency</td><td>LangGraph state persistence I/O per node</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Context rot</h3>
+    <p>Models attend more reliably to recent and salient tokens. Stuffing 100k tokens "because the window allows it" often degrades instruction following and tool selection. Prefer targeted retrieval over maximal history.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Treat context like a cache with eviction policy (LRU for messages, TTL for facts, priority boost for user-stated constraints). Miss rate = agent asks again or hallucinates.
+    </div>
+
+    <pre><code># Rough budget planner (tokens)
+BUDGET = 128_000
+RESERVE = {
+    "system": 3_000,
+    "tools": 4_000,
+    "output": 4_096,
+}
+retrieved = min(8_000, BUDGET - sum(RESERVE.values()) - 12_000)
+history_cap = BUDGET - sum(RESERVE.values()) - retrieved
+# history_cap goes to summary + recent raw messages</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="short-term-patterns">
+    <h2>4. Short-Term Memory Patterns</h2>
+    <p>Short-term memory keeps the current session coherent. Implementations range from naive message buffers to structured state machines.</p>
+
+    <h3>4.1 Full buffer</h3>
+    <p>Append every message (user, assistant, tool) to a list; send all until window fills. Simple and lossless until truncation. Use for short support chats and dev debugging.</p>
+
+    <h3>4.2 Sliding window</h3>
+    <p>Keep last <em>k</em> turns or last <em>n</em> tokens. Drop oldest messages. Risk: lose constraints stated early unless copied to summary or long-term store.</p>
+
+    <h3>4.3 Token-aware trimming</h3>
+    <p>Trim from the middle or drop tool payloads first (often largest). Preserve system + first user message + recent tail. Libraries like LangChain <code>trim_messages</code> implement role-aware rules.</p>
+
+    <h3>4.4 Scratchpad / working notes</h3>
+    <p>Agent maintains explicit notes the model updates via tool or structured output:</p>
+    <pre><code>{
+  "goal": "Book flight ORD to SFO under $400",
+  "constraints": ["depart after 9am", "one carry-on"],
+  "done": ["searched flights", "filtered 3 options"],
+  "next": "confirm user pick, call book_flight"
+}</code></pre>
+    <p>Scratchpads survive better than prose buried in chat when you summarize aggressively.</p>
+
+    <h3>4.5 State machine memory (agents)</h3>
+    <p>LangGraph and similar frameworks store typed state (messages, plan step, artifacts). Nodes read/write fields instead of parsing free-form chat. Reduces ambiguity for multi-step workflows.</p>
+
+    <table>
+      <thead><tr><th>Pattern</th><th>Best for</th><th>Main risk</th></tr></thead>
+      <tbody>
+        <tr><td>Full buffer</td><td>Short threads, eval replay</td><td>Window overflow</td></tr>
+        <tr><td>Sliding window</td><td>High-volume chat</td><td>Early context loss</td></tr>
+        <tr><td>Scratchpad</td><td>Tool-heavy agents</td><td>Stale notes if not updated</td></tr>
+        <tr><td>Typed state</td><td>Workflows, approvals</td><td>Schema rigidity</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="summarization">
+    <h2>5. Summarization and Compression</h2>
+    <p>When raw history exceeds budget, compress older turns into a summary while keeping recent messages verbatim. Summarization is the most common short-term memory extension and a frequent source of silent information loss.</p>
+
+    <h3>5.1 Rolling summary</h3>
+    <p>Maintain <code>summary</code> string updated every N turns:</p>
+    <ol>
+      <li>Input: previous summary + messages since last update.</li>
+      <li>Prompt: "Update summary; preserve user constraints, decisions, open tasks; drop small talk."</li>
+      <li>Store new summary; optionally archive dropped messages to cold storage.</li>
+    </ol>
+
+    <h3>5.2 Hierarchical summaries</h3>
+    <p>Session summary, daily summary, user profile summary. Higher levels aggregate lower levels. Enables long horizons without one giant paragraph that mixes unrelated facts.</p>
+
+    <h3>5.3 Structured compression</h3>
+    <p>Instead of prose, extract JSON facts during compression:</p>
+    <pre><code>{"facts": [
+  {"key": "budget", "value": "$400", "source_turn": 2},
+  {"key": "destination", "value": "SFO", "source_turn": 1}
+], "open_tasks": ["confirm flight"]}</code></pre>
+    <p>Easier to query and validate than narrative summary.</p>
+
+    <h3>5.4 Map-reduce for long documents</h3>
+    <p>For ingesting logs or transcripts into memory: chunk, summarize each chunk, then summarize summaries. Distinct from per-turn chat summarization but same compression idea.</p>
+
+    <h3>5.5 Quality safeguards</h3>
+    <ul>
+      <li>Pin immutable facts to long-term store before summarizing (user ID, legal opt-outs).</li>
+      <li>Keep verbatim copies of tool errors and numeric outputs when precision matters.</li>
+      <li>Log summary diffs for debugging "agent forgot X" reports.</li>
+      <li>Use a stronger model for summarization if the worker model is small.</li>
+    </ul>
+
+    <div class="callout callout-derivation">
+      <strong>Information theory view:</strong> Summarization is lossy compression. The objective is sufficient statistics for future decisions, not faithful prose. Define what must be preserved (constraints, commitments, identifiers) explicitly in the summarizer prompt or schema.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="vector-memory">
+    <h2>6. Vector Memory</h2>
+    <p>Long-term semantic memory often uses embeddings: text (or multimodal) vectors stored in a vector database for similarity search at query time.</p>
+
+    <h3>6.1 Write path</h3>
+    <ol>
+      <li><strong>Candidate selection:</strong> which messages or facts enter the index (post-extraction).</li>
+      <li><strong>Chunking:</strong> split long episodes; attach metadata (user_id, session_id, timestamp, type).</li>
+      <li><strong>Embedding:</strong> model choice must match query embedding model.</li>
+      <li><strong>Upsert:</strong> store vector + payload; handle updates and deletes.</li>
+    </ol>
+
+    <h3>6.2 Read path</h3>
+    <ol>
+      <li>Form query from current user message + optional agent plan.</li>
+      <li>Similarity search with filters (user, time range, memory type).</li>
+      <li>Re-rank (cross-encoder, LLM ranker, MMR for diversity).</li>
+      <li>Inject top-k into context with citations and timestamps.</li>
+    </ol>
+
+    <h3>6.3 Metadata filters (critical)</h3>
+    <p>Always scope retrieval by <code>user_id</code> or tenant. Cross-user leakage is a severe privacy failure. Combine vector score with metadata:</p>
+    <pre><code>filter = {
+    "user_id": current_user,
+    "memory_type": {"$in": ["preference", "fact"]},
+    "created_at": {"$gte": "2025-01-01"},
+}
+results = index.query(vector=emb, top_k=20, filter=filter)</code></pre>
+
+    <h3>6.4 Embedding models</h3>
+    <table>
+      <thead><tr><th>Consideration</th><th>Guidance</th></tr></thead>
+      <tbody>
+        <tr><td>Domain</td><td>Code and support tickets may need specialized embedders</td></tr>
+        <tr><td>Dimension</td><td>Higher not always better; match index limits</td></tr>
+        <tr><td>Multilingual</td><td>Use multilingual embeddings if users mix languages</td></tr>
+        <tr><td>Refresh</td><td>Re-embed entire index when changing models</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6.5 Stores</h3>
+    <p>Chroma, Pinecone, Weaviate, Qdrant, pgvector, Redis vector, LanceDB. Choice depends on scale, hybrid search needs, and ops maturity. pgvector suits teams already on Postgres for structured + vector in one place.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Vector memory answers "what past text is similar to now?" not "what is objectively true?" Pair with extraction validation and structured stores for high-stakes facts.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="structured-memory">
+    <h2>7. Structured Memory</h2>
+    <p>Facts with known shape belong in databases, not only embedding space. Structured memory enables precise queries, constraints, and audits.</p>
+
+    <h3>7.1 Key-value user profile</h3>
+    <pre><code>CREATE TABLE user_memory (
+  user_id UUID,
+  key TEXT,
+  value JSONB,
+  confidence FLOAT,
+  source TEXT,
+  updated_at TIMESTAMPTZ,
+  PRIMARY KEY (user_id, key)
+);</code></pre>
+    <p>Examples: <code>timezone</code>, <code>preferred_language</code>, <code>shipping_address_id</code>. Load entire row set or top keys each session.</p>
+
+    <h3>7.2 Episodic event log</h3>
+    <p>Append-only events: <code>{type: "purchase", item_id, at}</code>. Query by time or type. Good for "what did we do last month?" without semantic guesswork.</p>
+
+    <h3>7.3 Knowledge graph</h3>
+    <p>Entities (User, Account, Ticket) and edges (opened, assigned_to). Supports multi-hop questions and consistency checks. Higher setup cost; valuable for CRM, ITSM, and enterprise copilots.</p>
+
+    <h3>7.4 Typed memory objects</h3>
+    <pre><code>class MemoryFact(BaseModel):
+    subject: str
+    predicate: str
+    object: str
+    valid_until: datetime | None
+    source_message_id: str</code></pre>
+    <p>Validate on write; reject malformed extractions before persistence.</p>
+
+    <h3>7.5 Hybrid structured + vector</h3>
+    <p>Store canonical fact in SQL; store narrative episode in vector index with <code>fact_id</code> link. Retrieval: vector finds episode, SQL confirms current truth (handles superseded facts).</p>
+
+    <table>
+      <thead><tr><th>Store</th><th>Strength</th><th>Weakness</th></tr></thead>
+      <tbody>
+        <tr><td>SQL / KV</td><td>Exact lookup, transactions</td><td>Bad at fuzzy wording match</td></tr>
+        <tr><td>Graph</td><td>Relations, constraints</td><td>Schema maintenance</td></tr>
+        <tr><td>Vector</td><td>Fuzzy recall of text</td><td>No native truth maintenance</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="extraction-consolidation">
+    <h2>8. Extraction and Consolidation</h2>
+    <p>Memory quality depends on what you save. Raw chat ingestion creates noise; deliberate extraction creates usable long-term memory.</p>
+
+    <h3>8.1 Extraction triggers</h3>
+    <ul>
+      <li><strong>End of session:</strong> batch extract facts from full transcript.</li>
+      <li><strong>Per turn:</strong> lightweight classifier detects "remember this" statements.</li>
+      <li><strong>Post-tool:</strong> persist task outcome (booking confirmation, ticket ID).</li>
+      <li><strong>Explicit user command:</strong> "save that I prefer aisle seats."</li>
+    </ul>
+
+    <h3>8.2 Extraction prompt pattern</h3>
+    <pre><code>EXTRACT_PROMPT = """From the conversation, output JSON memories.
+Include only stable user-specific facts and preferences.
+Exclude transient chit-chat and tool debug output.
+Schema: {"memories": [{"type": "preference|fact|goal", "text": "...", "confidence": 0-1}]}
+"""</code></pre>
+
+    <h3>8.3 Consolidation (dedup and merge)</h3>
+    <p>New extraction "user likes morning flights" conflicts with existing "user prefers red-eye flights." Consolidation policies:</p>
+    <ul>
+      <li><strong>Recency wins:</strong> overwrite with latest explicit statement.</li>
+      <li><strong>Confidence + source:</strong> keep higher-confidence or user-confirmed.</li>
+      <li><strong>LLM merge:</strong> second pass reconciles candidates (costly, use for high-value profiles).</li>
+      <li><strong>Human review queue:</strong> flag contradictions for support tools.</li>
+    </ul>
+
+    <h3>8.4 Forgetting and TTL</h3>
+    <p>Not all memories should live forever. Apply TTL on marketing context, session-scoped goals, and stale inventory facts. GDPR/CCPA deletion must remove extracted facts, vectors, and summaries consistently.</p>
+
+    <h3>8.5 Memory write gating</h3>
+    <p>Gate writes with rules: no PII without consent, no secrets, no unverified model guesses labeled as facts. Use <code>proposed</code> vs <code>confirmed</code> status until user affirms sensitive data.</p>
+
+    <div class="callout">
+      <strong>Anti-pattern:</strong> Embedding every assistant reply creates a self-reinforcing hallucination index. Extract from user-verified or tool-grounded content preferentially.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="retrieval-strategies">
+    <h2>9. Retrieval Strategies</h2>
+    <p>Retrieval decides which memories enter the prompt this turn. Combine strategies; no single search solves all tasks.</p>
+
+    <h3>9.1 Always-on profile</h3>
+    <p>Load core user profile every request (small, high precision). Bounded to ~500-1500 tokens.</p>
+
+    <h3>9.2 Query-conditioned vector search</h3>
+    <p>Embed current message; retrieve top-k episodic memories. Tune k and similarity threshold on eval set.</p>
+
+    <h3>9.3 Recency bias</h3>
+    <p>Weight recent sessions higher: exponential decay on timestamp or "last 7 days" filter for support context.</p>
+
+    <h3>9.4 Importance scores</h3>
+    <p>Score at write time (user said "important", outcome affected money/account). Retrieve by importance x relevance.</p>
+
+    <h3>9.5 Tool-based memory lookup</h3>
+    <p>Expose <code>search_memory(query)</code> and <code>get_user_profile()</code> as tools the agent calls when needed instead of automatic injection. Saves tokens when memory irrelevant.</p>
+
+    <h3>9.6 MMR and diversity</h3>
+    <p>Maximal Marginal Relevance reduces redundant chunks ("aisle seat" repeated across ten episodes).</p>
+
+    <h3>9.7 HyDE and query expansion</h3>
+    <p>Generate hypothetical answer or expanded queries before search to bridge vocabulary mismatch between question and stored text.</p>
+
+    <pre><code>def retrieve_memories(user_id: str, query: str, k: int = 5) -> list[str]:
+    profile = db.get_profile(user_id)  # always-on
+    vec_hits = index.search(
+        embed(query), filter={"user_id": user_id}, k=k * 3
+    )
+    ranked = rerank_cross_encoder(query, vec_hits)[:k]
+    return format_for_context(profile, ranked)</code></pre>
+
+    <table>
+      <thead><tr><th>Strategy</th><th>Latency</th><th>When to use</th></tr></thead>
+      <tbody>
+        <tr><td>Always-on profile</td><td>Low</td><td>Personalization baseline</td></tr>
+        <tr><td>Auto vector inject</td><td>Medium</td><td>Open-ended support, companions</td></tr>
+        <tr><td>Agent tool lookup</td><td>On demand</td><td>Task-focused agents, token savings</td></tr>
+        <tr><td>Graph traversal</td><td>Medium-high</td><td>Account hierarchies, linked records</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="session-vs-persistent">
+    <h2>10. Session vs Persistent Memory</h2>
+    <p>Session memory dies or archives when the thread ends; persistent memory survives across threads and devices. Products need both with clear promotion rules from session to persistent.</p>
+
+    <h3>10.1 Session (thread) scope</h3>
+    <ul>
+      <li>Message list and summaries keyed by <code>thread_id</code>.</li>
+      <li>Tool artifacts for current task (files generated, partial forms).</li>
+      <li>Ephemeral plan state in LangGraph checkpoint tied to thread.</li>
+    </ul>
+
+    <h3>10.2 Persistent scope</h3>
+    <ul>
+      <li>User profile and preferences across threads.</li>
+      <li>Org-wide knowledge (docs RAG) not tied to one user.</li>
+      <li>Learned outcomes: "user's last order #12345 shipped."</li>
+    </ul>
+
+    <h3>10.3 Promotion pipeline</h3>
+    <ol>
+      <li>Detect durable fact in session (explicit or extraction).</li>
+      <li>Validate and dedup against persistent store.</li>
+      <li>Write to long-term index; optionally keep pointer in session summary.</li>
+    </ol>
+
+    <h3>10.4 Session isolation</h3>
+    <p>Multi-tab or multi-device: same user may have parallel threads. Do not merge threads automatically unless product intent is one continuous conversation. Cross-thread retrieval is persistent memory's job.</p>
+
+    <h3>10.5 Anonymous vs authenticated</h3>
+    <p>Anonymous sessions: memory in cookie/session ID with short TTL. On login, merge anonymous memory into user profile with conflict rules and audit log.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Session = working set for one task narrative. Persistent = user model the product maintains. Blurring them causes "why did another chat know that?" surprises.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="rag-vs-agent-memory">
+    <h2>11. RAG vs Agent Memory</h2>
+    <p>RAG and agent memory both inject external text into context, but they differ in source, update frequency, and ownership model.</p>
+
+    <table>
+      <thead><tr><th>Dimension</th><th>RAG (knowledge base)</th><th>Agent memory</th></tr></thead>
+      <tbody>
+        <tr><td>Content source</td><td>Docs, wikis, corpora (curated)</td><td>Conversations, tool results, extractions (generated)</td></tr>
+        <tr><td>Update cadence</td><td>Batch ingest, versioned releases</td><td>Continuous per session/user</td></tr>
+        <tr><td>Scope</td><td>Usually shared / org-wide</td><td>Often per-user or per-agent</td></tr>
+        <tr><td>Truth model</td><td>Authoritative documents</td><td>Probabilistic, needs consolidation</td></tr>
+        <tr><td>Privacy</td><td>Same corpus for all users (typically)</td><td>Must enforce per-user isolation</td></tr>
+        <tr><td>Eval focus</td><td>Citation accuracy, grounding</td><td>Retention, forgetting, contradiction</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Combined architecture</h3>
+    <p>Production copilots commonly use:</p>
+    <ul>
+      <li><strong>RAG layer:</strong> product docs, policies, API references (shared).</li>
+      <li><strong>Memory layer:</strong> user preferences, past cases, account-specific notes (isolated).</li>
+      <li><strong>Session layer:</strong> current ticket text and tool traces.</li>
+    </ul>
+    <p>Prompt assembly order: system policies, RAG chunks (with citations), user memory, session summary, recent messages.</p>
+
+    <h3>When RAG is enough</h3>
+    <p>Static knowledge tasks, single-session Q&amp;A, no personalization. Adding agent memory increases complexity without benefit.</p>
+
+    <h3>When memory is required</h3>
+    <p>Returning users, long tasks spanning days, personalization, learning from prior tool outcomes in user-specific ways RAG corpora cannot capture.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="langchain-memory">
+    <h2>12. LangChain Memory</h2>
+    <p>LangChain provides memory abstractions that attach to chains and agents. Modern LangGraph apps often implement memory in graph state, but LangChain memory classes remain common in tutorials and LCEL pipelines.</p>
+
+    <h3>12.1 ConversationBufferMemory</h3>
+    <p>Stores full message history as string or message objects. Grows unbounded until you trim externally.</p>
+
+    <h3>12.2 ConversationBufferWindowMemory</h3>
+    <p>Keeps last k interactions. Parameter <code>k</code> is turn pairs, not tokens.</p>
+
+    <h3>12.3 ConversationSummaryMemory</h3>
+    <p>Uses LLM to summarize history; stores summary + recent messages. Summary updated on each load or on schedule.</p>
+
+    <h3>12.4 ConversationSummaryBufferMemory</h3>
+    <p>Hybrid: recent raw buffer within token budget plus summary of older content.</p>
+
+    <h3>12.5 VectorStoreRetrieverMemory</h3>
+    <p>Persists history or facts to vector store; retrieves relevant past lines per query.</p>
+
+    <h3>12.6 Entity memory</h3>
+    <p>Tracks entities (people, places) mentioned across turns in structured store, often backed by LLM extraction.</p>
+
+    <pre><code>from langchain.memory import ConversationSummaryBufferMemory
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(model="gpt-4o-mini")
+memory = ConversationSummaryBufferMemory(
+    llm=llm,
+    max_token_limit=2000,
+    return_messages=True,
+    memory_key="history",
+)
+
+# In LCEL chain: assign memory to RunnableWithMessageHistory
+# session_id maps to chat_history backend (Redis, Postgres)</code></pre>
+
+    <h3>12.7 RunnableWithMessageHistory</h3>
+    <p>Separates chain logic from session storage via <code>get_session_history(session_id)</code>. Backends: in-memory (dev), Redis, SQL. This is the bridge pattern for multi-tenant session memory in LangChain v0.2+.</p>
+
+    <div class="callout">
+      <strong>Migration note:</strong> New agent projects should prefer LangGraph checkpoints + explicit store modules over legacy chain memory for clearer state and replay. LangChain memory remains useful for simple chat wrappers.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="langgraph-checkpoints">
+    <h2>13. LangGraph Checkpoints</h2>
+    <p>LangGraph persists graph state at super-step boundaries so threads survive restarts, support human-in-the-loop, and enable time travel debugging.</p>
+
+    <h3>13.1 What is checkpointed</h3>
+    <ul>
+      <li>Channel values: messages, custom state fields, pending sends.</li>
+      <li>Metadata: checkpoint id, parent checkpoint, timestamps.</li>
+      <li>Not automatic long-term user memory unless you write to a store from nodes.</li>
+    </ul>
+
+    <h3>13.2 Checkpointers</h3>
+    <table>
+      <thead><tr><th>Implementation</th><th>Use case</th></tr></thead>
+      <tbody>
+        <tr><td>MemorySaver</td><td>Local dev, tests</td></tr>
+        <tr><td>SqliteSaver / PostgresSaver</td><td>Production thread persistence</td></tr>
+        <tr><td>Custom</td><td>Enterprise storage, encryption at rest</td></tr>
+      </tbody>
+    </table>
+
+    <h3>13.3 thread_id and config</h3>
+    <pre><code>from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.graph import StateGraph
+
+checkpointer = PostgresSaver.from_conn_string(DB_URL)
+graph = builder.compile(checkpointer=checkpointer)
+
+config = {"configurable": {"thread_id": "user-42-support-9"}}
+result = graph.invoke({"messages": [("user", "Hello")]}, config)</code></pre>
+    <p>Same <code>thread_id</code> resumes state; new thread starts fresh checkpoint chain.</p>
+
+    <h3>13.4 LangGraph Store (long-term)</h3>
+    <p>Beyond checkpoints, LangGraph <code>Store</code> API supports cross-thread memory:</p>
+    <pre><code># Pseudocode pattern from LangGraph docs
+store.put(("users", user_id), "preferences", {"theme": "dark"})
+item = store.get(("users", user_id), "preferences")</code></pre>
+    <p>Namespaces organize tuples like <code>(user_id,)</code> or <code>(org, team)</code>. Embed search optional on values.</p>
+
+    <h3>13.5 Human-in-the-loop and forks</h3>
+    <p>Checkpoints enable pause before tool execution, resume after approval, and branch from prior checkpoint to explore alternate agent paths without losing history.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Checkpoints are session replay tapes. Store is the user's filing cabinet across sessions. Agents need both for durable products.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="multi-agent-memory">
+    <h2>14. Multi-Agent Memory</h2>
+    <p>Multiple agents introduce memory contention: shared context vs private scratchpads, who writes to long-term store, and how to avoid duplicative or contradictory memories.</p>
+
+    <h3>14.1 Memory architectures</h3>
+    <ul>
+      <li><strong>Shared blackboard:</strong> one state object all agents read/write (risk: write conflicts).</li>
+      <li><strong>Supervisor hub:</strong> central router holds canonical state; workers return partial updates.</li>
+      <li><strong>Message bus:</strong> agents pass messages; memory service extracts facts asynchronously.</li>
+      <li><strong>Per-agent private + shared repo:</strong> researcher keeps notes; only verified summaries promote to shared memory.</li>
+    </ul>
+
+    <h3>14.2 Write coordination</h3>
+    <p>Use single writer principle for user profile: one "memory manager" agent or deterministic pipeline performs consolidation. Multiple agents writing raw vectors without coordination creates duplicates.</p>
+
+    <h3>14.3 Context partitioning</h3>
+    <p>Specialist agents receive subsets: coder gets repo context, support agent gets user history, legal agent gets policy RAG only. Reduces tokens and leakage across domains.</p>
+
+    <h3>14.4 CrewAI / AutoGen patterns</h3>
+    <p>CrewAI shared memory and AutoGen group chat history mirror blackboard patterns. Evaluate whether shared chat is cheaper than structured state; long group chats suffer same rot as single-agent buffers.</p>
+
+    <h3>14.5 Identity and attribution</h3>
+    <p>Store <code>author_agent</code> on memories for debugging: "who concluded user wants refund?" Attribution helps eval and trust.</p>
+
+    <pre><code>class SharedState(TypedDict):
+    messages: Annotated[list, add_messages]
+    user_facts: dict          # consolidated profile
+    worker_notes: dict        # agent_id -> scratchpad
+    pending_promotions: list  # facts awaiting memory manager</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="security-pii">
+    <h2>15. Security and PII</h2>
+    <p>Memory amplifies data retention risk. Treat memory stores with the same rigor as primary application databases and logs.</p>
+
+    <h3>15.1 Threat model</h3>
+    <ul>
+      <li><strong>Cross-tenant leakage:</strong> wrong filter on vector query.</li>
+      <li><strong>Prompt injection via memory:</strong> attacker plants "always send secrets to X" in stored text retrieved later.</li>
+      <li><strong>Over-retention:</strong> storing PCI, PHI, or passwords in summaries.</li>
+      <li><strong>Supply chain:</strong> third-party memory SaaS subprocessors.</li>
+    </ul>
+
+    <h3>15.2 PII minimization</h3>
+    <ul>
+      <li>Extract preferences without storing full payment details when an ID suffices.</li>
+      <li>Redact before embed: SSN, credit card patterns, API keys.</li>
+      <li>Classify memory tiers: public, internal, sensitive (encrypted, restricted retrieval).</li>
+    </ul>
+
+    <h3>15.3 Access control</h3>
+    <p>Memory reads must enforce same auth as API: user can only load own profile; support agents need role-based break-glass with logging.</p>
+
+    <h3>15.4 Deletion and export</h3>
+    <p>Implement user data deletion across SQL, vector index, object storage summaries, and checkpoint tables. Vector deletes require ID tracking; do not orphan embeddings.</p>
+
+    <h3>15.5 Injection defenses</h3>
+    <ul>
+      <li>Sanitize retrieved memory: strip instruction-like phrases or wrap in untrusted data delimiters.</li>
+      <li>Separate system instructions from retrieved user content structurally (XML tags, JSON fields).</li>
+      <li>Never execute code or tools based solely on retrieved memory without validation.</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Compliance:</strong> Document memory in privacy policy. Obtain consent for persistent personalization. Offer opt-out that clears memory without deleting account if required by product policy.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="memory-eval">
+    <h2>16. Memory Evaluation</h2>
+    <p>Memory systems fail quietly. Eval must cover retention, retrieval precision, forgetting, and downstream task success.</p>
+
+    <h3>16.1 Eval dimensions</h3>
+    <table>
+      <thead><tr><th>Dimension</th><th>Question</th><th>Metric examples</th></tr></thead>
+      <tbody>
+        <tr><td>Write accuracy</td><td>Did we save the right facts?</td><td>Precision/recall vs labeled extractions</td></tr>
+        <tr><td>Retention</td><td>Still available after N turns?</td><td>Success on delayed probe questions</td></tr>
+        <tr><td>Retrieval</td><td>Right memory injected?</td><td>Recall@k, MRR, nDCG</td></tr>
+        <tr><td>Forgetting</td><td>Stale facts removed?</td><td>False recall rate on outdated facts</td></tr>
+        <tr><td>Contradiction</td><td>Conflicts handled?</td><td>Consistency after update sequences</td></tr>
+        <tr><td>Task success</td><td>Does memory help?</td><td>End-to-end agent success with/without memory</td></tr>
+      </tbody>
+    </table>
+
+    <h3>16.2 Benchmark patterns</h3>
+    <ul>
+      <li><strong>Needle in haystack sessions:</strong> plant fact at turn 3, ask at turn 50.</li>
+      <li><strong>Multi-session:</strong> session 1 establishes preference; session 2 tests recall without re-stating.</li>
+      <li><strong>Distraction:</strong> many irrelevant turns between write and probe.</li>
+      <li><strong>Update tests:</strong> change preference mid-session; expect new value wins.</li>
+    </ul>
+
+    <h3>16.3 Synthetic vs human logs</h3>
+    <p>Synthetic scripts scale CI; production sampled conversations catch real failure modes (summarizer drops negation). Combine both.</p>
+
+    <h3>16.4 Ablations</h3>
+    <p>Compare: no memory, summary only, vector only, hybrid. Measure token cost vs success lift to justify complexity.</p>
+
+    <pre><code># Simple delayed-recall eval scenario
+scenario = [
+    {"role": "user", "content": "My employee ID is E-7742."},
+    *filler_turns(40),
+    {"role": "user", "content": "What is my employee ID?"},
+]
+# Pass if agent answer contains E-7742 without tool cheat</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="production-patterns">
+    <h2>17. Production Patterns</h2>
+    <p>Patterns that survive traffic, org changes, and model upgrades.</p>
+
+    <h3>17.1 Layered memory service</h3>
+    <p>Central MemoryService API:</p>
+    <ul>
+      <li><code>get_context(user_id, thread_id, query) -> MemoryBundle</code></li>
+      <li><code>record_turn(thread_id, messages)</code></li>
+      <li><code>extract_and_persist(user_id, thread_id)</code> async</li>
+      <li><code>delete_user(user_id)</code></li>
+    </ul>
+    <p>Agents never touch vector DB directly; policies live in one module.</p>
+
+    <h3>17.2 Async extraction queue</h3>
+    <p>Do not block user latency on extraction LLM calls. Enqueue session end events; workers write memory. Show "learning your preferences" only when necessary.</p>
+
+    <h3>17.3 Versioned memory schema</h3>
+    <p>Tag memories with <code>schema_version</code> and <code>embedding_model</code>. Migrate on model changes with backfill jobs.</p>
+
+    <h3>17.4 Observability</h3>
+    <ul>
+      <li>Log retrieved memory IDs and scores per request.</li>
+      <li>Trace summarization inputs/outputs (redacted).</li>
+      <li>Alert on retrieval empty rate spikes (broken index).</li>
+    </ul>
+
+    <h3>17.5 Feature flags</h3>
+    <p>Gradual rollout: memory read-only, then write, per cohort. Kill switch to disable retrieval without taking down chat.</p>
+
+    <h3>17.6 Caching</h3>
+    <p>Cache user profile bundle per session in Redis with short TTL. Invalidate on memory write.</p>
+
+    <h3>17.7 Cost controls</h3>
+    <p>Cap daily embedding ingest per user, cap auto-retrieved tokens, use smaller models for extraction vs main agent.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Production mantra:</strong> Memory writes are async and gated; memory reads are scoped and logged; memory deletes are complete and tested.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="python-walkthrough">
+    <h2>18. Python Walkthrough</h2>
+    <p>End-to-end minimal pattern: session buffer, rolling summary, vector long-term memory, retrieval assembly. Uses OpenAI-compatible APIs and Chroma for illustration; swap providers as needed.</p>
+
+    <pre><code>"""Minimal layered memory for an agent (single file sketch)."""
+from __future__ import annotations
+
+import json
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
+import chromadb
+from openai import OpenAI
+
+client = OpenAI()
+
+
+@dataclass
+class Turn:
+    role: str
+    content: str
+    at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class SessionMemory:
+    def __init__(self, thread_id: str, token_budget: int = 6000):
+        self.thread_id = thread_id
+        self.token_budget = token_budget
+        self.turns: list[Turn] = []
+        self.summary: str = ""
+
+    def append(self, role: str, content: str) -> None:
+        self.turns.append(Turn(role=role, content=content))
+
+    def maybe_summarize(self) -> None:
+        # crude token estimate
+        if sum(len(t.content) for t in self.turns) &lt; self.token_budget:
+            return
+        transcript = "\n".join(f"{t.role}: {t.content}" for t in self.turns[:-6])
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Compress chat; keep constraints and IDs."},
+                {"role": "user", "content": f"Prior summary:\n{self.summary}\n\nNew lines:\n{transcript}"},
+            ],
+        )
+        self.summary = resp.choices[0].message.content or self.summary
+        self.turns = self.turns[-6:]
+
+    def as_messages(self) -> list[dict]:
+        msgs = []
+        if self.summary:
+            msgs.append({"role": "system", "content": f"Session summary: {self.summary}"})
+        for t in self.turns:
+            msgs.append({"role": t.role, "content": t.content})
+        return msgs
+
+
+class LongTermMemory:
+    def __init__(self, user_id: str, path: str = "./chroma_mem"):
+        self.user_id = user_id
+        self.chroma = chromadb.PersistentClient(path=path)
+        self.col = self.chroma.get_or_create_collection(f"user_{user_id}")
+
+    def _embed(self, texts: list[str]) -> list[list[float]]:
+        r = client.embeddings.create(model="text-embedding-3-small", input=texts)
+        return [d.embedding for d in r.data]
+
+    def add(self, text: str, memory_type: str = "fact") -> str:
+        mem_id = str(uuid.uuid4())
+        self.col.add(
+            ids=[mem_id],
+            documents=[text],
+            embeddings=self._embed([text]),
+            metadatas=[{"type": memory_type, "user_id": self.user_id}],
+        )
+        return mem_id
+
+    def search(self, query: str, k: int = 5) -> list[str]:
+        hits = self.col.query(
+            query_embeddings=self._embed([query]),
+            n_results=k,
+            where={"user_id": self.user_id},
+        )
+        return hits["documents"][0] if hits["documents"] else []
+
+
+def extract_facts(transcript: str) -> list[str]:
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": "Return JSON: {\"facts\": [\"...\"]}"},
+            {"role": "user", "content": transcript},
+        ],
+    )
+    data = json.loads(resp.choices[0].message.content or "{}")
+    return data.get("facts", [])
+
+
+def build_agent_context(user_id: str, thread_id: str, user_query: str) -> list[dict]:
+    session = sessions.setdefault(thread_id, SessionMemory(thread_id))
+    ltm = LongTermMemory(user_id)
+    retrieved = ltm.search(user_query, k=4)
+    system = "You are a helpful agent. Use retrieved memory when relevant."
+    if retrieved:
+        system += "\n\nRetrieved memories:\n" + "\n".join(f"- {m}" for m in retrieved)
+    messages = [{"role": "system", "content": system}]
+    messages.extend(session.as_messages())
+    messages.append({"role": "user", "content": user_query})
+    return messages
+
+
+sessions: dict[str, SessionMemory] = {}
+
+
+def on_session_end(user_id: str, thread_id: str) -> None:
+    session = sessions.get(thread_id)
+    if not session:
+        return
+    transcript = "\n".join(f"{t.role}: {t.content}" for t in session.turns)
+    facts = extract_facts(transcript)
+    ltm = LongTermMemory(user_id)
+    for f in facts:
+        ltm.add(f)</code></pre>
+
+    <p>Extend with: Postgres profile table, proper token counting (tiktoken), reranker, deletion API, and structured logging. Wire <code>on_session_end</code> to webhook or queue consumer.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="failure-modes">
+    <h2>19. Failure Modes</h2>
+    <p>Common production failures and mitigations.</p>
+
+    <table>
+      <thead><tr><th>Failure</th><th>Symptom</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Summary amnesia</td><td>Early constraint ignored</td><td>Pin facts to LTM; structured summary; eval needles</td></tr>
+        <tr><td>Memory hallucination</td><td>Agent cites false past events</td><td>Ground with IDs; show memory sources; lower temperature on recall</td></tr>
+        <tr><td>Stale memory</td><td>Outdated preference applied</td><td>TTL, updated_at checks, explicit supersede on conflict</td></tr>
+        <tr><td>Retrieval miss</td><td>User repeats self</td><td>HyDE, hybrid search, always-on profile for top facts</td></tr>
+        <tr><td>Retrieval noise</td><td>Irrelevant old chats in context</td><td>Higher threshold, MMR, reranker, tool-based lookup</td></tr>
+        <tr><td>Cross-user leak</td><td>Wrong personal data shown</td><td>Mandatory filters; integration tests per tenant</td></tr>
+        <tr><td>Injection via memory</td><td>Agent follows hostile stored text</td><td>Delimiter wrapping; instruction hierarchy; sanitize writes</td></tr>
+        <tr><td>Token blow-up</td><td>Latency/cost spikes</td><td>Hard caps on retrieved chars; trim tool outputs first</td></tr>
+        <tr><td>Duplicate memories</td><td>Index cluttered with repeats</td><td>Consolidation job; embedding dedup threshold</td></tr>
+        <tr><td>Checkpoint bloat</td><td>DB growth, slow resume</td><td>Prune old checkpoints; store large artifacts externally</td></tr>
+        <tr><td>Embedding drift</td><td>Recall drops after model change</td><td>Version index; scheduled re-embed</td></tr>
+        <tr><td>Unsafe write</td><td>PII in vector store</td><td>Redaction pipeline; blocklist; human review queue</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Debugging checklist</h3>
+    <ol>
+      <li>Reproduce with thread replay: raw messages vs what model saw.</li>
+      <li>Inspect retrieved memory IDs and scores for the failing turn.</li>
+      <li>Compare answer with memory disabled (isolate retrieval vs reasoning).</li>
+      <li>Check summarization diff after the turn where fact was introduced.</li>
+      <li>Verify user_id filter on all memory queries.</li>
+    </ol>
+
+    <div class="callout callout-derivation">
+      <strong>Root cause clusters:</strong> (1) never written, (2) written but not retrieved, (3) retrieved but truncated, (4) retrieved but model ignored. Logs must distinguish all four.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="decision-guide">
+    <h2>20. Memory Decision Guide</h2>
+    <p>Use this table to choose memory components for a new agent product. Combine rows; simplest solution that passes eval wins.</p>
+
+    <table>
+      <thead><tr><th>Your situation</th><th>Session memory</th><th>Long-term memory</th><th>Retrieval pattern</th><th>Framework notes</th></tr></thead>
+      <tbody>
+        <tr><td>Single-turn FAQ bot</td><td>None</td><td>None</td><td>RAG on docs only</td><td>No agent memory needed</td></tr>
+        <tr><td>Short support chat (&lt; 20 turns)</td><td>Full buffer</td><td>Optional</td><td>No auto vector</td><td>LangChain buffer or graph messages</td></tr>
+        <tr><td>Long support sessions</td><td>Summary + last k turns</td><td>Vector episodic</td><td>Auto inject top 3-5</td><td>LangGraph checkpoint + Store</td></tr>
+        <tr><td>Returning personalized assistant</td><td>Summary buffer</td><td>KV profile + vector</td><td>Always-on profile + search</td><td>Async extraction on session end</td></tr>
+        <tr><td>Multi-day coding agent</td><td>Scratchpad + trim</td><td>Structured task state</td><td>Tool-based file/memory lookup</td><td>LangGraph state fields; external artifact store</td></tr>
+        <tr><td>Enterprise copilot</td><td>Thread checkpoint</td><td>Graph + RAG corpus</td><td>RAG citations + role-scoped memory</td><td>Strict PII tiering</td></tr>
+        <tr><td>Multi-agent research crew</td><td>Per-agent notes</td><td>Shared promoted facts only</td><td>Supervisor merges retrieval</td><td>Single writer consolidation</td></tr>
+        <tr><td>High stakes (finance, health)</td><td>Typed state machine</td><td>SQL facts, no fuzzy recall for numbers</td><td>Explicit tool fetch with audit</td><td>Human confirm before write</td></tr>
+        <tr><td>Token-cost sensitive</td><td>Aggressive summarize</td><td>Sparse LTM</td><td>Tool lookup on demand</td><td>Cache profile; small embed model</td></tr>
+        <tr><td>Regulated data residency</td><td>Regional Postgres checkpoints</td><td>Same-region vector/SQL</td><td>On-prem embedders</td><td>No US memory for EU users</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Implementation order</h3>
+    <ol>
+      <li>Session message list + thread ID (checkpoint).</li>
+      <li>Token trimming and summarization with eval needles.</li>
+      <li>User profile KV (explicit fields).</li>
+      <li>Vector episodic memory with filters and deletion.</li>
+      <li>Extraction/consolidation worker and observability.</li>
+      <li>Multi-agent write coordination if needed.</li>
+    </ol>
+
+    <div class="callout callout-intuition">
+      <strong>Master memory in layers:</strong> (1) what belongs in context vs store, (2) session vs persistent scope, (3) extraction and consolidation quality, (4) retrieval precision under token budget, (5) security and eval before scaling users. Every agent memory bug is a failure in one of these five layers.
+    </div>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../../interview/Agents-and-Protocols/ai-engineering-interview-memory.html">Interview questions on Agent Memory</a></p>
+    <p>Next: <a href="ai-engineering-mcp.html">Model Context Protocol (MCP)</a></p>
+    <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

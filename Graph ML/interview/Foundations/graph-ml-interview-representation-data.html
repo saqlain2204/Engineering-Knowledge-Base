@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Representation &amp; Data | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Data Prep</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Representation &amp; Data Preparation</h1>
+  <p><a href="../../learn/Foundations/graph-ml-representation-data.html">Read learning notes</a>.</p>
+</header>
+<main><section>
+<h2>Data Preparation</h2>
+<details><summary>What is edge_index in PyTorch Geometric?</summary>
+<div><p>A tensor of shape $[2, \text{num\_edges}]$ in COO format. Row 0 = source nodes, row 1 = target nodes. For undirected graphs, include both $(i,j)$ and $(j,i)$.</p></div></details>
+<details><summary>How do you split data for link prediction without leakage?</summary>
+<div><p>Remove test edges from the training graph entirely before message passing. Train GNN on train edges only. Evaluate on held-out positive edges plus sampled negative non-edges. Never let the model see test edges during training.</p></div></details>
+<details><summary>What is the difference between inductive and transductive node splits?</summary>
+<div><p>Transductive: test nodes stay in the graph (structure visible, labels hidden). Inductive: test nodes/edges are removed from training graph  -  model must generalize to unseen structure.</p></div></details>
+<details><summary>When is building a k-NN graph from tabular data a bad idea?</summary>
+<div><p>When locality in feature space is not meaningful, when $k$ is arbitrary, or when relationships are not distance-based. Invented graphs can add noise and mislead GNNs. Try MLP baseline first.</p></div></details>
+<details><summary>What preprocessing steps are essential before GNN training?</summary>
+<div><p>Add/remove self-loops per model needs, make undirected edges bidirectional, handle isolated nodes, normalize features, create train/val/test masks, verify no label leakage across splits.</p></div></details>
+<details><summary>What are structural node features?</summary>
+<div><p>Features computed from graph structure: degree, clustering coefficient, PageRank, betweenness centrality, eigenvector centrality. Useful when raw attributes are weak but topology is informative.</p></div></details>
+<details><summary>Name key benchmark datasets and their tasks.</summary>
+<div><p>Cora/PubMed (node cls, citation), OGBN-Arxiv (large node cls), OGBN-Products (massive node cls), OGBG-MolHIV (graph cls, molecules), ZINC (graph regression). Use OGB splits for fair comparison.</p></div></details>
+<details><summary>What is a heterogeneous graph?</summary>
+<div><p>Multiple node types and edge types  -  e.g., users, products, brands with purchase and view relations. Requires type-specific message functions (R-GCN, HGT), not standard GCN.</p></div></details>
+</section></main>
+<footer><p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p></footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

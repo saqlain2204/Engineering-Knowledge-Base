@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Docker Compose | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Docker Compose</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Docker Compose</h1>
+  <p>Multi-container apps, compose files, and production patterns. <a href="../../learn/Docker/docker-compose.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Docker Compose</h2>
+<p>Declaratively define and run multi-container application stacks.</p>
+
+<details><summary>What is Docker Compose and when should you use it?</summary>
+<div><p>Docker Compose is a tool for defining and running multi-container applications from a single YAML file. Instead of chaining multiple <code>docker run</code> commands, you declare services, networks, and volumes once and manage the stack with <code>docker compose up</code>. It is ideal for local development, integration testing in CI, and small single-host production deployments. For multi-node orchestration at scale, Kubernetes is the typical next step.</p></div>
+</details>
+
+<details><summary>What is the anatomy of a Compose file?</summary>
+<div><p>A Compose file (typically <code>compose.yml</code>) is versioned YAML with a top-level <code>services</code> key (required), plus optional <code>networks</code>, <code>volumes</code>, <code>configs</code>, and <code>secrets</code> sections. Each service defines an image or build context, ports, environment, dependencies, health checks, and resource limits. Compose v2 (the <code>docker compose</code> CLI plugin) uses the Compose Specification  -  there is no longer a required <code>version:</code> field at the top of the file.</p></div>
+</details>
+
+<details><summary>How do you define and configure services in Compose?</summary>
+<div>
+<ul>
+<li><code>image:</code> pull a pre-built image, or <code>build:</code> with <code>context</code> and <code>dockerfile</code> to build locally.</li>
+<li><code>ports:</code> publish container ports to the host (<code>"8080:80"</code>).</li>
+<li><code>environment:</code> or <code>env_file:</code> inject configuration.</li>
+<li><code>command:</code> / <code>entrypoint:</code> override the image defaults.</li>
+<li><code>restart:</code> policy (<code>unless-stopped</code>, <code>on-failure</code>) for resilience.</li>
+<li><code>deploy.resources</code> (in Swarm-compatible files) or <code>mem_limit</code> / <code>cpus</code> for resource caps.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>How does networking work in Docker Compose?</summary>
+<div><p>Compose creates a default <strong>project network</strong> named <code>{project}_{network}</code>. Every service on that network can reach others by <strong>service name</strong> as a DNS hostname  -  e.g., a web container connects to <code>postgres:5432</code> without hard-coding IPs. You can define custom networks with the <code>networks:</code> key, attach services to multiple networks, and set <code>network_mode: host</code> to bypass bridge networking when needed.</p></div>
+</details>
+
+<details><summary>How do you manage persistent data with Compose volumes?</summary>
+<div>
+<ul>
+<li><strong>Named volumes</strong> (<code>volumes: db_data:/var/lib/postgresql/data</code>) are managed by Docker and survive <code>docker compose down</code>.</li>
+<li><strong>Bind mounts</strong> (<code>./src:/app/src</code>) map host paths  -  great for live-reload in development.</li>
+<li><strong>Anonymous volumes</strong> are created inline and removed with <code>docker compose down -v</code>.</li>
+</ul>
+<p>Declare named volumes under the top-level <code>volumes:</code> key so Compose creates them with a project-scoped name.</p>
+</div>
+</details>
+
+<details><summary>How do health checks and service dependencies work?</summary>
+<div><p>The <code>healthcheck</code> block runs a probe command inside the container on an interval. Docker marks the container <code>healthy</code> or <code>unhealthy</code> based on exit codes. <code>depends_on</code> with <code>condition: service_healthy</code> (Compose v2) waits for a dependency to pass its health check before starting a dependent service  -  solving the race where a database port is open but not yet ready to accept connections. Without a health condition, <code>depends_on</code> only waits for the container to <em>start</em>, not to be ready.</p></div>
+</details>
+
+<details><summary>What are override files and how do they enable environment-specific configs?</summary>
+<div><p>Compose automatically merges multiple files in order: <code>compose.yml</code> is the base, and <code>compose.override.yml</code> (if present) is applied on top for local dev overrides (bind mounts, debug ports, etc.). You can also pass explicit files: <code>docker compose -f compose.yml -f compose.prod.yml up</code>. Later files override earlier ones for conflicting keys. This keeps a single source of truth while tailoring dev, staging, and production without duplicating the entire stack definition.</p></div>
+</details>
+
+<details><summary>What is the difference between <code>docker compose up</code> and <code>docker compose run</code>?</summary>
+<div><p><code>docker compose up</code> creates and starts all (or specified) services defined in the compose file, wiring networks and volumes as declared. <code>docker compose run web pytest</code> starts a <em>one-off</em> container for the <code>web</code> service, overriding the default command  -  useful for migrations, test suites, or admin tasks. One-off containers do not get the service's <code>restart</code> policy and are removed after exit unless <code>--rm</code> is omitted.</p></div>
+</details>
+
+<details><summary>How do you handle environment variables and secrets in Compose?</summary>
+<div>
+<ul>
+<li><code>environment:</code> sets key-value pairs inline; <code>env_file: .env</code> loads a file.</li>
+<li>A <code>.env</code> file in the project directory can substitute variables in the compose file via <code>${VAR}</code> syntax.</li>
+<li><code>secrets:</code> (Swarm-compatible) mount sensitive files into containers at <code>/run/secrets/&lt;name&gt;</code> without baking them into images.</li>
+</ul>
+<p>Never commit real secrets to version control  -  use <code>.env.example</code> as a template and inject production secrets via CI or a secrets manager.</p>
+</div>
+</details>
+
+<details><summary>What production patterns should you follow with Compose?</summary>
+<div>
+<ul>
+<li>Pin images by <strong>digest</strong>, not floating tags like <code>latest</code>.</li>
+<li>Set <code>restart: unless-stopped</code> and define <code>healthcheck</code> on every critical service.</li>
+<li>Use named volumes for stateful services; back them up regularly.</li>
+<li>Place a reverse proxy (Traefik, Nginx) in front of app services for TLS termination.</li>
+<li>Limit resources with <code>deploy.resources</code> or cgroup flags to prevent one service from starving others.</li>
+<li>Run containers as non-root users defined in the Dockerfile.</li>
+<li>Log to stdout/stderr and collect with a log driver or sidecar  -  do not rely on container filesystem logs.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What are Compose profiles and when are they useful?</summary>
+<div><p>Profiles let you opt services in or out of a stack. Add <code>profiles: ["debug"]</code> to a service and it is ignored unless you activate that profile: <code>docker compose --profile debug up</code>. This keeps optional tooling (mail catchers, debug exporters, seed scripts) out of the default startup path without maintaining separate compose files for every combination.</p></div>
+</details>
+
+<details><summary>Compose v1 (<code>docker-compose</code>) vs v2 (<code>docker compose</code>)  -  what changed?</summary>
+<div><p>The legacy <code>docker-compose</code> was a standalone Python tool; it is deprecated. Compose v2 is a Go-based Docker CLI plugin invoked as <code>docker compose</code> (no hyphen). It integrates with Docker Buildx, supports the Compose Specification without a <code>version</code> field, and aligns with <code>docker</code> context and credential helpers. New projects should always use <code>docker compose</code>.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

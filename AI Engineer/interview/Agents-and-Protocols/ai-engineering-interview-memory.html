@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Agent Memory | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Agent Memory</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Agent and LLM Memory</h1>
+  <p>How agents remember across turns, sessions, and users. <a href="../../learn/Agents-and-Protocols/ai-engineering-memory.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Agent and LLM Memory</h2>
+<p>How agents remember across turns, sessions, and users.</p>
+
+<details><summary>What types of memory do agents need, and how do short-term and long-term differ?</summary>
+<div>
+<ul>
+<li><strong>Working memory</strong> - current turn scratchpad: plan, last tool result, draft output (in-context).</li>
+<li><strong>Short-term (episodic)</strong> - session/thread scope: message list, rolling summary, task state this visit.</li>
+<li><strong>Long-term (semantic)</strong> - cross-session: user preferences, prior resolutions, extracted facts (vector DB, SQL, graph).</li>
+<li><strong>Procedural</strong> - how to act: system prompts, playbooks, fine-tuned weights (org/agent level).</li>
+<li><strong>Shared/collective</strong> - product-wide docs and runbooks (often overlaps with RAG).</li>
+</ul>
+<p>Short-term is fast and lossless until the context window fills; long-term is larger but needs explicit write, index, and retrieval. Context window is RAM; persistent memory is disk - you page data in deliberately.</p>
+</div>
+</details>
+
+<details><summary>What short-term session memory patterns exist and when do you use each?</summary>
+<div>
+<ul>
+<li><strong>Full buffer</strong> - append all messages; simple, lossless until overflow. Best for short chats and eval replay.</li>
+<li><strong>Sliding window</strong> - keep last k turns or n tokens; cheap but drops early constraints unless pinned elsewhere.</li>
+<li><strong>Token-aware trimming</strong> - drop middle or large tool payloads first; preserve system + first user message + recent tail.</li>
+<li><strong>Scratchpad</strong> - structured working notes (goal, constraints, done, next) the agent updates; survives aggressive summarization better than buried prose.</li>
+<li><strong>Typed state (LangGraph)</strong> - fields like messages, plan step, artifacts; nodes read/write schema instead of parsing free-form chat.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>How does summarization extend session memory, and what are its main risks?</summary>
+<div><p>When raw history exceeds the token budget, older turns compress into a rolling summary while recent messages stay verbatim. Update every N turns: previous summary + new messages → new summary, with prompts that preserve constraints, decisions, open tasks, and IDs while dropping small talk. Hierarchical summaries (session → daily → profile) scale further. Summarization is lossy compression - silent amnesia is the top failure mode. Mitigate by pinning immutable facts to long-term store before summarizing, keeping verbatim tool errors and numeric outputs, logging summary diffs, and using structured JSON facts instead of prose when precision matters.</p></div>
+</details>
+
+<details><summary>How does vector memory work for long-term agent recall?</summary>
+<div>
+<p><strong>Write path:</strong> select candidates (post-extraction), chunk with metadata (user_id, session_id, timestamp, type), embed with a consistent model, upsert to vector store.</p>
+<p><strong>Read path:</strong> embed current query (+ optional plan), similarity search with mandatory metadata filters, re-rank (cross-encoder, MMR), inject top-k with citations and timestamps.</p>
+<p>Vector memory answers "what past text is similar to now?" not "what is objectively true?" - pair with structured stores and consolidation for high-stakes facts. Always scope by <code>user_id</code>/tenant; cross-user leakage is a severe privacy failure.</p>
+</div>
+</details>
+
+<details><summary>When should you use structured memory instead of (or alongside) vector memory?</summary>
+<div>
+<ul>
+<li><strong>Key-value user profile</strong> - exact fields like timezone, language, shipping_address_id; load every session (~500-1500 tokens).</li>
+<li><strong>Episodic event log</strong> - append-only events (purchases, ticket IDs); query by time/type without semantic guesswork.</li>
+<li><strong>Knowledge graph</strong> - entities and relations for multi-hop CRM/ITSM questions; higher setup cost.</li>
+<li><strong>Hybrid</strong> - canonical fact in SQL, narrative episode in vector index linked by fact_id; vector finds context, SQL confirms current truth.</li>
+</ul>
+<p>SQL/KV excels at exact lookup and transactions; vectors excel at fuzzy text recall but lack native truth maintenance. Use structured memory for numbers, IDs, and facts that must not drift.</p>
+</div>
+</details>
+
+<details><summary>How do extraction and consolidation pipelines decide what enters long-term memory?</summary>
+<div>
+<p><strong>Extraction triggers:</strong> end-of-session batch, per-turn "remember this" classifier, post-tool outcomes, explicit user commands.</p>
+<p>Extract stable user-specific facts as JSON (type, text, confidence); exclude chit-chat and debug output. Gate writes: no PII without consent, no secrets, no unverified model guesses labeled as facts; use proposed vs confirmed for sensitive data.</p>
+<p><strong>Consolidation</strong> merges new facts with existing store: recency wins on explicit updates, confidence/source ranking, optional LLM merge pass, human review queue on contradictions. Anti-pattern: embedding every assistant reply creates a self-reinforcing hallucination index - prefer user-verified or tool-grounded content.</p>
+</div>
+</details>
+
+<details><summary>What retrieval strategies should you combine when assembling memory for a turn?</summary>
+<div>
+<ul>
+<li><strong>Always-on profile</strong> - small KV bundle every request for baseline personalization.</li>
+<li><strong>Query-conditioned vector search</strong> - embed current message; tune k and similarity threshold on eval set.</li>
+<li><strong>Recency bias</strong> - timestamp decay or "last 7 days" filter for support context.</li>
+<li><strong>Importance scores</strong> - weight facts that affected money/account at write time.</li>
+<li><strong>Tool-based lookup</strong> - expose <code>search_memory</code> / <code>get_user_profile</code> so the agent fetches only when needed (saves tokens).</li>
+<li><strong>MMR / reranking</strong> - reduce redundant near-duplicate episodes; cross-encoder for precision.</li>
+<li><strong>HyDE / query expansion</strong> - bridge vocabulary mismatch between question and stored text.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What's the difference between session memory and persistent memory?</summary>
+<div>
+<p><strong>Session (thread):</strong> message list, summaries, tool artifacts, LangGraph checkpoint state keyed by <code>thread_id</code> - dies or archives when the thread ends.</p>
+<p><strong>Persistent:</strong> user profile across threads, org knowledge, learned outcomes ("last order #12345 shipped") - survives devices and sessions.</p>
+<p><strong>Promotion pipeline:</strong> detect durable fact in session → validate and dedup → write to long-term index → optionally pointer in session summary. Keep threads isolated (multi-tab = parallel narratives); cross-thread recall is persistent memory's job. On login, merge anonymous session memory into user profile with conflict rules and audit log.</p>
+</div>
+</details>
+
+<details><summary>How does agent memory differ from RAG, and when do you need both?</summary>
+<div>
+<table>
+<thead><tr><th>Dimension</th><th>RAG</th><th>Agent memory</th></tr></thead>
+<tbody>
+<tr><td>Source</td><td>Curated docs, wikis, corpora</td><td>Conversations, tool results, extractions</td></tr>
+<tr><td>Update</td><td>Batch ingest, versioned releases</td><td>Continuous per session/user</td></tr>
+<tr><td>Scope</td><td>Usually shared/org-wide</td><td>Per-user or per-agent</td></tr>
+<tr><td>Truth model</td><td>Authoritative documents</td><td>Probabilistic; needs consolidation</td></tr>
+<tr><td>Eval focus</td><td>Citation accuracy, grounding</td><td>Retention, forgetting, contradiction</td></tr>
+</tbody>
+</table>
+<p>Production copilots commonly layer: RAG (policies, API docs) + memory (preferences, past cases) + session (current ticket, tool traces). Prompt order: system policies → RAG with citations → user memory → session summary → recent messages. RAG alone suffices for static, single-session Q&amp;A; memory is required for returning users, multi-day tasks, and personalization RAG corpora cannot capture.</p>
+</div>
+</details>
+
+<details><summary>What LangChain memory abstractions exist and when are they appropriate?</summary>
+<div>
+<ul>
+<li><strong>ConversationBufferMemory</strong> - full history, unbounded until external trim.</li>
+<li><strong>ConversationBufferWindowMemory</strong> - last k turn pairs.</li>
+<li><strong>ConversationSummaryMemory</strong> - LLM-compressed history.</li>
+<li><strong>ConversationSummaryBufferMemory</strong> - hybrid: recent raw + summary of older content within token budget.</li>
+<li><strong>VectorStoreRetrieverMemory</strong> - vector-backed episodic recall per query.</li>
+<li><strong>Entity memory</strong> - structured tracking of people/places via extraction.</li>
+<li><strong>RunnableWithMessageHistory</strong> - separates chain logic from session backend (Redis, SQL) via <code>session_id</code>.</li>
+</ul>
+<p>New agent projects should prefer LangGraph checkpoints + explicit store modules for clearer state and replay; LangChain memory remains useful for simple LCEL chat wrappers.</p>
+</div>
+</details>
+
+<details><summary>What do LangGraph checkpoints and Store provide for agent memory?</summary>
+<div>
+<p><strong>Checkpoints</strong> persist graph state (messages, custom fields, pending sends) at super-step boundaries - session replay tapes for thread survival, human-in-the-loop pause/resume, time-travel debugging. Backends: MemorySaver (dev), PostgresSaver (production). Same <code>thread_id</code> resumes; new thread starts fresh. Checkpoints are not automatic cross-session user memory unless nodes write to a store.</p>
+<p><strong>LangGraph Store</strong> is the filing cabinet across threads: namespaced tuples like <code>(users, user_id)</code> with optional embed search on values. Intuition: checkpoints = session tape; Store = durable user/org memory.</p>
+</div>
+</details>
+
+<details><summary>How do you handle PII, privacy, and security risks in agent memory?</summary>
+<div>
+<ul>
+<li><strong>Cross-tenant leakage</strong> - mandatory <code>user_id</code> filters on every vector/SQL read; integration tests per tenant.</li>
+<li><strong>PII minimization</strong> - store IDs not full payment details; redact SSN/cards/API keys before embed; tier memories (public, internal, sensitive).</li>
+<li><strong>Prompt injection via memory</strong> - attacker plants instructions in stored text retrieved later; wrap retrieved content in untrusted delimiters, separate structurally from system instructions, never execute tools based solely on memory.</li>
+<li><strong>Access control</strong> - same auth as API; role-based break-glass for support with logging.</li>
+<li><strong>Deletion/export</strong> - GDPR/CCPA requires purge across SQL, vectors, summaries, checkpoints with tracked IDs (no orphan embeddings).</li>
+</ul>
+</div>
+</details>
+
+<details><summary>How do you evaluate an agent memory system?</summary>
+<div>
+<ul>
+<li><strong>Write accuracy</strong> - precision/recall vs labeled extractions.</li>
+<li><strong>Retention</strong> - delayed probe questions after N turns or a new session.</li>
+<li><strong>Retrieval</strong> - recall@k, MRR, nDCG on whether the right memory was injected.</li>
+<li><strong>Forgetting</strong> - false recall on outdated facts after preference updates.</li>
+<li><strong>Contradiction handling</strong> - consistency after update sequences.</li>
+<li><strong>Task success</strong> - end-to-end agent success with vs without memory (ablations).</li>
+</ul>
+<p>Benchmark patterns: needle-in-haystack (fact at turn 3, ask at turn 50), multi-session recall, distraction filler turns, mid-session preference updates. Memory fails quietly - combine synthetic CI scripts with sampled production logs. Log whether failures are: never written, written but not retrieved, retrieved but truncated, or retrieved but ignored.</p>
+</div>
+</details>
+
+<details><summary>What production patterns keep agent memory reliable at scale?</summary>
+<div>
+<ul>
+<li><strong>Central MemoryService API</strong> - <code>get_context</code>, <code>record_turn</code>, async <code>extract_and_persist</code>, <code>delete_user</code>; agents never touch vector DB directly.</li>
+<li><strong>Async extraction queue</strong> - do not block user latency on extraction LLM calls.</li>
+<li><strong>Versioned schema</strong> - tag <code>embedding_model</code> and <code>schema_version</code>; backfill on model changes.</li>
+<li><strong>Observability</strong> - log retrieved memory IDs/scores, trace summarization (redacted), alert on empty retrieval spikes.</li>
+<li><strong>Feature flags</strong> - gradual rollout; kill switch to disable retrieval without taking down chat.</li>
+<li><strong>Caching</strong> - profile bundle in Redis with invalidate-on-write.</li>
+<li><strong>Cost controls</strong> - cap daily embed ingest per user, cap auto-retrieved tokens, smaller model for extraction vs main agent.</li>
+</ul>
+<p>Mantra: writes are async and gated; reads are scoped and logged; deletes are complete and tested.</p>
+</div>
+</details>
+
+<details><summary>What are common agent memory failure modes and how do you mitigate them?</summary>
+<div>
+<ul>
+<li><strong>Summary amnesia</strong> - early constraint ignored → pin facts to LTM, structured summary, eval needles.</li>
+<li><strong>Memory hallucination</strong> - agent cites false past events → ground with IDs, show sources, lower temperature on recall.</li>
+<li><strong>Stale memory</strong> - outdated preference applied → TTL, <code>updated_at</code> checks, explicit supersede on conflict.</li>
+<li><strong>Retrieval miss</strong> - user repeats self → HyDE, hybrid search, always-on profile for top facts.</li>
+<li><strong>Retrieval noise</strong> - irrelevant old chats injected → higher threshold, MMR, reranker, tool-based lookup.</li>
+<li><strong>Cross-user leak</strong> - wrong personal data → mandatory filters, per-tenant tests.</li>
+<li><strong>Injection via memory</strong> - hostile stored text steers agent → delimiter wrapping, instruction hierarchy.</li>
+<li><strong>Token blow-up</strong> - latency/cost spikes → hard caps on retrieved chars; trim tool outputs first.</li>
+<li><strong>Duplicate memories</strong> - cluttered index → consolidation job, embedding dedup threshold.</li>
+<li><strong>Embedding drift</strong> - recall drops after model change → version index, scheduled re-embed.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>How do you budget context tokens across memory layers?</summary>
+<div><p>Memory design is explicit budget allocation: reserve system + tools + output headroom first, then allocate to retrieved chunks (RAG + long-term hits), historical summary + recent raw messages, and working turn content. Every retrieved token has cost and attention-dilution risk ("context rot") - stuffing the full window degrades instruction following. Treat context like a cache with eviction (LRU messages, TTL facts, priority boost for user-stated constraints). Prefer targeted retrieval over maximal history; compare token cost vs success lift in ablations to justify complexity.</p></div>
+</details>
+
+<details><summary>How should forgetting, TTL, and user deletion work in production memory?</summary>
+<div><p>Not all memories live forever: apply TTL on marketing context, session-scoped goals, and stale inventory facts. Consolidation should supersede contradictions (recency or confidence wins) rather than accumulate conflicting entries. User deletion must be complete across SQL profile rows, vector index entries, cold-storage summaries, LangGraph checkpoint tables, and caches - track memory IDs at write time so nothing is orphaned. Offer opt-out of persistent personalization without necessarily deleting the account. Document retention in privacy policy and obtain consent for cross-session memory.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

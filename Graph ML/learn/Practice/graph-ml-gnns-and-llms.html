@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>GNNs in the LLM Era | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; GNNs &amp; LLMs</p>
+  </nav>
+  <h1>GNNs in the LLM Era</h1>
+  <p>How graph neural networks and large language models work together  -  and when each wins alone.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why-combine">Why Combine Graphs and LLMs?</a></li>
+    <li><a href="#tags">Text-Attributed Graphs (TAGs)</a></li>
+    <li><a href="#lm-encoder">LLM as Node Feature Encoder</a></li>
+    <li><a href="#gnn-retriever">GNN as Retriever for RAG</a></li>
+    <li><a href="#graphrag">GraphRAG</a></li>
+    <li><a href="#prompting">LLM Prompting vs Learned GNN</a></li>
+    <li><a href="#agents">Agents + Knowledge Graphs</a></li>
+    <li><a href="#multimodal">Multimodal: Molecules + Language</a></li>
+    <li><a href="#who-wins">Who Wins: LLM, GNN, or Both?</a></li>
+    <li><a href="#future">Future: Graph Foundation Models</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="why-combine">
+    <h2>1. Why Combine Graphs and LLMs?</h2>
+    <p><strong>LLMs are great at:</strong> language, reasoning over text, few-shot generalization, world knowledge in parameters.</p>
+    <p><strong>LLMs are weak at:</strong> precise multi-hop relational traversal, combinatorial structure (symmetry, connectivity), updating factual graphs cheaply, guaranteed consistency over structured KBs.</p>
+    <p><strong>GNNs are great at:</strong> encoding connectivity, permutation-invariant structure, inductive generalization on graphs, efficient inference on fixed topology.</p>
+    <p><strong>GNNs are weak at:</strong> open-ended language, zero-shot reasoning, tasks needing broad world knowledge not in node features.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> LLM is the linguist. GNN is the map. You need both when your data is a <em>network of text things</em>  -  documents citing documents, products with descriptions, genes with papers, entities in a knowledge graph.
+    </div>
+  </section>
+
+  <section id="tags">
+    <h2>2. Text-Attributed Graphs (TAGs)</h2>
+    <p>Each node carries raw text: paper abstract, product title, wiki paragraph, code docstring. This is the most common LLM+GNN setting in 2024–2026 research.</p>
+    <p>Pipeline options:</p>
+    <ol>
+      <li><strong>Freeze LLM → embed → GNN:</strong> cheap, fast GNN training</li>
+      <li><strong>Finetune LLM + GNN end-to-end:</strong> best quality, expensive</li>
+      <li><strong>Adapter layers:</strong> LoRA on LLM + light GNN on top</li>
+    </ol>
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2310.01089" rel="noopener noreferrer">Chen et al.  -  Text-Attributed Graph Representation Learning (TAGLab)</a></small></p>
+  </section>
+
+  <section id="lm-encoder">
+    <h2>3. LLM as Node Feature Encoder</h2>
+    <pre><code># Step 1: embed each node's text with a frozen LM
+from transformers import AutoModel, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+lm = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+
+def embed_texts(texts):
+    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+    with torch.no_grad():
+        out = lm(**inputs)
+    return out.last_hidden_state[:, 0]  # CLS token
+
+data.x = embed_texts(node_text_list)  # shape [num_nodes, dim]
+
+# Step 2: GNN on top  -  structure refines text embeddings
+model = GAT(in_dim=data.x.size(1), hidden=256, out_dim=num_classes)</code></pre>
+    <p><strong>Why GNN after LLM?</strong> Two papers with similar abstracts may belong to different topics if one cites ML and one cites biology  -  citations (edges) disambiguate.</p>
+    <p><strong>Why not LLM alone?</strong> Feeding all neighbors' text into context blows the context window on high-degree nodes and misses global graph structure.</p>
+  </section>
+
+  <section id="gnn-retriever">
+    <h2>4. GNN as Retriever for RAG</h2>
+    <p>Standard RAG retrieves text chunks by vector similarity. <strong>GraphRAG-style</strong> systems retrieve by graph structure:</p>
+    <ol>
+      <li>Build KG or document graph (entities, citations, sections)</li>
+      <li>GNN or graph embedding scores relevant subgraph / nodes</li>
+      <li>Pass retrieved nodes' text to LLM for answer generation</li>
+    </ol>
+    <p>GNN captures multi-hop relations vector search misses: "papers that cite papers that cite X."</p>
+  </section>
+
+  <section id="graphrag">
+    <h2>5. GraphRAG</h2>
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2404.16130" rel="noopener noreferrer">Edge et al.  -  From Local to Global: A GraphRAG Approach (Microsoft, 2024)</a></small></p>
+    <p>GraphRAG pipeline:</p>
+    <ol>
+      <li><strong>Extract</strong> entities and relations from documents with LLM</li>
+      <li><strong>Build</strong> knowledge graph</li>
+      <li><strong>Community detection</strong> on graph (Leiden algorithm)</li>
+      <li><strong>Summarize</strong> each community with LLM → hierarchical summaries</li>
+      <li><strong>Query:</strong> retrieve relevant communities + entities, LLM answers with global context</li>
+    </ol>
+    <div class="callout callout-intuition">
+      <strong>Why it works:</strong> Plain RAG fails on "what are the main themes across this entire corpus?"  -  too many chunks. GraphRAG pre-clusters the corpus into a graph and summarizes communities, giving the LLM a map of the whole dataset.
+    </div>
+  </section>
+
+  <section id="prompting">
+    <h2>6. LLM Prompting vs Learned GNN</h2>
+    <table>
+      <thead><tr><th>Approach</th><th>How</th><th>Pros</th><th>Cons</th></tr></thead>
+      <tbody>
+        <tr><td>Text-only prompt</td><td>Describe edges in natural language to LLM</td><td>No training, flexible</td><td>Context limit, hallucination, slow, expensive at scale</td></tr>
+        <tr><td>GNN</td><td>Learned structure encoding</td><td>Fast inference, scales to millions of nodes</td><td>Needs labels/data, no language reasoning</td></tr>
+        <tr><td>Hybrid</td><td>GNN retrieves + LLM reasons</td><td>Best of both in production</td><td>More engineering</td></tr>
+      </tbody>
+    </table>
+    <p><strong>When prompting is enough:</strong> one-off analysis on small graphs (&lt; 100 nodes), exploratory QA, prototyping.</p>
+    <p><strong>When you need GNN:</strong> million-node graphs, real-time recommendation, repeated queries, training data available.</p>
+  </section>
+
+  <section id="agents">
+    <h2>7. Agents + Knowledge Graphs</h2>
+    <p>LLM agents use tools (search, SQL, code). A <strong>knowledge graph</strong> becomes a structured tool:</p>
+    <ul>
+      <li>Agent plans query → GNN/KG embedding finds entry points → traverses relations → LLM synthesizes answer</li>
+      <li>Reduces hallucination  -  facts grounded in KG triples</li>
+      <li>GNN can rank which entities to explore next (learned policy vs greedy traversal)</li>
+    </ul>
+    <p>Related: <strong>Graph-ToolFormer</strong>, <strong>Think-on-Graph</strong>, <strong>KG-Agent</strong> lines of work (2024–2025).</p>
+  </section>
+
+  <section id="multimodal">
+    <h2>8. Multimodal: Molecules + Language</h2>
+    <p>Molecules are graphs (atoms = nodes, bonds = edges). LLMs understand SMILES strings and natural language descriptions.</p>
+    <ul>
+      <li><strong>GNN</strong> encodes 3D/2D structure and bond symmetry equivariance (EGNN, SchNet)</li>
+      <li><strong>LLM</strong> encodes text descriptions and property questions</li>
+      <li><strong>Joint models (MolT5, Text2Mol, MoMu):</strong> align GNN graph embedding space with LLM text embedding space</li>
+    </ul>
+    <p>For drug discovery: GNN still wins on property prediction from structure alone. LLM wins on "explain why this molecule might bind to this protein in plain English."</p>
+  </section>
+
+  <section id="who-wins">
+    <h2>9. Who Wins: LLM, GNN, or Both?</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Best approach</th></tr></thead>
+      <tbody>
+        <tr><td>Cora node classification (bag-of-words)</td><td>GNN or MLP  -  LLM overkill</td></tr>
+        <tr><td>OGBN-Arxiv (paper titles + citations)</td><td>LLM embed + GNN</td></tr>
+        <tr><td>Molecule property prediction</td><td>Equivariant GNN (LLM optional for text)</td></tr>
+        <tr><td>Enterprise doc QA over corpus</td><td>GraphRAG (LLM + graph)</td></tr>
+        <tr><td>Recommendation (user-item graph)</td><td>GNN / classical CF  -  LLM for cold-start text only</td></tr>
+        <tr><td>KG question answering</td><td>GNN retriever + LLM reader</td></tr>
+        <tr><td>"Summarize themes in 10K papers"</td><td>GraphRAG  -  LLM alone struggles</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="future">
+    <h2>10. Future: Graph Foundation Models</h2>
+    <p>Like LLMs pretrain on text, <strong>graph foundation models</strong> pretrain on many graphs then finetune:</p>
+    <ul>
+      <li><strong>GraphMAE, GraphGPT, OneForAll, GFM:</strong> self-supervised pretraining on diverse graphs</li>
+      <li><strong>LLM as graph tokenizer:</strong> describe nodes/edges in text, single LM handles all modalities</li>
+      <li><strong>Unified orchestration:</strong> LLM plans, GNN executes structured computation, LLM explains</li>
+    </ul>
+    <p>The trend is not "GNN replaces LLM" or vice versa  -  it is <strong>specialized modules in one system</strong>: LLM for language and reasoning, GNN for relational structure.</p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-recent-advances-papers.html">Recent Advances &amp; Papers →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

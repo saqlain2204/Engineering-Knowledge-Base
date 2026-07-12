@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Docker Fundamentals | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Docker fundamentals: containers vs VMs, architecture, images and layers, Dockerfile, CLI, networking, volumes, and best practices.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Docker Fundamentals</p>
+  </nav>
+  <h1>Docker Fundamentals</h1>
+  <p>From Linux namespaces to production-ready images  -  the core concepts every container engineer needs.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#containers-vs-vms">Containers vs Virtual Machines</a></li>
+    <li><a href="#architecture">Docker Architecture</a></li>
+    <li><a href="#images-layers">Images &amp; Layers</a></li>
+    <li><a href="#dockerfile">Dockerfile</a></li>
+    <li><a href="#cli">Docker CLI</a></li>
+    <li><a href="#networking">Networking</a></li>
+    <li><a href="#volumes">Volumes &amp; Storage</a></li>
+    <li><a href="#best-practices">Best Practices</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="containers-vs-vms">
+    <h2>1. Containers vs Virtual Machines</h2>
+    <p>A <strong>virtual machine (VM)</strong> runs a full guest operating system on a hypervisor. Each VM has its own kernel, drivers, and userland. VMs are strong isolation boundaries but heavy: gigabytes of disk, seconds to minutes to boot, and significant CPU overhead for the hypervisor.</p>
+    <p>A <strong>container</strong> is an isolated process (or process tree) on the <em>host</em> kernel. Linux kernel features provide the isolation:</p>
+    <ul>
+      <li><strong>Namespaces</strong> control what a process can <em>see</em>: PID, network, mounts, hostname, IPC, and user ID mappings.</li>
+      <li><strong>cgroups (control groups)</strong> limit what a process can <em>consume</em>: CPU, memory, block I/O, and network bandwidth.</li>
+      <li><strong>Capabilities</strong> and <strong>seccomp</strong> restrict which privileged syscalls a container may invoke.</li>
+    </ul>
+    <pre><code>┌─────────────────────────────────────────────────────────────────┐
+│  VM model                                                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                       │
+│  │ Guest OS │  │ Guest OS │  │ Guest OS │   each with own kernel │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘                       │
+│       └─────────────┴─────────────┘                             │
+│                    Hypervisor (KVM, Hyper-V)                    │
+│                    Host OS + hardware                           │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Container model                                                │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                       │
+│  │ App proc │  │ App proc │  │ App proc │   share host kernel   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘                       │
+│       └─────────────┴─────────────┘                             │
+│         containerd + runc (namespaces + cgroups)              │
+│                    Host OS + hardware                           │
+└─────────────────────────────────────────────────────────────────┘</code></pre>
+    <table>
+      <thead><tr><th>Aspect</th><th>VM</th><th>Container</th></tr></thead>
+      <tbody>
+        <tr><td>Isolation</td><td>Separate kernel per VM</td><td>Shared kernel, namespace boundaries</td></tr>
+        <tr><td>Startup</td><td>Seconds to minutes</td><td>Milliseconds</td></tr>
+        <tr><td>Size</td><td>GBs (full OS)</td><td>MBs (app + minimal runtime)</td></tr>
+        <tr><td>Density</td><td>Tens per host</td><td>Hundreds per host</td></tr>
+        <tr><td>Best for</td><td>Multi-tenant, mixed OS, strong isolation</td><td>Microservices, CI/CD, cloud-native apps</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>When to choose which:</strong> Use VMs when you need a different OS, kernel version, or hardware-level isolation. Use containers when you want fast, dense, reproducible application packaging on a shared Linux (or Windows container) host.
+    </div>
+  </section>
+
+  <section id="architecture">
+    <h2>2. Docker Architecture</h2>
+    <p>Docker follows a client-server model. The CLI sends API requests; the daemon manages resources; the runtime actually starts processes.</p>
+    <pre><code>  docker CLI                dockerd (daemon)              container runtime
+  ──────────                ────────────────              ─────────────────
+  docker build  ──REST──▶   manages images,               containerd
+  docker run                containers,                   └── runc (OCI runtime)
+  docker ps                 networks, volumes                   │
+                            │                                   ▼
+                            └── talks to registry          Linux namespaces
+                                (Docker Hub, ECR,            + cgroups
+                                 GHCR, private)</code></pre>
+    <h3>Key components</h3>
+    <ul>
+      <li><strong>docker</strong>  -  the client CLI. Sends commands to the daemon via Unix socket (<code>/var/run/docker.sock</code> on Linux) or TCP.</li>
+      <li><strong>dockerd</strong>  -  the daemon. Builds images, pulls/pushes to registries, creates networks and volumes, orchestrates container lifecycle.</li>
+      <li><strong>containerd</strong>  -  industry-standard container runtime. Manages image transfer, container execution, and snapshots.</li>
+      <li><strong>runc</strong>  -  OCI-compliant low-level runtime that creates the container process with namespaces and cgroups.</li>
+      <li><strong>Registry</strong>  -  stores and distributes images (Docker Hub, Amazon ECR, Google Artifact Registry, GitHub Container Registry).</li>
+    </ul>
+    <h3>Container lifecycle</h3>
+    <pre><code>docker create   # allocate filesystem + config, do not start
+docker start    # run the main process
+docker stop     # SIGTERM, grace period (default 10s), then SIGKILL
+docker rm       # delete container and writable layer
+docker run      # create + start in one step</code></pre>
+    <p>A stopped container retains its writable layer until removed. Image layers are never modified by running containers.</p>
+  </section>
+
+  <section id="images-layers">
+    <h2>3. Images &amp; Layers</h2>
+    <p>A Docker <strong>image</strong> is a read-only stack of filesystem layers. Each Dockerfile instruction that modifies the filesystem creates a new layer. Layers are content-addressable and shared across images  -  if two images share a base, it is stored once on disk.</p>
+    <p>When you run a container, Docker adds a thin <strong>writable container layer</strong> on top using a copy-on-write (CoW) filesystem (overlay2 on modern Linux).</p>
+    <pre><code># Image layers (read-only)          Container (read-write top layer)
+┌─────────────────────┐
+│  Layer 4: CMD       │  ◀── Dockerfile instruction
+├─────────────────────┤
+│  Layer 3: COPY app  │
+├─────────────────────┤
+│  Layer 2: RUN npm ci│
+├─────────────────────┤
+│  Layer 1: FROM node │  ◀── base image
+└─────────────────────┘
+         +
+┌─────────────────────┐
+│  Writable layer     │  ◀── deleted when container is removed
+└─────────────────────┘</code></pre>
+    <h3>Inspecting images</h3>
+    <pre><code>docker images
+docker image history myapp:1.0 --no-trunc
+docker inspect myapp:1.0 --format '{{.RootFS.Layers}}'
+docker system df          # disk usage summary
+docker image prune -a     # remove unused images</code></pre>
+    <h3>Image naming and tags</h3>
+    <pre><code># Format: [registry/][namespace/]repository[:tag|@digest]
+docker.io/library/nginx:latest
+ghcr.io/myorg/api:v2.1.0
+123456789.dkr.ecr.us-east-1.amazonaws.com/app@sha256:abc123...</code></pre>
+    <div class="callout">
+      <strong>Immutable tags:</strong> Pin images by digest in production (<code>image@sha256:...</code>) so a tag retag cannot silently change what you deploy.
+    </div>
+  </section>
+
+  <section id="dockerfile">
+    <h2>4. Dockerfile</h2>
+    <p>A <strong>Dockerfile</strong> is a declarative recipe for building an image. Each instruction creates a cached layer.</p>
+    <pre><code># syntax=docker/dockerfile:1
+FROM node:20-bookworm-slim AS base
+WORKDIR /app
+
+# Install dependencies first (cache-friendly)
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy application source
+COPY src/ ./src/
+COPY public/ ./public/
+
+# Non-root user
+RUN addgroup --system app &amp;&amp; adduser --system --ingroup app app
+USER app
+
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+CMD ["node", "src/server.js"]</code></pre>
+
+    <h3>Common instructions</h3>
+    <table>
+      <thead><tr><th>Instruction</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>FROM</code></td><td>Base image; starts a new build stage</td></tr>
+        <tr><td><code>WORKDIR</code></td><td>Set working directory for subsequent instructions</td></tr>
+        <tr><td><code>COPY</code> / <code>ADD</code></td><td>Copy files from build context; prefer COPY</td></tr>
+        <tr><td><code>RUN</code></td><td>Execute command during build; creates a layer</td></tr>
+        <tr><td><code>ENV</code> / <code>ARG</code></td><td>Runtime env vars vs build-time variables</td></tr>
+        <tr><td><code>EXPOSE</code></td><td>Document which port the container listens on</td></tr>
+        <tr><td><code>USER</code></td><td>Run subsequent commands and the container as this user</td></tr>
+        <tr><td><code>ENTRYPOINT</code></td><td>Fixed executable; defines what the container <em>is</em></td></tr>
+        <tr><td><code>CMD</code></td><td>Default arguments; overridden by <code>docker run</code> args</td></tr>
+      </tbody>
+    </table>
+
+    <h3>CMD vs ENTRYPOINT</h3>
+    <pre><code># Pattern: ENTRYPOINT is the binary, CMD is default args
+ENTRYPOINT ["python", "app.py"]
+CMD ["--port", "8080"]
+
+# docker run myimage --debug  →  python app.py --debug
+# docker run myimage python other.py  →  overrides ENTRYPOINT entirely</code></pre>
+
+    <h3>.dockerignore</h3>
+    <pre><code># .dockerignore  -  exclude from build context (faster builds, smaller context)
+node_modules
+.git
+.env
+*.log
+dist/
+coverage/
+Dockerfile*</code></pre>
+
+    <h3>Build commands</h3>
+    <pre><code>docker build -t myapp:1.0 .
+docker build -t myapp:1.0 -f Dockerfile.prod .
+docker build --build-arg NODE_ENV=production -t myapp:1.0 .
+docker build --no-cache -t myapp:1.0 .    # ignore layer cache
+docker build --target build -t myapp:build .  # stop at named stage</code></pre>
+  </section>
+
+  <section id="cli">
+    <h2>5. Docker CLI</h2>
+    <p>The Docker CLI groups commands by resource type. These are the commands you will use daily.</p>
+
+    <h3>Containers</h3>
+    <pre><code>docker run -d --name web -p 8080:80 --restart unless-stopped nginx:alpine
+docker ps                          # running containers
+docker ps -a                       # all containers
+docker logs -f web --tail 100      # follow logs
+docker exec -it web sh             # interactive shell
+docker inspect web                 # full JSON metadata
+docker stop web &amp;&amp; docker rm web    # stop and remove</code></pre>
+
+    <h3>Images</h3>
+    <pre><code>docker pull nginx:1.25-alpine
+docker tag myapp:1.0 registry.example.com/myapp:1.0
+docker push registry.example.com/myapp:1.0
+docker rmi myapp:1.0
+docker save myapp:1.0 -o myapp.tar    # export
+docker load -i myapp.tar              # import</code></pre>
+
+    <h3>Resource limits at run time</h3>
+    <pre><code>docker run -d \
+  --name api \
+  --cpus="1.5" \
+  --memory="512m" \
+  --memory-swap="512m" \
+  --pids-limit=100 \
+  myapp:1.0</code></pre>
+
+    <h3>Debugging</h3>
+    <pre><code>docker top web                       # running processes
+docker stats web --no-stream         # CPU/memory snapshot
+docker diff web                      # filesystem changes vs image
+docker events --filter container=web # real-time events</code></pre>
+  </section>
+
+  <section id="networking">
+    <h2>6. Networking</h2>
+    <p>Docker provides several network drivers. The default bridge network works for single-host development; user-defined bridges and overlay networks support multi-container and multi-host scenarios.</p>
+
+    <table>
+      <thead><tr><th>Driver</th><th>Scope</th><th>Use case</th></tr></thead>
+      <tbody>
+        <tr><td><code>bridge</code></td><td>Single host</td><td>Default; isolated containers on a virtual bridge</td></tr>
+        <tr><td><code>host</code></td><td>Single host</td><td>Container uses host network stack directly</td></tr>
+        <tr><td><code>none</code></td><td>Single host</td><td>No networking; fully isolated</td></tr>
+        <tr><td><code>overlay</code></td><td>Multi-host</td><td>Swarm mode service discovery across nodes</td></tr>
+        <tr><td><code>macvlan</code></td><td>Single host</td><td>Container gets a MAC address on physical network</td></tr>
+      </tbody>
+    </table>
+
+    <h3>User-defined bridge (recommended for Compose and multi-container apps)</h3>
+    <pre><code>docker network create app-net
+
+docker run -d --name db --network app-net \
+  -e POSTGRES_PASSWORD=secret postgres:16-alpine
+
+docker run -d --name api --network app-net -p 8080:8080 myapp:1.0
+# api can reach db by hostname: postgres://db:5432</code></pre>
+
+    <h3>Port publishing</h3>
+    <pre><code># -p hostPort:containerPort
+docker run -p 8080:80 nginx          # bind 0.0.0.0:8080
+docker run -p 127.0.0.1:8080:80 nginx  # localhost only
+docker run -P nginx                  # publish all EXPOSEd ports to random host ports</code></pre>
+
+    <h3>DNS and service discovery</h3>
+    <p>On user-defined bridge networks, Docker provides embedded DNS. Containers resolve each other by <code>--name</code> or network alias. The default <code>bridge</code> network does not support automatic DNS between containers.</p>
+    <pre><code>docker network inspect app-net
+docker run --rm --network app-net nicolaka/netshoot ping -c 3 api</code></pre>
+  </section>
+
+  <section id="volumes">
+    <h2>7. Volumes &amp; Storage</h2>
+    <p>Container filesystems are ephemeral by default. Data that must survive container restarts uses <strong>volumes</strong> or <strong>bind mounts</strong>.</p>
+
+    <table>
+      <thead><tr><th>Mechanism</th><th>Managed by</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td><code>volume</code></td><td>Docker</td><td>Production data, databases, shared storage</td></tr>
+        <tr><td><code>bind mount</code></td><td>Host path</td><td>Dev hot-reload, config files on known host paths</td></tr>
+        <tr><td><code>tmpfs</code></td><td>Memory</td><td>Sensitive temp data, no disk persistence</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Named volumes</h3>
+    <pre><code>docker volume create pgdata
+
+docker run -d --name db \
+  -v pgdata:/var/lib/postgresql/data \
+  postgres:16-alpine
+
+# Inspect and backup
+docker volume inspect pgdata
+docker run --rm -v pgdata:/data -v $(pwd):/backup alpine \
+  tar czf /backup/pgdata-backup.tar.gz -C /data .</code></pre>
+
+    <h3>Bind mounts (development)</h3>
+    <pre><code>docker run -d \
+  -v /home/dev/myproject/src:/app/src:ro \
+  -v /home/dev/myproject/config.yml:/app/config.yml:ro \
+  myapp:dev</code></pre>
+
+    <h3>tmpfs (in-memory, no disk write)</h3>
+    <pre><code>docker run --tmpfs /run/secrets:size=10m,mode=1700 myapp:1.0</code></pre>
+    <div class="callout">
+      <strong>Data lifecycle:</strong> Removing a container does not remove its named volumes. Use <code>docker volume rm</code> or <code>docker volume prune</code> explicitly. Bind mounts are never deleted by Docker.
+    </div>
+  </section>
+
+  <section id="best-practices">
+    <h2>8. Best Practices</h2>
+    <ul>
+      <li><strong>Pin base image versions</strong>  -  use <code>node:20-bookworm-slim</code>, not <code>node:latest</code>.</li>
+      <li><strong>Minimize layers and image size</strong>  -  combine RUN commands, use slim or distroless bases, multi-stage builds for compiled apps.</li>
+      <li><strong>Order Dockerfile for cache hits</strong>  -  copy dependency manifests before source code.</li>
+      <li><strong>Run as non-root</strong>  -  set <code>USER</code> after installing dependencies.</li>
+      <li><strong>One process per container</strong>  -  keeps logs, health checks, and scaling simple.</li>
+      <li><strong>Use .dockerignore</strong>  -  exclude <code>node_modules</code>, <code>.git</code>, secrets, and build artifacts.</li>
+      <li><strong>Add HEALTHCHECK</strong>  -  orchestrators and load balancers need a signal that the app is ready.</li>
+      <li><strong>Do not store secrets in images</strong>  -  inject at runtime via env vars, secrets mounts, or external secret stores.</li>
+      <li><strong>Scan images in CI</strong>  -  use <code>docker scout</code>, Trivy, or Snyk before pushing to production registries.</li>
+      <li><strong>Set resource limits</strong>  -  prevent a single container from starving the host.</li>
+    </ul>
+
+    <h3>Signal handling</h3>
+    <p>PID 1 in a container must forward signals correctly. Use an init wrapper or ensure your app handles SIGTERM for graceful shutdown:</p>
+    <pre><code># Option 1: tini as entrypoint
+FROM node:20-bookworm-slim
+RUN apt-get update &amp;&amp; apt-get install -y --no-install-recommends tini
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "server.js"]
+
+# Option 2: exec form so node receives signals directly
+CMD ["node", "server.js"]</code></pre>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>9. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>Build image</td><td><code>docker build -t name:tag .</code></td></tr>
+        <tr><td>Run detached</td><td><code>docker run -d --name app -p 8080:80 image:tag</code></td></tr>
+        <tr><td>Follow logs</td><td><code>docker logs -f app</code></td></tr>
+        <tr><td>Shell into container</td><td><code>docker exec -it app sh</code></td></tr>
+        <tr><td>List images</td><td><code>docker images</code></td></tr>
+        <tr><td>Prune unused</td><td><code>docker system prune -a</code></td></tr>
+        <tr><td>Create network</td><td><code>docker network create mynet</code></td></tr>
+        <tr><td>Create volume</td><td><code>docker volume create myvol</code></td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheet: <a href="../../cheatsheets/docker-cli-cheatsheet.html">Docker CLI Cheat Sheet</a></p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="docker-compose.html">Docker Compose →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

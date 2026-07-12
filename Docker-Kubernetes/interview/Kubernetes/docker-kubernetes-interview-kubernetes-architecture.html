@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Architecture | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Kubernetes Architecture</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Kubernetes Architecture</h1>
+  <p>Control plane, worker nodes, and how the cluster reconciles desired state. <a href="../../learn/Kubernetes/kubernetes-architecture.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Kubernetes Architecture</h2>
+<p>Control plane, worker nodes, and how the cluster reconciles desired state.</p>
+
+<details><summary>Why use Kubernetes instead of running containers directly on VMs or with Docker Compose?</summary>
+<div><p>Kubernetes solves orchestration at scale: scheduling containers across many nodes, self-healing when nodes or containers fail, rolling updates with rollback, declarative configuration, service discovery, and horizontal scaling. Docker Compose is excellent for local dev and small fixed deployments; VMs are heavy and slow to provision. Kubernetes gives you a uniform API and control loop for production workloads where availability, elasticity, and multi-team operations matter.</p></div>
+</details>
+
+<details><summary>What is the control plane and what does it do?</summary>
+<div><p>The control plane is the brain of the cluster. It stores cluster state, exposes the Kubernetes API, schedules Pods onto nodes, and runs controllers that continuously reconcile actual state with desired state. Worker nodes run your workloads; the control plane decides what runs where and keeps the cluster healthy. In managed offerings (EKS, GKE, AKS), the cloud provider runs most control plane components for you.</p></div>
+</details>
+
+<details><summary>What is the role of the API server (kube-apiserver)?</summary>
+<div><p>The API server is the front door to the cluster. Every interaction  -  kubectl, controllers, kubelet  -  goes through its REST API. It validates and persists objects to etcd, enforces authentication and authorization (RBAC), and is the only component that talks to etcd directly. It is stateless and typically fronted by a load balancer in HA setups so multiple API server instances can run in parallel.</p></div>
+</details>
+
+<details><summary>Why is etcd critical and what happens if it fails?</summary>
+<div><p>etcd is the cluster's source of truth  -  a consistent, distributed key-value store holding all Kubernetes object data (Pods, Deployments, Secrets, etc.). If etcd is unavailable or corrupted, the API server cannot read or write state, so scheduling, scaling, and updates stop. Production clusters run etcd in HA (usually 3 or 5 nodes) with regular snapshots and backups. Losing quorum means the control plane cannot function until etcd is restored.</p></div>
+</details>
+
+<details><summary>How does the scheduler decide where to place a Pod?</summary>
+<div><p>The scheduler watches for unscheduled Pods (no <code>nodeName</code> set), filters nodes that cannot fit the Pod (insufficient CPU/memory, taints, affinity rules, volume constraints), then scores remaining nodes and binds the Pod to the highest-scoring node. It does not run containers  -  it only assigns Pods to nodes. Custom schedulers or scheduler plugins can extend filtering and scoring for GPU nodes, spot instances, or topology spread.</p></div>
+</details>
+
+<details><summary>What do controllers do in Kubernetes?</summary>
+<div><p>Controllers are control-loop processes that watch the API server for resources and take action to match reality to the declared spec. Examples: Deployment controller creates ReplicaSets and rolls out updates; ReplicaSet controller maintains Pod count; Node controller marks nodes unhealthy; EndpointSlice controller updates Service backends. Each controller focuses on one resource type and runs continuously  -  they are the "automation" behind declarative YAML.</p></div>
+</details>
+
+<details><summary>What runs on a worker node?</summary>
+<div><p>Each worker node runs the kubelet (talks to the API server, manages Pods on that node), kube-proxy (maintains network rules so Services reach Pod IPs), and a container runtime (containerd, CRI-O) that actually starts containers. The node also needs a CNI plugin for Pod networking. Worker nodes do not run etcd or the scheduler  -  they execute what the control plane decides.</p></div>
+</details>
+
+<details><summary>What is the kubelet responsible for?</summary>
+<div><p>The kubelet is the node agent. It registers the node with the API server, watches Pod specs assigned to its node, instructs the container runtime to start/stop containers, reports Pod and node status, runs liveness/readiness probes, and mounts volumes. If the kubelet stops, the node is marked NotReady and Pods on that node may be rescheduled elsewhere (depending on tolerations and PDBs).</p></div>
+</details>
+
+<details><summary>What does kube-proxy do?</summary>
+<div><p>kube-proxy implements the Service abstraction on each node. It watches Service and EndpointSlice objects and programs iptables, IPVS, or eBPF rules so traffic to a Service IP (or NodePort) is load-balanced to healthy Pod IPs. Without kube-proxy (or an equivalent dataplane), ClusterIP Services would not forward traffic. Some CNI/service mesh setups replace or bypass kube-proxy with eBPF-based implementations.</p></div>
+</details>
+
+<details><summary>How does kubectl interact with the cluster?</summary>
+<div><p>kubectl is a CLI client that sends HTTP requests to the API server. Commands like <code>kubectl apply</code> send declarative manifests; <code>kubectl get</code> reads objects; <code>kubectl logs</code> and <code>kubectl exec</code> go through the API server's subresource endpoints to reach the kubelet. kubectl does not talk to nodes directly  -  the API server is always the intermediary. Contexts and kubeconfig files store cluster URL, credentials, and default namespace.</p></div>
+</details>
+
+<details><summary>Explain the reconciliation loop (control loop) in Kubernetes.</summary>
+<div><p>You declare desired state (e.g. "3 replicas of this Deployment"); controllers continuously compare desired state (spec) with observed state (status) and take corrective actions until they match. If a Pod dies, the ReplicaSet controller creates another. If you scale to 5, it creates two more Pods. This loop is asynchronous and eventually consistent  -  there is a delay between <code>apply</code> and all Pods running, which is why readiness probes and rollout status matter in production.</p></div>
+</details>
+
+<details><summary>How do you set up a Kubernetes cluster for learning vs production?</summary>
+<div>
+<ul>
+<li><strong>Local dev</strong>  -  minikube, kind, or Docker Desktop Kubernetes for a single-node sandbox with minimal ops overhead.</li>
+<li><strong>Production</strong>  -  managed control plane (EKS/GKE/AKS) or kubeadm on hardened VMs; HA API server and etcd, separate worker node pools, network policies, backups, and monitoring from day one.</li>
+<li><strong>Key differences</strong>  -  production needs multi-AZ node groups, RBAC, Pod security standards, ingress/TLS, and upgrade strategy; local clusters skip most of that but teach the same API and workload patterns.</li>
+</ul>
+</div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

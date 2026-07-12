@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Temporal &amp; Dynamic Graphs | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Temporal &amp; Dynamic Graphs</p>
+  </nav>
+  <h1>Temporal &amp; Dynamic Graphs</h1>
+  <p>Graphs that change over time  -  snapshots, continuous-time models, and temporal link prediction.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#types">Three Types of Dynamic Graphs</a></li>
+    <li><a href="#snapshots">Snapshot Methods</a></li>
+    <li><a href="#evolvegcn">EvolveGCN &amp; DySAT</a></li>
+    <li><a href="#tgn">Temporal Graph Networks (TGN)</a></li>
+    <li><a href="#temporal-link">Temporal Link Prediction</a></li>
+    <li><a href="#when">When Temporal Modeling Matters</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="types">
+    <h2>1. Three Types of Dynamic Graphs</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Description</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Static</strong></td><td>Graph fixed in time</td><td>Cora citations (snapshot)</td></tr>
+        <tr><td><strong>Discrete-time</strong></td><td>Sequence of graph snapshots $G_1, G_2, \ldots$</td><td>Monthly co-purchase networks</td></tr>
+        <tr><td><strong>Continuous-time</strong></td><td>Edges arrive with timestamps $(u, v, t)$</td><td>Social interactions, payments</td></tr>
+      </tbody>
+    </table>
+    <div class="callout callout-intuition">
+      <strong>Why not ignore time?</strong> If you shuffle timestamps, you leak future into past. A model that sees tomorrow's edges will look great and fail in production.
+    </div>
+  </section>
+
+  <section id="snapshots">
+    <h2>2. Snapshot Methods</h2>
+    <p>Run a GNN on each snapshot independently, then aggregate over time with RNN/Transformer/attention.</p>
+    $$\mathbf{h}_i^{(t)} = \text{GNN}(G_t, \mathbf{X}_t)_i \quad \mathbf{z}_i = \text{TemporalAgg}(\{\mathbf{h}_i^{(t)}\}_{t=1}^T)$$
+    <p>Simple but loses fine-grained event order within snapshots.</p>
+  </section>
+
+  <section id="evolvegcn">
+    <h2>3. EvolveGCN &amp; DySAT</h2>
+    <p><strong>EvolveGCN:</strong> GCN weights evolve over time via RNN  -  parameters at step $t$ depend on $t-1$.</p>
+    <p><strong>DySAT:</strong> structural self-attention within each snapshot + temporal self-attention across snapshots.</p>
+  </section>
+
+  <section id="tgn">
+    <h2>4. Temporal Graph Networks (TGN)</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/2006.10637" rel="noopener noreferrer">Rossi et al.  -  Temporal Graph Networks (2020)</a></small></p>
+    <p>TGN maintains a <strong>memory vector</strong> per node, updated when an interaction happens:</p>
+    <ol>
+      <li>Event $(u, v, t)$ arrives</li>
+      <li>Fetch memory $\mathbf{s}_u, \mathbf{s}_v$</li>
+      <li>Compute message from event + node states</li>
+      <li>Update memories with GRU-like module</li>
+      <li>Compute embedding for prediction</li>
+    </ol>
+    <p>Handles streaming edges in real time  -  used for dynamic link prediction and recommendation.</p>
+  </section>
+
+  <section id="temporal-link">
+    <h2>5. Temporal Link Prediction</h2>
+    <p>Predict whether edge $(u,v)$ will appear in window $[t, t+\Delta]$ given history before $t$.</p>
+    <ul>
+      <li><strong>Split:</strong> train on past edges, test on future edges only</li>
+      <li><strong>Negative sampling:</strong> random non-edges in same time window</li>
+      <li><strong>Metrics:</strong> AUC-ROC, AP over future edges</li>
+    </ul>
+  </section>
+
+  <section id="when">
+    <h2>6. When Temporal Modeling Matters</h2>
+    <ul>
+      <li><strong>Yes:</strong> social feeds, fraud (evolving rings), traffic, supply chain, interaction recommendation</li>
+      <li><strong>No:</strong> static molecules, fixed citation networks (unless you add time explicitly)</li>
+    </ul>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-graph-transformers.html">Graph Transformers →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

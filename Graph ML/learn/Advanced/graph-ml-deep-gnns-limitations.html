@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Deep GNNs &amp; Limitations | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Deep GNNs &amp; Limitations</p>
+  </nav>
+  <h1>Deep GNNs &amp; Limitations</h1>
+  <p>Oversmoothing, over-squashing, expressiveness limits, and the fixes that let you go deeper.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#oversmoothing">Oversmoothing</a></li>
+    <li><a href="#over-squashing">Over-Squashing</a></li>
+    <li><a href="#expressiveness">Expressiveness and 1-WL</a></li>
+    <li><a href="#fixes">Fixes: JK, Residual, Normalization</a></li>
+    <li><a href="#heterophily-fixes">Heterophily Architectures</a></li>
+    <li><a href="#depth-guide">How Many Layers?</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="oversmoothing">
+    <h2>1. Oversmoothing</h2>
+    <p>Stack many GNN layers and all node embeddings become nearly identical  -  the model cannot distinguish nodes.</p>
+    <p><strong>Math intuition:</strong> Repeated normalized adjacency multiplication is like repeated low-pass filtering. The Dirichlet energy $\mathbf{h}^T\mathbf{L}\mathbf{h}$ shrinks toward zero  -  embeddings become smooth (constant) across the graph.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Imagine everyone in a network averaging their opinion with neighbors every day. Eventually everyone says the same thing. That is oversmoothing.
+    </div>
+    <p><strong>When it hurts:</strong> node classification needing local detail, heterophilous graphs. <strong>When it helps:</strong> semi-supervised learning with very few labels (smoothness prior).</p>
+  </section>
+
+  <section id="over-squashing">
+    <h2>2. Over-Squashing</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/2111.08110" rel="noopener noreferrer">Topping et al.  -  Understanding Over-Squashing (2022)</a></small></p>
+    <p>Information from distant nodes must pass through narrow bottlenecks (low-degree edges). Messages get compressed into fixed-size vectors  -  exponential information loss.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> A rumor passing through one person who only speaks in 10-word sentences loses detail fast. Bridge nodes with few connections are those bottlenecks.
+    </div>
+    <p><strong>Fixes:</strong> graph rewiring (add edges), virtual nodes, graph transformers (global attention), subgraph GNNs.</p>
+  </section>
+
+  <section id="expressiveness">
+    <h2>3. Expressiveness and 1-WL</h2>
+    <p>Standard MPNNs are at most as powerful as the <strong>1-Weisfeiler-Lehman</strong> graph isomorphism test. They cannot distinguish some non-isomorphic graphs.</p>
+    <p><strong>GIN</strong> achieves this upper bound. To go beyond: subgraph GNNs (NGNN, ESAN), higher-order WL, simplicial complexes.</p>
+  </section>
+
+  <section id="fixes">
+    <h2>4. Fixes: JK, Residual, Normalization</h2>
+    <ul>
+      <li><strong>Jumping Knowledge (JK):</strong> concatenate $\mathbf{h}_i^{(1)}, \ldots, \mathbf{h}_i^{(L)}$  -  keeps both local and global info</li>
+      <li><strong>Residual connections:</strong> $\mathbf{h}^{(l+1)} = \mathbf{h}^{(l)} + \text{MPNN}(\mathbf{h}^{(l)})$  -  like ResNet for graphs</li>
+      <li><strong>PairNorm / GraphNorm / BatchNorm:</strong> normalize embeddings per layer to slow oversmoothing</li>
+      <li><strong>DropEdge:</strong> randomly drop edges during training  -  regularization + depth help</li>
+    </ul>
+    <pre><code>from torch_geometric.nn import JumpingKnowledge
+
+class DeepGNN(torch.nn.Module):
+    def __init__(self, num_layers, hidden, out_dim):
+        super().__init__()
+        self.convs = torch.nn.ModuleList([GCNConv(hidden, hidden) for _ in range(num_layers)])
+        self.jk = JumpingKnowledge(mode='cat')
+        self.lin = torch.nn.Linear(num_layers * hidden, out_dim)
+
+    def forward(self, x, edge_index):
+        hs = []
+        for conv in self.convs:
+            x = conv(x, edge_index).relu()
+            hs.append(x)
+        x = self.jk(hs)
+        return self.lin(x)</code></pre>
+  </section>
+
+  <section id="heterophily-fixes">
+    <h2>5. Heterophily Architectures</h2>
+    <p>When neighbors have <em>different</em> labels, blind aggregation fails. Solutions:</p>
+    <ul>
+      <li><strong>H2GCN:</strong> combine ego features + higher-order neighbors separately</li>
+      <li><strong>GPR-GNN:</strong> learnable weights for each hop (can be negative  -  high-pass filter)</li>
+      <li><strong>FAGCN:</strong> signed attention  -  attract similar, repel dissimilar</li>
+    </ul>
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1901.00596" rel="noopener noreferrer">Zhu et al.  -  Beyond Homophily</a></small></p>
+  </section>
+
+  <section id="depth-guide">
+    <h2>6. How Many Layers?</h2>
+    <table>
+      <thead><tr><th>Graph type</th><th>Typical depth</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td>Cora-scale citation</td><td>2</td><td>Small diameter, homophily</td></tr>
+        <tr><td>Molecules</td><td>3–5</td><td>Need multi-bond receptive field</td></tr>
+        <tr><td>Large social</td><td>2–3 + sampling</td><td>Oversmoothing + scale</td></tr>
+        <tr><td>Long-range reasoning</td><td>Transformer / rewiring</td><td>Over-squashing in MPNN</td></tr>
+      </tbody>
+    </table>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-heterogeneous-graphs.html">Heterogeneous &amp; Knowledge Graphs →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

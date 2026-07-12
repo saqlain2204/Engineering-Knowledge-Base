@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+  <title>GNN Formula Sheet | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../styles.css">
+  <script src="../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../graph-ml.html">Graph ML</a> &rsaquo; Formula Sheet</p>
+  </nav>
+  <h1>GNN Formula Sheet</h1>
+  <p>All key equations in one place for quick revision.</p>
+</header>
+
+<main class="article">
+
+  <section>
+    <h2>Graph Matrices</h2>
+    $$\mathbf{L} = \mathbf{D} - \mathbf{A}$$
+    $$\mathcal{L}_{\text{sym}} = \mathbf{I} - \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2}$$
+    $$\mathbf{f}^T \mathbf{L} \mathbf{f} = \frac{1}{2} \sum_{(i,j) \in E} (f_i - f_j)^2$$
+    $$\tilde{\mathbf{A}} = \mathbf{D}^{-1/2}(\mathbf{A}+\mathbf{I})\mathbf{D}^{-1/2}$$
+  </section>
+
+  <section>
+    <h2>Message Passing (MPNN)</h2>
+    $$\mathbf{m}_{ij}^{(l+1)} = \phi^{(l)}\left(\mathbf{h}_i^{(l)}, \mathbf{h}_j^{(l)}, \mathbf{e}_{ij}\right)$$
+    $$\bar{\mathbf{m}}_i^{(l+1)} = \bigoplus_{j \in \mathcal{N}(i)} \mathbf{m}_{ij}^{(l+1)}$$
+    $$\mathbf{h}_i^{(l+1)} = \gamma^{(l)}\left(\mathbf{h}_i^{(l)}, \bar{\mathbf{m}}_i^{(l+1)}\right)$$
+    $$\mathbf{h}_G = \text{READOUT}\left(\{\mathbf{h}_i^{(L)}\}\right)$$
+  </section>
+
+  <section>
+    <h2>GCN</h2>
+    $$\mathbf{H}^{(l+1)} = \sigma\left(\tilde{\mathbf{D}}^{-1/2}\tilde{\mathbf{A}}\tilde{\mathbf{D}}^{-1/2} \mathbf{H}^{(l)} \mathbf{W}^{(l)}\right)$$
+  </section>
+
+  <section>
+    <h2>GraphSAGE</h2>
+    $$\mathbf{h}_i^{(l+1)} = \sigma\left(\mathbf{W}^{(l)} \cdot \text{CONCAT}\left(\mathbf{h}_i^{(l)}, \text{AGG}(\{\mathbf{h}_j^{(l)}\}_{j \in \mathcal{N}(i)})\right)\right)$$
+  </section>
+
+  <section>
+    <h2>GAT</h2>
+    $$e_{ij} = \text{LeakyReLU}\left(\vec{a}^T [\mathbf{W}\mathbf{h}_i \| \mathbf{W}\mathbf{h}_j]\right)$$
+    $$\alpha_{ij} = \frac{\exp(e_{ij})}{\sum_{k \in \mathcal{N}(i)} \exp(e_{ik})}$$
+    $$\mathbf{h}_i^{(l+1)} = \sigma\left(\sum_{j \in \mathcal{N}(i)} \alpha_{ij} \mathbf{W}\mathbf{h}_j^{(l)}\right)$$
+  </section>
+
+  <section>
+    <h2>GIN</h2>
+    $$\mathbf{h}_i^{(l+1)} = \text{MLP}^{(l)}\left((1 + \epsilon^{(l)}) \mathbf{h}_i^{(l)} + \sum_{j \in \mathcal{N}(i)} \mathbf{h}_j^{(l)}\right)$$
+  </section>
+
+  <section>
+    <h2>ChebNet</h2>
+    $$\mathbf{g} * \mathbf{f} \approx \sum_{k=0}^{K} \theta_k T_k(\tilde{\mathbf{L}})\mathbf{f}$$
+  </section>
+
+  <section>
+    <h2>R-GCN</h2>
+    $$\mathbf{h}_i^{(l+1)} = \sigma\left(\sum_{r \in \mathcal{R}} \sum_{j \in \mathcal{N}_r(i)} \frac{1}{c_{i,r}} \mathbf{W}_r^{(l)} \mathbf{h}_j^{(l)} + \mathbf{W}_0^{(l)}\mathbf{h}_i^{(l)}\right)$$
+  </section>
+
+  <section>
+    <h2>Knowledge Graph Embeddings</h2>
+    <p><strong>TransE:</strong> $\|\mathbf{h} + \mathbf{r} - \mathbf{t}\|$</p>
+    <p><strong>DistMult:</strong> $\langle \mathbf{h}, \mathbf{r}, \mathbf{t} \rangle$</p>
+  </section>
+
+  <section>
+    <h2>Homophily</h2>
+    $$h = \frac{|\{(u,v) : (u,v) \in E \land y_u = y_v\}|}{|E|}$$
+  </section>
+
+  <section>
+    <h2>Link Prediction Loss</h2>
+    $$\mathcal{L} = -\sum_{(i,j) \in E^+} \log \sigma(\mathbf{h}_i^T \mathbf{W} \mathbf{h}_j) - \sum_{(i,j) \in E^-} \log(1 - \sigma(\mathbf{h}_i^T \mathbf{W} \mathbf{h}_j))$$
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml.html">Back to Graph ML</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../assets/site.js"></script>
+<script src="../../assets/search.js" defer></script>
+</body>
+</html>

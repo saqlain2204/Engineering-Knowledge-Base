@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Workloads | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Kubernetes workloads: Pods, ReplicaSets, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, probes, HPA, and resource limits.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Workloads</p>
+  </nav>
+  <h1>Kubernetes Workloads</h1>
+  <p>The workload resources that run your applications  -  from single Pods to replicated Deployments, stateful databases, and batch Jobs.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#pods">Pods</a></li>
+    <li><a href="#replicasets">ReplicaSets</a></li>
+    <li><a href="#deployments">Deployments</a></li>
+    <li><a href="#statefulsets">StatefulSets</a></li>
+    <li><a href="#daemonsets">DaemonSets</a></li>
+    <li><a href="#jobs-cronjobs">Jobs &amp; CronJobs</a></li>
+    <li><a href="#probes">Probes</a></li>
+    <li><a href="#hpa">Horizontal Pod Autoscaler (HPA)</a></li>
+    <li><a href="#resources">Resource Requests &amp; Limits</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="pods">
+    <h2>1. Pods</h2>
+    <p>A <strong>Pod</strong> is the smallest deployable unit in Kubernetes. It wraps one or more containers that share a network namespace (one IP), IPC, and optionally volumes. Most production apps run inside Deployments, but understanding Pods is essential.</p>
+    <pre><code>┌─────────────────────────────────────────────┐
+│  Pod  10.244.1.8                            │
+│  ┌─────────────┐  ┌─────────────┐          │
+│  │  app        │  │  sidecar    │          │
+│  │  :8080      │  │  (logging)  │          │
+│  └─────────────┘  └─────────────┘          │
+│  shared: localhost, volumes, hostname       │
+└─────────────────────────────────────────────┘</code></pre>
+
+    <h3>Single-container Pod</h3>
+    <pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.25
+      ports:
+        - containerPort: 80
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi</code></pre>
+
+    <h3>Multi-container Pod (sidecar pattern)</h3>
+    <pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: app-with-logger
+spec:
+  containers:
+    - name: app
+      image: myapp:1.0
+      volumeMounts:
+        - name: logs
+          mountPath: /var/log/app
+    - name: log-shipper
+      image: fluent/fluent-bit:2.2
+      volumeMounts:
+        - name: logs
+          mountPath: /var/log/app
+          readOnly: true
+  volumes:
+    - name: logs
+      emptyDir: {}</code></pre>
+
+    <h3>Pod lifecycle phases</h3>
+    <table>
+      <thead><tr><th>Phase</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>Pending</code></td><td>Accepted but not yet running (scheduling, image pull)</td></tr>
+        <tr><td><code>Running</code></td><td>At least one container is running</td></tr>
+        <tr><td><code>Succeeded</code></td><td>All containers terminated successfully (Jobs)</td></tr>
+        <tr><td><code>Failed</code></td><td>At least one container failed</td></tr>
+        <tr><td><code>Unknown</code></td><td>Node communication lost</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>Do not manage Pods directly in production.</strong> Pods are ephemeral. Use a controller (Deployment, StatefulSet, Job) so Kubernetes recreates them when nodes fail or updates roll out.
+    </div>
+  </section>
+
+  <section id="replicasets">
+    <h2>2. ReplicaSets</h2>
+    <p>A <strong>ReplicaSet</strong> maintains a stable set of Pod replicas. It creates or deletes Pods to match <code>spec.replicas</code> and uses a label selector to identify managed Pods.</p>
+    <pre><code>apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: api-rs
+  labels:
+    app: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: api
+        tier: backend
+    spec:
+      containers:
+        - name: api
+          image: myregistry/api:1.0.0
+          ports:
+            - containerPort: 8080</code></pre>
+    <p>You rarely create ReplicaSets directly. <strong>Deployments</strong> own ReplicaSets and handle rolling updates. ReplicaSets remain the mechanism underneath.</p>
+    <pre><code>kubectl get rs
+kubectl describe rs api-rs
+# Pods owned by ReplicaSet show ownerReferences in metadata</code></pre>
+  </section>
+
+  <section id="deployments">
+    <h2>3. Deployments</h2>
+    <p>A <strong>Deployment</strong> is the standard way to run stateless applications. It manages ReplicaSets and supports declarative updates, rollbacks, and scaling.</p>
+
+    <h3>Basic Deployment</h3>
+    <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: production
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: myregistry/api:2.0.0
+          ports:
+            - containerPort: 8080</code></pre>
+
+    <h3>Rolling update strategy</h3>
+    <pre><code>spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # extra Pods above desired count during update
+      maxUnavailable: 0  # zero-downtime: always keep full capacity
+  minReadySeconds: 10</code></pre>
+    <pre><code># Rollout commands
+kubectl set image deployment/api api=myregistry/api:2.1.0
+kubectl rollout status deployment/api
+kubectl rollout history deployment/api
+kubectl rollout undo deployment/api
+kubectl rollout undo deployment/api --to-revision=2</code></pre>
+
+    <h3>Recreate strategy (brief downtime)</h3>
+    <pre><code>spec:
+  strategy:
+    type: Recreate   # kill all old Pods, then start new ones</code></pre>
+
+    <h3>Deployment revision diagram</h3>
+    <pre><code>Deployment "api" (desired: 3 replicas, image v2)
+    │
+    ├── ReplicaSet api-7d4f8b (rev 2, image v2)  ← active, 3 Pods
+    └── ReplicaSet api-9a2c1e (rev 1, image v1)  ← scaled to 0, kept for rollback</code></pre>
+  </section>
+
+  <section id="statefulsets">
+    <h2>4. StatefulSets</h2>
+    <p><strong>StatefulSets</strong> manage stateful applications with stable network identities, ordered deployment, and persistent storage per replica. Use for databases, Kafka, ZooKeeper, Elasticsearch.</p>
+    <ul>
+      <li>Stable Pod names: <code>postgres-0</code>, <code>postgres-1</code>, <code>postgres-2</code></li>
+      <li>Stable DNS: <code>postgres-0.postgres.default.svc.cluster.local</code></li>
+      <li>Ordered rollout and scale (0, then 1, then 2)</li>
+      <li>PersistentVolumeClaim per Pod via <code>volumeClaimTemplates</code></li>
+    </ul>
+    <pre><code>apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres          # headless Service required
+  replicas: 3
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 50Gi</code></pre>
+    <pre><code># Headless Service for StatefulSet DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432</code></pre>
+    <div class="callout">
+      <strong>Deleting a StatefulSet does not delete PVCs by default.</strong> Use <code>kubectl delete statefulset postgres --cascade=orphan</code> carefully, or delete PVCs explicitly when decommissioning data.
+    </div>
+  </section>
+
+  <section id="daemonsets">
+    <h2>5. DaemonSets</h2>
+    <p>A <strong>DaemonSet</strong> ensures one Pod copy runs on every node (or a subset via node selectors). Used for node-level agents: log collectors, monitoring, CNI plugins, storage drivers.</p>
+    <pre><code>apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      tolerations:
+        - operator: Exists   # run on tainted nodes too
+      containers:
+        - name: exporter
+          image: prom/node-exporter:v1.7
+          ports:
+            - containerPort: 9100
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi</code></pre>
+    <pre><code>┌──────────┐  ┌──────────┐  ┌──────────┐
+│  Node 1  │  │  Node 2  │  │  Node 3  │
+│ ┌──────┐ │  │ ┌──────┐ │  │ ┌──────┐ │
+│ │ DS   │ │  │ │ DS   │ │  │ │ DS   │ │
+│ │ Pod  │ │  │ │ Pod  │ │  │ │ Pod  │ │
+│ └──────┘ │  │ └──────┘ │  │ └──────┘ │
+└──────────┘  └──────────┘  └──────────┘
+  one DaemonSet Pod per eligible node</code></pre>
+  </section>
+
+  <section id="jobs-cronjobs">
+    <h2>6. Jobs &amp; CronJobs</h2>
+    <p><strong>Jobs</strong> run Pods to completion (batch, one-off tasks). <strong>CronJobs</strong> create Jobs on a schedule.</p>
+
+    <h3>Job</h3>
+    <pre><code>apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: myregistry/api:2.0.0
+          command: ["python", "manage.py", "migrate"]</code></pre>
+
+    <h3>Parallel Job (work queue)</h3>
+    <pre><code>spec:
+  completions: 10      # 10 successful Pod completions required
+  parallelism: 3       # run 3 Pods at a time
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: worker
+          image: batch-worker:latest</code></pre>
+
+    <h3>CronJob</h3>
+    <pre><code>apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-backup
+spec:
+  schedule: "0 2 * * *"    # 02:00 UTC daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: backup-tool:1.0
+              args: ["--target", "s3://backups/prod"]</code></pre>
+    <pre><code>kubectl get jobs
+kubectl get cronjobs
+kubectl create job manual-backup --from=cronjob/nightly-backup</code></pre>
+  </section>
+
+  <section id="probes">
+    <h2>7. Probes</h2>
+    <p>Probes tell kubelet whether a container is alive, ready to receive traffic, or still starting up. Misconfigured probes are a top cause of CrashLoopBackOff and flapping Deployments.</p>
+    <table>
+      <thead><tr><th>Probe</th><th>Purpose</th><th>Failure action</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Liveness</strong></td><td>Is the process healthy?</td><td>Restart the container</td></tr>
+        <tr><td><strong>Readiness</strong></td><td>Can it serve traffic?</td><td>Remove from Service endpoints</td></tr>
+        <tr><td><strong>Startup</strong></td><td>Has it finished booting?</td><td>Disable liveness until success; restart if fail</td></tr>
+      </tbody>
+    </table>
+
+    <h3>HTTP probes</h3>
+    <pre><code>spec:
+  containers:
+    - name: api
+      image: myregistry/api:2.0.0
+      ports:
+        - containerPort: 8080
+      startupProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
+        failureThreshold: 30
+        periodSeconds: 10          # up to 300s startup time
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
+        initialDelaySeconds: 0
+        periodSeconds: 10
+        failureThreshold: 3
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
+        periodSeconds: 5
+        failureThreshold: 2</code></pre>
+
+    <h3>TCP and exec probes</h3>
+    <pre><code>      livenessProbe:
+        tcpSocket:
+          port: 5432
+        periodSeconds: 15
+
+      readinessProbe:
+        exec:
+          command:
+            - pg_isready
+            - -U
+            - postgres
+        periodSeconds: 10</code></pre>
+    <div class="callout">
+      <strong>Use startup probes for slow-starting apps.</strong> Without them, a long <code>initialDelaySeconds</code> on liveness delays crash detection. Startup probes protect the container during boot.
+    </div>
+  </section>
+
+  <section id="hpa">
+    <h2>8. Horizontal Pod Autoscaler (HPA)</h2>
+    <p>The <strong>HPA</strong> automatically scales Deployment (or StatefulSet) replicas based on observed metrics. Requires <strong>metrics-server</strong> (CPU/memory) or custom/external metrics (Prometheus adapter).</p>
+    <pre><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80</code></pre>
+
+    <h3>Custom metric (requests per second)</h3>
+    <pre><code>  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "1000"</code></pre>
+
+    <h3>Scaling behaviour</h3>
+    <pre><code>  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 4
+          periodSeconds: 60</code></pre>
+    <pre><code>kubectl get hpa
+kubectl describe hpa api-hpa
+kubectl top pods -n production</code></pre>
+    <p>HPA changes replica count; <strong>Cluster Autoscaler</strong> adds nodes when pending Pods cannot be scheduled. Together they scale the workload and the infrastructure.</p>
+  </section>
+
+  <section id="resources">
+    <h2>9. Resource Requests &amp; Limits</h2>
+    <p>Every container should declare <strong>requests</strong> (used for scheduling) and <strong>limits</strong> (maximum allowed). Without requests, the scheduler cannot place Pods intelligently; without limits, one Pod can starve others.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td><code>requests.cpu</code></td><td>Scheduler reserves this CPU on a node</td></tr>
+        <tr><td><code>limits.cpu</code></td><td>Throttled via CFS quota when exceeded</td></tr>
+        <tr><td><code>requests.memory</code></td><td>Scheduler reserves this memory</td></tr>
+        <tr><td><code>limits.memory</code></td><td>OOMKilled if exceeded</td></tr>
+      </tbody>
+    </table>
+
+    <h3>CPU and memory units</h3>
+    <ul>
+      <li>CPU: <code>1</code> = 1 core, <code>500m</code> = 0.5 core, <code>100m</code> = 0.1 core</li>
+      <li>Memory: <code>128Mi</code> (mebibytes), <code>1Gi</code> (gibibytes)</li>
+    </ul>
+
+    <h3>Example container resources</h3>
+    <pre><code>spec:
+  containers:
+    - name: api
+      image: myregistry/api:2.0.0
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          cpu: "1"
+          memory: 512Mi</code></pre>
+
+    <h3>QoS classes</h3>
+    <table>
+      <thead><tr><th>QoS</th><th>Condition</th><th>Eviction priority</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Guaranteed</strong></td><td>limits = requests for all containers</td><td>Last evicted</td></tr>
+        <tr><td><strong>Burstable</strong></td><td>At least one request or limit set</td><td>Middle</td></tr>
+        <tr><td><strong>BestEffort</strong></td><td>No requests or limits</td><td>First evicted</td></tr>
+      </tbody>
+    </table>
+
+    <h3>LimitRange and ResourceQuota</h3>
+    <pre><code># Namespace default for containers without resources
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: defaults
+  namespace: production
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 256Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      max:
+        cpu: "4"
+        memory: 4Gi</code></pre>
+    <pre><code># Cap total namespace consumption
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: prod-quota
+  namespace: production
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    pods: "50"</code></pre>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>10. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>List Deployments</td><td><code>kubectl get deploy -A</code></td></tr>
+        <tr><td>Scale Deployment</td><td><code>kubectl scale deploy/api --replicas=5</code></td></tr>
+        <tr><td>Rollout undo</td><td><code>kubectl rollout undo deploy/api</code></td></tr>
+        <tr><td>StatefulSet Pods</td><td><code>kubectl get pods -l app=postgres</code></td></tr>
+        <tr><td>Run one-off Job</td><td><code>kubectl create job test --image=busybox -- echo hi</code></td></tr>
+        <tr><td>CronJob schedule</td><td><code>kubectl get cronjobs</code></td></tr>
+        <tr><td>Check probes</td><td><code>kubectl describe pod &lt;name&gt; | grep -A5 Liveness</code></td></tr>
+        <tr><td>HPA status</td><td><code>kubectl get hpa</code></td></tr>
+        <tr><td>Pod resource usage</td><td><code>kubectl top pods</code></td></tr>
+        <tr><td>QoS class</td><td><code>kubectl get pod &lt;name&gt; -o jsonpath='{.status.qosClass}'</code></td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheet: <a href="../../cheatsheets/kubectl-cheatsheet.html">kubectl Cheat Sheet</a></p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="kubernetes-networking.html">Networking &amp; Services →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

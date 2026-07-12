@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Graph Transformers | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Graph Transformers</p>
+  </nav>
+  <h1>Graph Transformers</h1>
+  <p>Global attention on graphs  -  Graphormer, GPS, positional encodings, and when they beat message passing.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why">Why Transformers on Graphs?</a></li>
+    <li><a href="#positional">Graph Positional Encodings</a></li>
+    <li><a href="#graphormer">Graphormer</a></li>
+    <li><a href="#gps">GPS and Hybrid Models</a></li>
+    <li><a href="#complexity">Complexity and Scaling</a></li>
+    <li><a href="#when">MPNN vs Transformer</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="why">
+    <h2>1. Why Transformers on Graphs?</h2>
+    <p>Message passing only mixes <strong>local</strong> neighborhoods per layer. Distant nodes need many layers → oversmoothing and over-squashing.</p>
+    <p><strong>Transformers</strong> let every node attend to every other node in one layer  -  global receptive field.</p>
+    <div class="callout callout-intuition">
+      <strong>Tradeoff:</strong> MPNN is $O(|E|)$ per layer  -  cheap on sparse graphs. Full graph attention is $O(n^2)$  -  expensive but fixes long-range bottlenecks.
+    </div>
+  </section>
+
+  <section id="positional">
+    <h2>2. Graph Positional Encodings</h2>
+    <p>Unlike sequences, graphs have no built-in order. Transformers need position info injected:</p>
+    <ul>
+      <li><strong>Laplacian PE:</strong> first $k$ eigenvectors of $\mathbf{L}$ as node coordinates</li>
+      <li><strong>RWSE:</strong> random-walk structural encoding (landing probabilities)</li>
+      <li><strong>SignNet:</strong> handles eigenvector sign ambiguity</li>
+      <li><strong>Shortest-path distance:</strong> added to attention bias between $i$ and $j$</li>
+    </ul>
+  </section>
+
+  <section id="graphormer">
+    <h2>3. Graphormer</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/2106.05234" rel="noopener noreferrer">Ying et al.  -  Do Transformers Really Perform Bad for Graph Representation? (2021)</a></small></p>
+    <p>Three structural encodings added to attention:</p>
+    <ul>
+      <li><strong>Centrality encoding</strong>  -  degree-based bias</li>
+      <li><strong>Spatial encoding</strong>  -  shortest-path distance between nodes</li>
+      <li><strong>Edge encoding</strong>  -  edge features in attention</li>
+    </ul>
+    $$\text{Attn}(i,j) = \text{softmax}\left(\frac{Q_i K_j^T}{\sqrt{d}} + b_{\text{spatial}}(i,j) + b_{\text{edge}}(i,j)\right)$$
+  </section>
+
+  <section id="gps">
+    <h2>4. GPS and Hybrid Models</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/2205.12454" rel="noopener noreferrer">Rampášek et al.  -  Recipe for a General, Powerful, Scalable Graph Transformer (GPS, 2022)</a></small></p>
+    <p><strong>GPS = MPNN + Transformer:</strong></p>
+    $$\mathbf{h}_i' = \text{MLP}\left(\text{MPNN}(\mathbf{h})_i + \text{Transformer}(\mathbf{h})_i\right)$$
+    <p>Local message passing captures neighborhood structure; global attention fixes over-squashing. State-of-the-art on many OGB benchmarks.</p>
+    <p>Also see: <strong>GRIT</strong>, <strong>SAN</strong>, <strong>Exphormer</strong> (sparse expander attention).</p>
+  </section>
+
+  <section id="complexity">
+    <h2>5. Complexity and Scaling</h2>
+    <ul>
+      <li>Full attention: $O(n^2)$ memory  -  OK for molecules (~30 atoms), not for million-node social graphs</li>
+      <li><strong>Sparse attention:</strong> only attend to $k$-hop neighbors + virtual nodes</li>
+      <li><strong>Linear attention:</strong> kernel tricks (NodeFormer, DIFFormer)</li>
+      <li><strong>Subgraph sampling:</strong> train on induced subgraphs</li>
+    </ul>
+  </section>
+
+  <section id="when">
+    <h2>6. MPNN vs Transformer</h2>
+    <table>
+      <thead><tr><th>Choose MPNN</th><th>Choose Graph Transformer</th></tr></thead>
+      <tbody>
+        <tr><td>Sparse, million-node graphs</td><td>Small/medium graphs needing long-range</td></tr>
+        <tr><td>Strong local structure (molecules)</td><td>Over-squashing in deep MPNN</td></tr>
+        <tr><td>Latency-sensitive production</td><td>Benchmark chasing on OGB</td></tr>
+      </tbody>
+    </table>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="../Practice/graph-ml-training-scaling.html">Training &amp; Scaling →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

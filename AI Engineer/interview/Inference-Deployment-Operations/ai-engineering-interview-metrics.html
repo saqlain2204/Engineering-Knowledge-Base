@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Metrics | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-interview.html">Interview Prep</a> &rsaquo; Metrics</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: LLM Metrics and Observability</h1>
+  <p>Measuring quality, latency, cost, and reliability in production. <a href="../../learn/Inference-Deployment-Operations/ai-engineering-metrics.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>LLM Metrics & Observability</h2>
+<p>Measuring quality, latency, cost, and reliability in production.</p>
+
+<details><summary>What are the four layers of the LLM metrics hierarchy?</summary>
+<div>
+<ul>
+<li><strong>Business</strong> - task completion rate, CSAT, conversion lift; answers whether the product works for users and revenue.</li>
+<li><strong>Quality</strong> - faithfulness, hallucination rate, rubric scores; answers whether answers are correct, grounded, and on-brand.</li>
+<li><strong>System</strong> - p95 latency, error rate, GPU utilization; answers whether infrastructure is healthy.</li>
+<li><strong>Cost</strong> - tokens per task, $/successful answer, cache hit rate; answers whether spend is efficient.</li>
+</ul>
+<p>A healthy stack instruments all four and correlates them on <code>trace_id</code> - system metrics are fast but say nothing about hallucinations, while quality metrics are slow but decisive.</p>
+</div>
+</details>
+
+<details><summary>What quality metrics should you track for a production LLM application?</summary>
+<div>
+<ul>
+<li><strong>Correctness</strong> - exact match, F1, or unit tests against ground truth.</li>
+<li><strong>Faithfulness</strong> - answer claims supported by retrieved context (RAGAS faithfulness, citation checks).</li>
+<li><strong>Relevance</strong> - answer addresses the user question (LLM-as-judge, answer relevancy).</li>
+<li><strong>Instruction following</strong> - schema validation, format/tone constraints respected.</li>
+<li><strong>Proxy signals</strong> - thumbs up/down, regenerate rate, escalation rate (cheap but noisy).</li>
+</ul>
+<p>Combine offline golden-set evals (high precision, low freshness) with sampled online scoring (higher freshness, sampling bias risk). Never use a single judge score as the only launch gate.</p>
+</div>
+</details>
+
+<details><summary>What are the key retrieval metrics for RAG systems?</summary>
+<div>
+<ul>
+<li><strong>Recall@k</strong> - fraction of relevant docs in top-k; critical for recall-oriented QA.</li>
+<li><strong>Precision@k</strong> - fraction of top-k that are relevant; matters with short context windows.</li>
+<li><strong>MRR</strong> - mean reciprocal rank of first relevant hit; good when one correct document is expected.</li>
+<li><strong>nDCG@k</strong> - graded relevance with position discounting.</li>
+<li><strong>Hit rate</strong> - % queries with at least one relevant doc above threshold; good operational dashboard metric.</li>
+</ul>
+<p>Also track embedding latency, index staleness, rerank lift, and context assembly (chunks retrieved vs after dedup, total context tokens). High generation quality with poor retrieval metrics often means the model is hallucinating from parametric memory.</p>
+</div>
+</details>
+
+<details><summary>What retrieval proxies do you monitor when labeled query-document pairs are scarce?</summary>
+<div>
+<ul>
+<li><strong>Empty result rate</strong> - queries returning zero chunks above score threshold.</li>
+<li><strong>Low score rate</strong> - top-1 similarity below corpus-specific threshold.</li>
+<li><strong>Context length distribution</strong> - sudden drops may signal retrieval failure.</li>
+<li><strong>Chunk diversity</strong> - redundant chunks waste context budget.</li>
+<li><strong>Rerank lift</strong> - mean score delta pre vs post reranker.</li>
+<li><strong>Index lag</strong> - time between source doc update and index refresh.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What's the difference between TTFT and TPOT, and why do both matter?</summary>
+<div>
+<ul>
+<li><strong>TTFT (time to first token)</strong> - request accepted to first streamed token byte; dominated by prefill (prompt processing). Users perceive this most acutely - target often &lt; 500 ms (small model) to 2 s (large).</li>
+<li><strong>TPOT (time per output token)</strong> - median ms between consecutive output tokens after the first; dominated by decode. Typical range 20-80 ms/token depending on hardware.</li>
+<li><strong>E2E latency</strong> - full response ready; task-dependent and includes retrieval, tool calls, and post-processing.</li>
+</ul>
+<p>Report p50/p90/p95/p99 per span, not averages - LLM latency distributions are heavy-tailed. Optimize perceived speed with streaming even if total E2E is unchanged.</p>
+</div>
+</details>
+
+<details><summary>How do you measure and control LLM cost in production?</summary>
+<div>
+<ul>
+<li>Track <strong>input tokens</strong> (system + user + retrieved context + tool results), <strong>output tokens</strong>, <strong>cached input tokens</strong>, and often-forgotten <strong>embedding/reranker</strong> costs separately.</li>
+<li>Compute per-request cost from versioned price tables: <code>(N_in × p_in + N_out × p_out) / 10^6 + C_embed + C_tools</code>.</li>
+<li>Efficiency ratios: tokens per <em>successful</em> task, context efficiency (useful output / total input), retry multiplier, cache savings.</li>
+<li>Guardrails: per-tenant daily caps, max_tokens limits, retrieval top-k caps, agent max_steps at the gateway.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What metrics matter for LLM agent systems?</summary>
+<div>
+<ul>
+<li><strong>Steps per session</strong> and <strong>LLM calls per session</strong> - detect runaway loops and correlate with cost.</li>
+<li><strong>Tool calls per session</strong> - per-tool latency p95, error rate, timeout rate, retry count.</li>
+<li><strong>Termination reason</strong> - success, max_steps, timeout, user_cancel, error.</li>
+<li><strong>Planning proxies</strong> - redundant tool calls, dead-end rate, human takeover rate, objective verifier pass rate.</li>
+</ul>
+<p>A single user message can span dozens of LLM calls and external API hits. Hard caps on steps, tokens, and tool spend are mandatory production controls - a 30-step agent loop can cost dollars per message.</p>
+</div>
+</details>
+
+<details><summary>What safety metrics should you monitor?</summary>
+<div>
+<ul>
+<li><strong>Input-side</strong> - jailbreak attempt rate, prompt injection in retrieved docs, PII detected in user input, blocked topic rate.</li>
+<li><strong>Output-side</strong> - toxicity score distribution, PII leakage rate, over-refusal vs under-refusal rate, policy violation rate.</li>
+<li><strong>Red team cadence</strong> - scheduled adversarial suite pass rate; alert on regressions after model or prompt changes.</li>
+<li><strong>Human review queue</strong> - flagged volume, time to review SLA, confirmed violation rate (flag precision).</li>
+</ul>
+<p>Safety events are sparse - use Wilson score intervals or Bayesian smoothing for rates below 1%. A jump from 0.1% to 2% PII leakage is an incident; small drops may be noise.</p>
+</div>
+</details>
+
+<details><summary>What types of drift affect LLM systems and how do you detect them?</summary>
+<div>
+<ul>
+<li><strong>Data drift</strong> - input query distribution shifts (language, length, new intents); detect via embedding distance or PSI on features.</li>
+<li><strong>Concept drift</strong> - mapping from input to correct answer changes; golden eval regression, feedback drop.</li>
+<li><strong>Upstream model drift</strong> - provider silently updates weights; fixed-prompt eval suite, output hash shifts.</li>
+<li><strong>Corpus drift</strong> - retrieved docs stale or wrong; index age, source freshness metrics.</li>
+<li><strong>Prompt drift</strong> - unversioned prompt edits in prod; config registry hash mismatch alerts.</li>
+</ul>
+<p>PSI (Population Stability Index) on binned features: &lt; 0.1 stable, 0.1-0.25 moderate shift, &gt; 0.25 investigate. Correlate drift timestamps with deploy events.</p>
+</div>
+</details>
+
+<details><summary>How do you define SLOs for an LLM service?</summary>
+<div>
+<ul>
+<li><strong>SLI</strong> - measured indicator (e.g., p95 latency &lt; 3 s).</li>
+<li><strong>SLO</strong> - target over a window (e.g., 99% of hours meet the SLI).</li>
+<li><strong>SLA</strong> - contractual consequence if SLO missed (credits, refunds).</li>
+</ul>
+<p>LLM SLOs must cover latency, availability, quality, and cost - not just uptime. Example set: 99.9% non-5xx availability, p95 TTFT &lt; 1.2 s, golden eval pass ≥ 94%, safety red-team pass ≥ 99%, cost per task p50 &lt; $0.02. Use error budgets: when latency budget is exhausted, freeze non-critical deploys and route to faster tiers; when quality budget is exhausted, block prompt experiments and roll back config.</p>
+</div>
+</details>
+
+<details><summary>What should a production LLM trace schema include?</summary>
+<div>
+<ul>
+<li><strong>Top-level</strong> - trace_id, span_id, service_name, operation, duration_ms, status, session_id, tenant_id, feature, environment.</li>
+<li><strong>LLM span</strong> - model, prompt_version, prompt_hash (not raw PII), input/output tokens, finish_reason, temperature, ttft_ms, estimated_cost_usd.</li>
+<li><strong>RAG span</strong> - query_hash, top_k, chunk_ids, scores, embed_model, index_version, hit, context_tokens.</li>
+<li><strong>Agent span</strong> - step_index, max_steps, termination_reason, tool.name, tool.latency_ms, tool.status.</li>
+</ul>
+<p>Use OpenTelemetry Gen AI conventions where possible. Store hashes and IDs by default; raw prompts/completions go to restricted stores with TTL. Never attach unbounded labels (user_id, full prompt) to Prometheus - use trace backends for high-cardinality detail.</p>
+</div>
+</details>
+
+<details><summary>How should you design dashboards for LLM observability?</summary>
+<div>
+<ul>
+<li><strong>Executive health</strong> - DAU, task success, cost/day, CSAT trend.</li>
+<li><strong>On-call operations</strong> - error rate, p95 latency by stage, queue depth, SLO burn rate.</li>
+<li><strong>Quality review</strong> - eval scores, feedback rate, drift PSI, slice breakdown.</li>
+<li><strong>Cost FinOps</strong> - $ by tenant, tokens/task, cache savings.</li>
+<li><strong>Safety</strong> - flag volume, red-team pass, injection rate.</li>
+<li><strong>RAG deep dive</strong> - recall@k, empty hits, index lag, rerank lift.</li>
+</ul>
+<p>On-call single screen: "Is it up? Slow? Wrong? Expensive?" Use RED (rate, errors, duration) for request paths and USE (utilization, saturation, errors) for GPUs. Limit to 12-15 panels; link every panel to a runbook.</p>
+</div>
+</details>
+
+<details><summary>How do you instrument LLM services with Prometheus?</summary>
+<div>
+<ul>
+<li><strong>Counter</strong> - monotonic totals: <code>llm_requests_total</code>, <code>llm_tokens_total</code>, <code>llm_errors_total</code>.</li>
+<li><strong>Histogram</strong> - latency distributions: <code>llm_request_duration_seconds</code> with buckets aligned to SLO thresholds.</li>
+<li><strong>Gauge</strong> - point-in-time: queue depth, inflight requests, eval scores from nightly jobs.</li>
+<li>Bounded labels only: <code>model</code>, <code>feature</code>, <code>tenant_tier</code>, <code>status</code> - never raw user_id or prompt text.</li>
+</ul>
+<p>Example PromQL: p95 latency via <code>histogram_quantile(0.95, sum(rate(llm_request_duration_seconds_bucket[5m])) by (le, feature))</code>; error rate as error requests / total requests. Use recording rules for expensive quantiles; export Grafana dashboards as JSON in git.</p>
+</div>
+</details>
+
+<details><summary>What makes a good alerting strategy for LLM systems?</summary>
+<div>
+<ul>
+<li><strong>P1 page</strong> - availability &lt; 99% over 15m, confirmed safety leak spike.</li>
+<li><strong>P2 ticket</strong> - p95 latency 2× baseline for 1h, eval score drop 5%.</li>
+<li><strong>P3 info</strong> - cost 20% above forecast, moderate PSI drift.</li>
+</ul>
+<p>Alert on symptoms users feel: high 5xx rate, latency SLO burn (multi-window 1h + 6h), provider timeout spikes, nightly eval regression, thumbs-down rate &gt; 3σ above 7-day mean, hourly spend &gt; 2× trailing average (agent loops), queue wait p95 &gt; 10 s. Every alert needs runbook_url and owner_team labels; use inhibition to avoid duplicate pages; review alert fatigue monthly.</p>
+</div>
+</details>
+
+<details><summary>How do you implement cost attribution across teams and features?</summary>
+<div>
+<ul>
+<li><strong>Dimensions</strong> - tenant/customer, feature/product surface, team/cost center, model tier, environment, prompt version.</li>
+<li><strong>Unit economics</strong> - cost per successful task (divide spend by verifier-pass count), cost per active user/month, margin per AI feature.</li>
+<li><strong>Shared costs</strong> - GPU cluster split by measured GPU-seconds or token share per feature; avoid equal splits that hide heavy users.</li>
+<li><strong>Tagging discipline</strong> - require tenant_id and feature on every internal API call; reject untagged prod calls.</li>
+</ul>
+<p>Weekly FinOps review: top 10 expensive tenants/features. Monthly: model routing opportunities (swap traffic to smaller model with &lt; 2% quality loss). Without attribution, LLM bills stay one opaque line item and nobody optimizes.</p>
+</div>
+</details>
+
+<details><summary>What is cardinality discipline and why does it matter for LLM Prometheus metrics?</summary>
+<div><p>Never attach unbounded labels (raw user_id, full prompt text, chunk content) to Prometheus metrics - each unique label combination creates a new time series and can explode storage and query cost. Use bounded enums: model, feature, tenant_tier, prompt_version. Store high-cardinality detail (full traces, prompts, chunk IDs) in trace backends like Langfuse, Phoenix, or ClickHouse. A single mis-instrumented label can take down your monitoring stack faster than a model outage.</p></div>
+</details>
+
+<details><summary>How do offline, online, and proxy quality measurements differ?</summary>
+<div>
+<ul>
+<li><strong>Offline</strong> - fixed golden sets scored on schedule or in CI; high precision, low freshness, no sampling bias.</li>
+<li><strong>Online</strong> - sampled production traffic scored asynchronously (LLM-as-judge); higher freshness but sampling and position bias risk.</li>
+<li><strong>Proxy</strong> - user feedback, regenerate rate, edit distance, retry rate; cheap and always-on but noisy and delayed.</li>
+</ul>
+<p>Store eval results keyed by config_hash (model + prompt + tools + retrieval settings). Alert when score drops beyond δ on any stratified slice - aggregate averages hide regressions on minority slices that carry legal or revenue risk.</p>
+</div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../ai-engineering-interview.html">Back to Interview Prep</a> &middot; <a href="../../ai-engineering.html">AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

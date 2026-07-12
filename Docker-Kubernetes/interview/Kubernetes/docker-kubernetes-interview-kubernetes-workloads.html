@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Workloads | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Workloads</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Kubernetes Workloads</h1>
+  <p>Pods, controllers, probes, autoscaling, and resource management. <a href="../../learn/Kubernetes/kubernetes-workloads.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Kubernetes Workloads</h2>
+<p>Pods, controllers, probes, autoscaling, and resource management.</p>
+
+<details><summary>What is a Pod and why is it the smallest deployable unit?</summary>
+<div><p>A Pod wraps one or more containers that share network namespace (one IP, shared localhost) and can share volumes. Kubernetes schedules and manages at the Pod level, not individual containers. Multi-container Pods are used for sidecars (logging, proxy, config reload) or tightly coupled processes. Pods are ephemeral  -  they are created, destroyed, and replaced; you rarely manage bare Pods directly in production.</p></div>
+</details>
+
+<details><summary>What is a ReplicaSet and how does it differ from a Deployment?</summary>
+<div><p>A ReplicaSet ensures a specified number of identical Pod replicas are running. If a Pod is deleted or a node fails, it creates replacements. Deployments own ReplicaSets and add rollout semantics: rolling updates, rollback to previous ReplicaSets, and pause/resume. You almost always use Deployments in production; ReplicaSets are the mechanism Deployments use under the hood, not something you create manually for stateless apps.</p></div>
+</details>
+
+<details><summary>How do Deployments handle rolling updates and rollbacks?</summary>
+<div><p>A Deployment update creates a new ReplicaSet with the new Pod template and gradually scales it up while scaling the old ReplicaSet down (<code>maxSurge</code>, <code>maxUnavailable</code> control the pace). Kubernetes keeps old ReplicaSets for rollback history (<code>revisionHistoryLimit</code>). <code>kubectl rollout undo</code> reverts to a previous ReplicaSet. Readiness probes ensure new Pods receive traffic only when ready, preventing downtime during rollouts.</p></div>
+</details>
+
+<details><summary>When should you use a StatefulSet instead of a Deployment?</summary>
+<div><p>StatefulSets are for workloads needing stable network identity and persistent storage per replica: databases (PostgreSQL, MongoDB), Kafka, ZooKeeper. Each Pod gets a predictable name (<code>app-0</code>, <code>app-1</code>), ordered startup/termination, and its own PersistentVolumeClaim. Deployments give random Pod names and interchangeable replicas  -  fine for stateless APIs, wrong for clustered databases that care about identity and data locality.</p></div>
+</details>
+
+<details><summary>What is a DaemonSet and when is it used?</summary>
+<div><p>A DaemonSet ensures one Pod copy runs on every node (or every node matching a selector). Use cases: log collectors (Fluent Bit), monitoring agents (node-exporter), CNI plugins, or security scanners. When you add a node, the DaemonSet scheduler places its Pod automatically; when a node is removed, the Pod is garbage-collected. Unlike Deployments, you scale by adding nodes, not by changing replica count.</p></div>
+</details>
+
+<details><summary>How do Jobs and CronJobs differ from long-running workloads?</summary>
+<div><p>Jobs run Pods until they complete successfully a set number of times (<code>completions</code>, <code>parallelism</code>). Use them for batch processing, migrations, or one-off tasks. CronJobs wrap Jobs on a schedule (like cron). They are not restarted on failure indefinitely unless <code>restartPolicy</code> and backoff limits allow retries. Long-running Deployments keep Pods running forever; Jobs exit when work is done.</p></div>
+</details>
+
+<details><summary>Explain liveness, readiness, and startup probes.</summary>
+<div>
+<ul>
+<li><strong>Liveness</strong>  -  "Is the container alive?" Fails → kubelet restarts the container. Use when the app can deadlock but the process still runs.</li>
+<li><strong>Readiness</strong>  -  "Can this Pod receive traffic?" Fails → Pod is removed from Service endpoints but not restarted. Use when the app depends on DB warmup or external deps.</li>
+<li><strong>Startup</strong>  -  Disables liveness/readiness until the app finishes slow startup (e.g. loading large models). Prevents liveness killing a still-booting container.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>How does the Horizontal Pod Autoscaler (HPA) work?</summary>
+<div><p>HPA watches metrics (usually CPU/memory via metrics-server, or custom metrics from Prometheus) and scales a Deployment/StatefulSet replica count up or down to match a target (e.g. 70% CPU utilization). It runs in the control plane, evaluates every few seconds, and respects <code>minReplicas</code>/<code>maxReplicas</code>. HPA needs resource requests set on containers for CPU-based scaling; without requests, it cannot compute utilization percentage.</p></div>
+</details>
+
+<details><summary>What is the difference between resource requests and limits?</summary>
+<div><p><strong>Requests</strong> are guaranteed resources the scheduler uses for placement  -  a Pod is scheduled only onto nodes with enough allocatable CPU/memory after requests. <strong>Limits</strong> cap maximum usage; exceeding CPU limits throttles the container, exceeding memory limits triggers OOMKill. Best practice: set requests close to steady-state usage, limits higher for burst (or equal for predictable workloads). Missing requests cause poor scheduling and broken HPA.</p></div>
+</details>
+
+<details><summary>What happens when a Pod exceeds its memory limit?</summary>
+<div><p>The Linux kernel OOM killer terminates the container process. Kubernetes may restart it per <code>restartPolicy</code>. Repeated OOMKills indicate limits are too low or a memory leak. Unlike CPU (which is compressible/throttled), memory is not  -  there is no graceful slowdown. Monitor OOM events and set limits based on profiling; consider Vertical Pod Autoscaler (VPA) for recommendation-only or automatic request/limit tuning.</p></div>
+</details>
+
+<details><summary>What are init containers and when would you use them?</summary>
+<div><p>Init containers run sequentially before app containers start, and must all succeed. Use them to wait for dependencies (DB ready), download config/artifacts, run migrations, or set permissions on volumes. They share volumes with app containers but not the same image lifecycle. Example: an init container runs <code>flyway migrate</code> before the API server container starts serving traffic.</p></div>
+</details>
+
+<details><summary>How do you choose the right workload type for a given application?</summary>
+<div>
+<ul>
+<li><strong>Deployment</strong>  -  stateless web APIs, microservices, anything horizontally scalable with interchangeable replicas.</li>
+<li><strong>StatefulSet</strong>  -  databases, queues, or apps needing stable hostname and per-replica disk.</li>
+<li><strong>DaemonSet</strong>  -  per-node agents (logs, metrics, security).</li>
+<li><strong>Job / CronJob</strong>  -  batch ETL, backups, scheduled reports, one-time migrations.</li>
+</ul>
+<p>Most production microservices are Deployments with HPA, probes, and resource requests/limits configured.</p>
+</div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

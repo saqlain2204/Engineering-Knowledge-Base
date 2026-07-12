@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Classic GNN Architectures | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Classic Architectures</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Classic GNN Architectures</h1>
+  <p>GCN, GraphSAGE, GAT, GIN. <a href="../../learn/Core/graph-ml-classic-architectures.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+<h2>Classic Architectures</h2>
+
+<details><summary>Write the GCN layer equation and explain each part.</summary>
+<div><p>$\mathbf{H}^{(l+1)} = \sigma(\tilde{\mathbf{D}}^{-1/2}\tilde{\mathbf{A}}\tilde{\mathbf{D}}^{-1/2}\mathbf{H}^{(l)}\mathbf{W}^{(l)})$ where $\tilde{\mathbf{A}}=\mathbf{A}+\mathbf{I}$. Normalized adjacency averages neighbor features fairly. $\mathbf{W}^{(l)}$ is a learnable linear transform. $\sigma$ is activation. It is a first-order spectral approximation (ChebNet with $K=1$).</p></div>
+</details>
+
+<details><summary>How does GraphSAGE differ from GCN?</summary>
+<div><p>GraphSAGE explicitly concatenates the node's own embedding with an aggregated neighborhood embedding, then passes through an MLP. It supports multiple aggregators (mean, max, LSTM) and neighbor sampling for scalability. It is designed for <strong>inductive</strong> learning on large graphs.</p></div>
+</details>
+
+<details><summary>How does GAT attention work on graphs?</summary>
+<div><p>Compute attention scores $e_{ij} = \text{LeakyReLU}(\vec{a}^T[\mathbf{W}\mathbf{h}_i \| \mathbf{W}\mathbf{h}_j])$, normalize with softmax over neighbors to get $\alpha_{ij}$, then update $\mathbf{h}_i' = \sigma(\sum_j \alpha_{ij}\mathbf{W}\mathbf{h}_j)$. Different neighbors get different weights  -  unlike GCN's fixed normalization.</p></div>
+</details>
+
+<details><summary>Why is GIN more expressive than GCN?</summary>
+<div><p>GIN uses sum aggregation followed by an injective MLP: $\mathbf{h}_i' = \text{MLP}((1+\epsilon)\mathbf{h}_i + \sum_{j\in\mathcal{N}(i)}\mathbf{h}_j)$. Sum preserves multiset structure (mean loses count info). Xu et al. proved this matches the power of the 1-Weisfeiler-Lehman test  -  the upper bound for standard MPNNs.</p></div>
+</details>
+
+<details><summary>What is the 1-WL test and why does it matter?</summary>
+<div><p>The 1-Weisfeiler-Lehman test iteratively refines node labels by hashing (own label + sorted neighbor labels). It distinguishes many but not all non-isomorphic graphs. Standard MPNNs are at most as powerful as 1-WL. GIN achieves this bound; GCN does not.</p></div>
+</details>
+
+<details><summary>When would you pick GAT over GCN?</summary>
+<div><p>When neighbors have varying importance (heterogeneous neighbor types, attention helps), or when GCN's fixed averaging loses signal. Cost: more parameters and compute. On simple homophilous citation graphs, GCN may match GAT with less tuning.</p></div>
+</details>
+
+<details><summary>What is MPNN and how does it handle edge features?</summary>
+<div><p>MPNN (Gilmer 2017) defines message $\mathbf{m}_{ij} = \mathbf{M}(\mathbf{h}_i, \mathbf{h}_j, \mathbf{e}_{ij})$, aggregate messages, then update $\mathbf{h}_i' = \mathbf{U}(\mathbf{h}_i, \sum_j \mathbf{m}_{ij})$. Edge features $\mathbf{e}_{ij}$ (bond type, distance) are built into the message  -  critical for molecules.</p></div>
+</details>
+
+<details><summary>Why add self-loops in GCN?</summary>
+<div><p>Without self-loops, a node's new embedding is only a function of neighbors  -  it loses its own identity. Adding $\mathbf{I}$ to $\mathbf{A}$ lets each node include its own features in the aggregation, stabilizing training.</p></div>
+</details>
+
+<details><summary>Compare mean vs sum aggregation.</summary>
+<div><p><strong>Sum:</strong> preserves neighborhood size information; injective with MLP (GIN). <strong>Mean:</strong> size-invariant; can fail to distinguish neighborhoods with same mean but different counts. <strong>Max:</strong> captures strongest neighbor signal; good for some heterophily settings.</p></div>
+</details>
+
+<details><summary>What is the receptive field of an $L$-layer GNN?</summary>
+<div><p>The $L$-hop neighborhood  -  all nodes within $L$ edges. A 2-layer GCN on node $i$ uses features from $i$ and its 2-hop neighbors. Deeper layers = wider context but also more oversmoothing risk.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

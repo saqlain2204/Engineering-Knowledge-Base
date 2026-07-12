@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>GNNs &amp; LLMs | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; GNNs &amp; LLMs</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: GNNs in the LLM Era</h1>
+  <p>Hybrid systems, GraphRAG, when each wins. <a href="../../learn/Practice/graph-ml-gnns-and-llms.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+<h2>GNNs &amp; LLMs</h2>
+
+<details><summary>Why combine GNNs and LLMs instead of using one alone?</summary>
+<div><p>LLMs excel at language and reasoning but struggle with precise multi-hop graph traversal, combinatorial structure, and cheap updates to structured knowledge. GNNs excel at encoding connectivity and relational patterns but cannot do open-ended language reasoning. Real data (text-attributed graphs, knowledge graphs) needs both.</p></div>
+</details>
+
+<details><summary>What is a text-attributed graph (TAG)?</summary>
+<div><p>A graph where each node has associated raw text  -  paper abstracts, product descriptions, wiki entries. Pipeline: LLM embeds text into node features, then GNN refines embeddings using graph structure. Structure disambiguates text (two similar abstracts in different citation communities get different labels).</p></div>
+</details>
+
+<details><summary>Explain the GraphRAG pipeline at a high level.</summary>
+<div><p>(1) LLM extracts entities/relations from documents. (2) Build a knowledge graph. (3) Run community detection. (4) LLM summarizes each community. (5) At query time, retrieve relevant communities and entities, LLM answers with global corpus context. Solves "holistic" questions plain vector RAG cannot.</p></div>
+</details>
+
+<details><summary>When does an LLM alone beat a GNN?</summary>
+<div><p>Small graphs with rich text where you can fit everything in context; one-off exploratory analysis; tasks needing broad world knowledge and language generation; few-shot prototyping without training data. LLM can describe graph structure in natural language for tiny graphs.</p></div>
+</details>
+
+<details><summary>When does a GNN alone beat an LLM?</summary>
+<div><p>Million-node graphs where LLM context limits fail; real-time recommendation; structure-heavy tasks (molecule property from bonds); repeated inference where LLM cost is prohibitive; when connectivity matters more than text content.</p></div>
+</details>
+
+<details><summary>How can a GNN improve RAG?</summary>
+<div><p>Vector RAG retrieves by embedding similarity  -  misses multi-hop relations. GNN scores nodes/subgraphs by structural relevance, enabling retrieval along citation chains, KG paths, or community membership. GNN finds "papers citing papers citing X" that vector search misses.</p></div>
+</details>
+
+<details><summary>What is the LM-as-encoder + GNN pattern?</summary>
+<div><p>Freeze a pretrained LM, embed each node's text to get initial features $\mathbf{x}_i$, then train a GNN on top. Cheap and effective. Finetune LM with LoRA + GNN end-to-end for best quality at higher cost.</p></div>
+</details>
+
+<details><summary>How do LLM agents use knowledge graphs?</summary>
+<div><p>Agent plans a query, KG provides structured facts and relations, GNN/embedding retrieval finds entry points, agent traverses or LLM synthesizes answer. Reduces hallucination by grounding in KG triples. GNN can rank which entities to explore next.</p></div>
+</details>
+
+<details><summary>What are graph foundation models and how do they relate to LLMs?</summary>
+<div><p>Graph FMs (GraphMAE, GraphGPT, OneForAll) pretrain on many graphs then finetune  -  analogous to LLM pretraining on text. Trend: LLM as universal tokenizer (describe graph in text) vs specialized GNN encoders. Likely future: orchestrated systems where LLM plans and GNN computes structure.</p></div>
+</details>
+
+<details><summary>Give an example where hybrid LLM+GNN is the production answer.</summary>
+<div><p>Enterprise document QA over 50K internal docs: GraphRAG builds entity graph + community summaries (LLM), GNN/structure retrieves relevant subgraph for each query, LLM generates final answer grounded in retrieved nodes. Pure vector RAG fails on global questions; pure LLM fails on scale and structure.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

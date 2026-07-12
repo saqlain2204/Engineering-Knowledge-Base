@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+  <title>kubectl Cheat Sheet | Docker &amp; Kubernetes</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../index.html">Home</a> &rsaquo; <a href="../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="docker-kubernetes-cheatsheets.html">Cheat Sheets</a> &rsaquo; kubectl</p>
+  </nav>
+  <h1>kubectl Cheat Sheet</h1>
+  <p>Essential kubectl commands for workloads, networking, storage, debugging, and cluster management.</p>
+</header>
+
+<main class="article">
+
+  <section>
+    <h2>Context &amp; Cluster Info</h2>
+    <pre><code>kubectl config current-context
+kubectl config get-contexts
+kubectl config use-context prod-cluster
+kubectl cluster-info
+kubectl get nodes -o wide
+kubectl get componentstatuses          # deprecated but still useful
+kubectl api-resources
+kubectl api-versions
+kubectl version --short</code></pre>
+  </section>
+
+  <section>
+    <h2>Pods</h2>
+    <pre><code>kubectl get pods
+kubectl get pods -A
+kubectl get pods -n production -o wide
+kubectl get pods -l app=api
+kubectl describe pod api-7d8f9c-abc12 -n production
+kubectl logs api-7d8f9c-abc12 -n production
+kubectl logs -f -l app=api -n production --tail=100
+kubectl logs api-7d8f9c-abc12 -c sidecar -n production
+kubectl logs --previous api-7d8f9c-abc12   # crashed container
+
+kubectl exec -it api-7d8f9c-abc12 -n production -- sh
+kubectl exec api-7d8f9c-abc12 -- env
+
+kubectl run debug --rm -it --image=busybox:1.36 --restart=Never -- sh
+kubectl run netshoot --rm -it --image=nicolaka/netshoot --restart=Never -- bash
+
+kubectl delete pod api-7d8f9c-abc12 -n production
+kubectl delete pod -l app=api -n production</code></pre>
+  </section>
+
+  <section>
+    <h2>Deployments &amp; Workloads</h2>
+    <pre><code>kubectl get deployments -n production
+kubectl describe deployment api -n production
+kubectl rollout status deployment/api -n production
+kubectl rollout history deployment/api -n production
+kubectl rollout undo deployment/api -n production
+kubectl rollout undo deployment/api --to-revision=3 -n production
+
+kubectl scale deployment api --replicas=5 -n production
+kubectl autoscale deployment api --min=2 --max=10 --cpu-percent=70 -n production
+
+kubectl set image deployment/api api=myapp:2.0 -n production
+kubectl patch deployment api -n production -p '{"spec":{"replicas":3}}'
+
+kubectl get rs,ds,sts,job,cronjob -n production</code></pre>
+  </section>
+
+  <section>
+    <h2>Services &amp; Networking</h2>
+    <pre><code>kubectl get svc -n production
+kubectl describe svc api -n production
+kubectl get endpoints api -n production
+kubectl get ingress -n production
+kubectl describe ingress app-ingress -n production
+
+kubectl port-forward svc/api 8080:80 -n production
+kubectl port-forward pod/api-7d8f9c-abc12 8080:8080 -n production
+
+kubectl get networkpolicy -n production
+kubectl get ingressclass</code></pre>
+  </section>
+
+  <section>
+    <h2>ConfigMaps &amp; Secrets</h2>
+    <pre><code>kubectl get configmap -n production
+kubectl describe configmap app-config -n production
+kubectl create configmap app-config --from-file=config.yaml -n production
+kubectl create configmap app-config --from-literal=LOG_LEVEL=debug -n production
+
+kubectl get secrets -n production
+kubectl create secret generic db-creds --from-literal=password=secret -n production
+kubectl get secret db-creds -o jsonpath='{.data.password}' | base64 -d</code></pre>
+  </section>
+
+  <section>
+    <h2>Storage</h2>
+    <pre><code>kubectl get pvc -n production
+kubectl describe pvc postgres-data -n production
+kubectl get pv
+kubectl get storageclass
+kubectl get volumesnapshot</code></pre>
+  </section>
+
+  <section>
+    <h2>RBAC &amp; Security</h2>
+    <pre><code>kubectl auth can-i create pods -n production
+kubectl auth can-i delete secrets --as=system:serviceaccount:production:api-sa
+kubectl auth can-i --list --as=system:serviceaccount:production:api-sa
+
+kubectl get role,rolebinding -n production
+kubectl get clusterrole,clusterrolebinding
+kubectl get serviceaccount -n production</code></pre>
+  </section>
+
+  <section>
+    <h2>Apply &amp; Generate YAML</h2>
+    <pre><code>kubectl apply -f deployment.yaml
+kubectl apply -f ./manifests/ -n production
+kubectl delete -f deployment.yaml
+kubectl diff -f deployment.yaml
+
+kubectl create deployment api --image=myapp:1.0 --dry-run=client -o yaml
+kubectl expose deployment api --port=80 --target-port=8080 --dry-run=client -o yaml
+kubectl run tmp --image=nginx --dry-run=client -o yaml
+
+kubectl get deployment api -o yaml
+kubectl get deployment api -o json
+kubectl get pods -o jsonpath='{.items[*].metadata.name}'</code></pre>
+  </section>
+
+  <section>
+    <h2>Debugging &amp; Events</h2>
+    <pre><code>kubectl get events -n production --sort-by='.lastTimestamp'
+kubectl top nodes
+kubectl top pods -n production
+
+kubectl describe node worker-1
+kubectl get pods -n production --field-selector status.phase=Pending
+kubectl get pods -n production | grep -v Running
+
+# Why is my Pod pending/crashing?
+kubectl describe pod &lt;pod&gt; -n production   # Events section at bottom
+kubectl get pod &lt;pod&gt; -o yaml | grep -A5 conditions
+
+# Resource usage
+kubectl describe quota -n production
+kubectl describe limitrange -n production</code></pre>
+  </section>
+
+  <section>
+    <h2>Namespaces &amp; Labels</h2>
+    <pre><code>kubectl get namespaces
+kubectl create namespace staging
+kubectl label namespace production env=prod
+kubectl annotate deployment api description="main API"
+
+kubectl get all -n production
+kubectl get all -l app=api -n production
+kubectl label pod api-abc app=api-v2 --overwrite</code></pre>
+  </section>
+
+  <section>
+    <h2>Helm (related)</h2>
+    <pre><code>helm list -A
+helm install my-api ./chart -n production
+helm upgrade my-api ./chart -f values.yaml
+helm rollback my-api 2
+helm uninstall my-api -n production
+helm template my-api ./chart --debug</code></pre>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="docker-kubernetes-cheatsheets.html">Back to Cheat Sheets</a> &middot; <a href="../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../assets/site.js"></script>
+<script src="../../assets/search.js" defer></script>
+</body>
+</html>

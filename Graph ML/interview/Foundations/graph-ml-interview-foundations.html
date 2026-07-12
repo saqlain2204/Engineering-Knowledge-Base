@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Graph Foundations | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Foundations</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Graph Foundations</h1>
+  <p>Graphs, Laplacian, tasks, homophily. <a href="../../learn/Foundations/graph-ml-foundations.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+<h2>Graph Foundations</h2>
+
+<details><summary>What is a graph in ML terms?</summary>
+<div><p>A graph $G=(V,E)$ has nodes $V$ (entities) and edges $E$ (relationships). Each node can have a feature vector $\mathbf{x}_i$. Edges can be directed or undirected, weighted or unweighted. Graphs encode relational structure that flat tables ignore.</p></div>
+</details>
+
+<details><summary>Why can't we feed an adjacency matrix directly into an MLP?</summary>
+<div><p>Graphs have different sizes ($n$ varies), no canonical node order (permuting nodes changes the matrix but not the graph), and sparse structure. An MLP would need fixed input size and would give different outputs for the same graph with relabeled nodes. GNNs solve this with permutation-equivariant message passing.</p></div>
+</details>
+
+<details><summary>What is the graph Laplacian and why does it matter?</summary>
+<div><p>$\mathbf{L} = \mathbf{D} - \mathbf{A}$. The quadratic form $\mathbf{f}^T\mathbf{L}\mathbf{f} = \frac{1}{2}\sum_{(i,j)\in E}(f_i-f_j)^2$ measures smoothness of a signal on the graph. Eigenvectors of $\mathbf{L}$ act as Fourier bases for graph signal processing. GCN derives from a first-order approximation of spectral convolution using $\mathbf{L}$.</p></div>
+</details>
+
+<details><summary>What is normalized adjacency in GCN?</summary>
+<div><p>$\tilde{\mathbf{A}} = \mathbf{D}^{-1/2}(\mathbf{A}+\mathbf{I})\mathbf{D}^{-1/2}$. Self-loops ($\mathbf{I}$) let nodes keep their own signal. Degree normalization prevents high-degree hub nodes from dominating the aggregation.</p></div>
+</details>
+
+<details><summary>Name the main graph ML tasks.</summary>
+<div><ul>
+<li><strong>Node classification:</strong> predict label per node</li>
+<li><strong>Link prediction:</strong> predict missing edges</li>
+<li><strong>Graph classification:</strong> predict label per entire graph</li>
+<li><strong>Graph regression:</strong> predict scalar per graph</li>
+<li><strong>Community detection:</strong> cluster nodes</li>
+</ul></div>
+</details>
+
+<details><summary>What is homophily vs heterophily?</summary>
+<div><p><strong>Homophily:</strong> connected nodes tend to share labels/features ("birds of a feather"). <strong>Heterophily:</strong> connected nodes tend to differ. Standard GNNs assume homophily when aggregating neighbors. Under heterophily, blind neighbor averaging hurts  -  need specialized models (H2GCN, GPR-GNN).</p></div>
+</details>
+
+<details><summary>What is transductive vs inductive learning on graphs?</summary>
+<div><p><strong>Transductive:</strong> test nodes are in the graph at training time (labels hidden). Model sees test structure. <strong>Inductive:</strong> generalize to new nodes/graphs not seen during training. GraphSAGE is designed for inductive settings.</p></div>
+</details>
+
+<details><summary>Why do CNNs not work directly on graphs?</summary>
+<div><p>CNNs assume a regular grid with fixed neighbor layout (4 or 8 neighbors). Graph neighborhoods vary in size and have no spatial order (no up/down/left/right). You need permutation-invariant aggregation over arbitrary neighborhoods.</p></div>
+</details>
+
+<details><summary>What does the smoothness energy tell us about oversmoothing?</summary>
+<div><p>As GNN layers stack, embeddings minimize Dirichlet energy $\mathbf{h}^T\mathbf{L}\mathbf{h}$  -  they become smooth across edges. Too many layers push all embeddings toward the same value (oversmoothing), making nodes indistinguishable.</p></div>
+</details>
+
+<details><summary>What real-world data is naturally a graph?</summary>
+<div><p>Social networks, citation networks, molecules, knowledge graphs, road networks, protein interaction networks, user-item recommendation graphs, supply chains, fraud rings, and document hyperlink networks.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

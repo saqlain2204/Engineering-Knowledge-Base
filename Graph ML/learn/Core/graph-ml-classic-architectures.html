@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Classic GNN Architectures | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Classic Architectures</p>
+  </nav>
+  <h1>Classic GNN Architectures</h1>
+  <p>GCN, GraphSAGE, GAT, GIN, and MPNN  -  the models you must understand cold. Math, intuition, code, and when to use each.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#gcn">GCN  -  Graph Convolutional Network</a></li>
+    <li><a href="#graphsage">GraphSAGE</a></li>
+    <li><a href="#gat">GAT  -  Graph Attention Network</a></li>
+    <li><a href="#gin">GIN  -  Graph Isomorphism Network</a></li>
+    <li><a href="#mpnn">MPNN</a></li>
+    <li><a href="#comparison">Comparison Table</a></li>
+    <li><a href="#code">Full Training Example</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="gcn">
+    <h2>1. GCN  -  Graph Convolutional Network</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1609.02907" rel="noopener noreferrer">Kipf &amp; Welling, Semi-Supervised Classification with GCN (2017)</a></small></p>
+
+    <h3>Update rule</h3>
+    $$\mathbf{h}_i^{(l+1)} = \sigma\left(\sum_{j \in \mathcal{N}(i) \cup \{i\}} \frac{1}{\sqrt{d_i d_j}} \mathbf{h}_j^{(l)} \mathbf{W}^{(l)}\right)$$
+
+    <h3>Derivation intuition</h3>
+    <p>GCN is a first-order approximation of spectral graph convolution (ChebNet with $K=1$). The factor $\frac{1}{\sqrt{d_i d_j}}$ prevents high-degree nodes from dominating the sum.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Each node replaces itself with a weighted average of its neighbors' embeddings (plus itself), then applies a linear layer. Like a CNN's local filter, but on arbitrary graphs.
+    </div>
+
+    <h3>Pros and cons</h3>
+    <ul>
+      <li><strong>Pros:</strong> Simple, fast, strong baseline on homophilous graphs (Cora, Citeseer)</li>
+      <li><strong>Cons:</strong> Fixed aggregation weights (no learning which neighbor matters), transductive by default, weak on heterophily</li>
+    </ul>
+
+    <pre><code>from torch_geometric.nn import GCNConv
+
+class GCN(torch.nn.Module):
+    def __init__(self, in_dim, hidden, out_dim):
+        super().__init__()
+        self.conv1 = GCNConv(in_dim, hidden)
+        self.conv2 = GCNConv(hidden, out_dim)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index).relu()
+        x = F.dropout(x, 0.5, training=self.training)
+        return self.conv2(x, edge_index)</code></pre>
+  </section>
+
+  <section id="graphsage">
+    <h2>2. GraphSAGE</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1706.02216" rel="noopener noreferrer">Hamilton, Ying, Leskovec  -  Inductive Representation Learning on Large Graphs (2017)</a></small></p>
+
+    <h3>Update rule</h3>
+    $$\mathbf{h}_i^{(l+1)} = \sigma\left(\mathbf{W}^{(l)} \cdot \text{CONCAT}\left(\mathbf{h}_i^{(l)}, \text{AGG}\left(\{\mathbf{h}_j^{(l)} : j \in \mathcal{N}(i)\}\right)\right)\right)$$
+
+    <h3>Aggregators</h3>
+    <ul>
+      <li><strong>Mean:</strong> $\frac{1}{|\mathcal{N}(i)|}\sum_{j} \mathbf{h}_j$</li>
+      <li><strong>Max:</strong> element-wise max over neighbors</li>
+      <li><strong>LSTM:</strong> run LSTM over random permutations of neighbors (not strictly permutation invariant but works)</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>Key idea:</strong> GraphSAGE is <strong>inductive</strong>  -  it learns a function to generate embeddings for unseen nodes using only their features and local neighborhood. Sample a fixed number of neighbors for scalability.
+    </div>
+
+    <h3>When to use</h3>
+    <p>Large graphs, inductive settings, production systems where new nodes arrive daily (Pinterest, Uber Eats recommendations).</p>
+
+    <pre><code>from torch_geometric.nn import SAGEConv
+
+class GraphSAGE(torch.nn.Module):
+    def __init__(self, in_dim, hidden, out_dim):
+        super().__init__()
+        self.conv1 = SAGEConv(in_dim, hidden)
+        self.conv2 = SAGEConv(hidden, out_dim)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index).relu()
+        return self.conv2(x, edge_index)</code></pre>
+  </section>
+
+  <section id="gat">
+    <h2>3. GAT  -  Graph Attention Network</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1710.10903" rel="noopener noreferrer">Veličković et al.  -  Graph Attention Networks (2018)</a></small></p>
+
+    <h3>Attention coefficient</h3>
+    $$e_{ij} = \text{LeakyReLU}\left(\vec{a}^T [\mathbf{W}\mathbf{h}_i \| \mathbf{W}\mathbf{h}_j]\right)$$
+    $$\alpha_{ij} = \frac{\exp(e_{ij})}{\sum_{k \in \mathcal{N}(i)} \exp(e_{ik})}$$
+
+    <h3>Update</h3>
+    $$\mathbf{h}_i^{(l+1)} = \sigma\left(\sum_{j \in \mathcal{N}(i)} \alpha_{ij} \mathbf{W}\mathbf{h}_j^{(l)}\right)$$
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Not all neighbors matter equally. GAT learns attention weights  -  like Transformer attention but only over graph neighbors (sparse attention).
+    </div>
+
+    <h3>Multi-head attention</h3>
+    <p>Run $K$ independent attention heads, concatenate (or average) outputs  -  same idea as Transformer multi-head.</p>
+
+    <h3>When to use</h3>
+    <p>When neighbors are heterogeneous in importance. Slightly more expensive than GCN but often more accurate.</p>
+
+    <pre><code>from torch_geometric.nn import GATConv
+
+class GAT(torch.nn.Module):
+    def __init__(self, in_dim, hidden, out_dim, heads=4):
+        super().__init__()
+        self.conv1 = GATConv(in_dim, hidden, heads=heads, dropout=0.6)
+        self.conv2 = GATConv(hidden * heads, out_dim, heads=1, concat=False)
+
+    def forward(self, x, edge_index):
+        x = F.elu(self.conv1(x, edge_index))
+        return self.conv2(x, edge_index)</code></pre>
+  </section>
+
+  <section id="gin">
+    <h2>4. GIN  -  Graph Isomorphism Network</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1810.00826" rel="noopener noreferrer">Xu et al.  -  How Powerful are Graph Neural Networks? (2019)</a></small></p>
+
+    <h3>Update rule</h3>
+    $$\mathbf{h}_i^{(l+1)} = \text{MLP}^{(l)}\left((1 + \epsilon^{(l)}) \cdot \mathbf{h}_i^{(l)} + \sum_{j \in \mathcal{N}(i)} \mathbf{h}_j^{(l)}\right)$$
+
+    <h3>Connection to Weisfeiler-Lehman (WL) test</h3>
+    <p>The 1-WL test distinguishes graphs by repeatedly replacing each node's label with a hash of its own label + sorted neighbor labels. GIN with sum aggregation + injective MLP matches the power of 1-WL  -  the strongest expressiveness among standard MPNNs.</p>
+
+    <div class="callout callout-derivation">
+      <strong>Why sum, not mean?</strong> Mean loses information about neighborhood size. Sum + MLP can distinguish different multiset structures. Xu et al. prove sum is the right aggregator for maximum expressiveness.
+    </div>
+
+    <h3>When to use</h3>
+    <p>Graph classification (molecules, proteins), when structural discrimination matters. State-of-the-art on many graph-level benchmarks.</p>
+
+    <pre><code>from torch_geometric.nn import GINConv
+
+class GIN(torch.nn.Module):
+    def __init__(self, in_dim, hidden, out_dim):
+        super().__init__()
+        nn1 = torch.nn.Sequential(torch.nn.Linear(in_dim, hidden), torch.nn.ReLU(),
+                                  torch.nn.Linear(hidden, hidden))
+        nn2 = torch.nn.Sequential(torch.nn.Linear(hidden, hidden), torch.nn.ReLU(),
+                                  torch.nn.Linear(hidden, out_dim))
+        self.conv1 = GINConv(nn1)
+        self.conv2 = GINConv(nn2)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index).relu()
+        return self.conv2(x, edge_index)</code></pre>
+  </section>
+
+  <section id="mpnn">
+    <h2>5. MPNN</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1704.01212" rel="noopener noreferrer">Gilmer et al.  -  Neural Message Passing for Quantum Chemistry (2017)</a></small></p>
+    <p>MPNN specializes message passing for molecules:</p>
+    $$\mathbf{m}_{ij} = \mathbf{M}(\mathbf{h}_i, \mathbf{h}_j, \mathbf{e}_{ij}) \quad \mathbf{h}_i' = \mathbf{U}(\mathbf{h}_i, \sum_j \mathbf{m}_{ij})$$
+    <p>Edge features (bond type, distance) are first-class citizens. This design powers molecular property prediction  -  atoms are nodes, bonds are edges with rich features.</p>
+  </section>
+
+  <section id="comparison">
+    <h2>6. Comparison Table</h2>
+    <table>
+      <thead><tr><th>Model</th><th>Aggregation</th><th>Inductive</th><th>Edge features</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td>GCN</td><td>Normalized sum</td><td>Limited</td><td>No (default)</td><td>Homophilous node classification baseline</td></tr>
+        <tr><td>GraphSAGE</td><td>Mean/max/LSTM</td><td>Yes</td><td>Limited</td><td>Large-scale inductive</td></tr>
+        <tr><td>GAT</td><td>Attention-weighted</td><td>Yes</td><td>With extension</td><td>Variable neighbor importance</td></tr>
+        <tr><td>GIN</td><td>Sum + MLP</td><td>Yes</td><td>With extension</td><td>Graph classification, expressiveness</td></tr>
+        <tr><td>MPNN</td><td>Sum + edge msgs</td><td>Yes</td><td>Yes</td><td>Molecules, edge-rich graphs</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="code">
+    <h2>7. Full Training Example</h2>
+    <pre><code># Pick GAT for Cora  -  swap GATConv for GCNConv/SAGEConv/GINConv
+model = GAT(dataset.num_features, 8, dataset.num_classes, heads=8)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=5e-4)
+
+def train():
+    model.train()
+    optimizer.zero_grad()
+    out = model(data.x, data.edge_index)
+    loss = F.cross_entropy(out[data.train_mask], data.y[data.train_mask])
+    loss.backward()
+    optimizer.step()
+    return loss.item()
+
+@torch.no_grad()
+def test():
+    model.eval()
+    out = model(data.x, data.edge_index)
+    pred = out.argmax(dim=1)
+    acc = (pred[data.test_mask] == data.y[data.test_mask]).float().mean()
+    return acc.item()</code></pre>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-spectral-methods.html">Spectral Methods →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Advanced Docker | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Advanced Docker</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Advanced Docker</h1>
+  <p>Multi-stage builds, BuildKit, security, registries, CI/CD, and hardening. <a href="../../learn/Docker/docker-advanced.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Advanced Docker</h2>
+<p>Production-grade image building, security, and deployment patterns.</p>
+
+<details><summary>What are multi-stage builds and why use them?</summary>
+<div><p>A Dockerfile with multiple <code>FROM</code> statements defines separate build stages. Each stage has its own filesystem; you copy only the artifacts you need into the final stage with <code>COPY --from=&lt;stage&gt;</code>. This lets you use a full SDK image for compilation while shipping a minimal runtime image  -  excluding compilers, source code, and dev dependencies. The result is smaller images, a reduced attack surface, and faster deploys.</p></div>
+</details>
+
+<details><summary>How do you target a specific build stage?</summary>
+<div><p>Name stages with <code>FROM golang:1.22 AS builder</code> and reference them by name or index. Build only up to a stage with <code>docker build --target builder -t myapp:builder .</code>  -  useful for CI steps that need the compiled binary but not the final slim image. The default output is the <em>last</em> stage in the Dockerfile unless <code>--target</code> specifies otherwise.</p></div>
+</details>
+
+<details><summary>What is BuildKit and what advantages does it provide?</summary>
+<div>
+<ul>
+<li><strong>Parallel layer builds</strong>  -  independent stages and instructions run concurrently.</li>
+<li><strong>Build cache mounts</strong>  -  <code>RUN --mount=type=cache</code> persists package manager caches across builds without bloating the image.</li>
+<li><strong>Secret mounts</strong>  -  <code>RUN --mount=type=secret</code> passes credentials at build time without writing them into any layer.</li>
+<li><strong>SSH mounts</strong>  -  clone private repos during build without embedding keys.</li>
+<li><strong>Improved Dockerfile frontend</strong>  -  heredoc <code>RUN &lt;&lt;EOF</code> syntax, <code>COPY --link</code> for independent layers.</li>
+</ul>
+<p>Enable with <code>DOCKER_BUILDKIT=1</code> (default in modern Docker) or <code>docker buildx build</code>.</p>
+</div>
+</details>
+
+<details><summary>How do you pass build-time secrets safely with BuildKit?</summary>
+<div><p>Never put secrets in <code>ARG</code> or <code>ENV</code>  -  they end up in image history. Instead, use a secret mount:</p>
+<pre><code># syntax=docker/dockerfile:1
+RUN --mount=type=secret,id=npm_token \
+    NPM_TOKEN=$(cat /run/secrets/npm_token) npm ci</code></pre>
+<p>Pass the secret at build time: <code>docker build --secret id=npm_token,src=.npmrc .</code>. The secret file is mounted only for that <code>RUN</code> instruction and is never committed to a layer.</p></div>
+</details>
+
+<details><summary>How do you secure Docker images and the supply chain?</summary>
+<div>
+<ul>
+<li><strong>Scan images</strong> with Docker Scout, Trivy, or Grype to find CVEs in OS packages and application dependencies.</li>
+<li><strong>Use minimal base images</strong> (distroless, Alpine, slim variants) to reduce the attack surface.</li>
+<li><strong>Pin base images by digest</strong> and rebuild regularly to pick up security patches.</li>
+<li><strong>Run as non-root</strong>  -  set <code>USER</code> in the Dockerfile and avoid <code>--privileged</code>.</li>
+<li><strong>Generate SBOMs</strong> (Software Bill of Materials) for auditability: <code>docker scout sbom</code> or <code>syft</code>.</li>
+<li><strong>Sign images</strong> with Sigstore/cosign or Docker Content Trust for tamper verification.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is the difference between a public registry, a private registry, and a mirror?</summary>
+<div>
+<ul>
+<li><strong>Public registry</strong> (Docker Hub, GHCR)  -  hosts images accessible to anyone (or scoped to an org).</li>
+<li><strong>Private registry</strong> (<code>registry:2</code> self-hosted, ECR, ACR, GCR)  -  stores proprietary images behind authentication; required for internal apps and compliance.</li>
+<li><strong>Registry mirror / pull-through cache</strong>  -  proxies requests to an upstream registry, caching layers locally to speed pulls and reduce rate-limit hits.</li>
+</ul>
+<p>Authenticate with <code>docker login</code>; CI pipelines use short-lived tokens or OIDC rather than long-lived passwords.</p>
+</div>
+</details>
+
+<details><summary>How do you integrate Docker into a CI/CD pipeline effectively?</summary>
+<div>
+<ul>
+<li>Use <strong>multi-stage builds</strong> so CI produces the same artifact shape as local dev.</li>
+<li>Enable <strong>BuildKit cache</strong> in CI (<code>--cache-from</code> / <code>--cache-to</code> with a registry or GitHub Actions cache) to avoid rebuilding every layer from scratch.</li>
+<li><strong>Scan</strong> the built image and fail the pipeline on critical CVEs.</li>
+<li><strong>Push by digest</strong> and deploy the digest, not a mutable tag.</li>
+<li>Use <strong>buildx</strong> for multi-platform images (<code>--platform linux/amd64,linux/arm64</code>) when deploying to heterogeneous clusters.</li>
+<li>Keep Dockerfiles in the repo; treat image build as a first-class build artifact alongside unit tests.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is rootless Docker and what are its trade-offs?</summary>
+<div><p>Rootless mode runs the Docker daemon and containers as an unprivileged user, using user namespaces to map container root (UID 0) to a high, unprivileged host UID. This limits the blast radius if a container escape occurs  -  the attacker does not get host root. Trade-offs: some features are unavailable or restricted (e.g., certain cgroup configurations, <code>--net=host</code> on some setups), and overlay networking uses slirp4netns which can be slower than rootful bridge networking. Ideal for developer workstations and security-sensitive environments.</p></div>
+</details>
+
+<details><summary>How do you set CPU and memory limits on containers?</summary>
+<div>
+<ul>
+<li><code>docker run --memory 512m --cpus 1.5</code> sets hard memory and CPU limits via cgroups v2.</li>
+<li><code>--memory-reservation</code> sets a soft limit; the kernel reclaims under pressure.</li>
+<li><code>--cpu-shares</code> (relative weight) and <code>--cpuset-cpus</code> (pin to specific cores) offer finer control.</li>
+<li>In Compose: <code>deploy.resources.limits</code> or the shorthand <code>mem_limit</code> / <code>cpus</code> fields.</li>
+</ul>
+<p>Without limits, a single runaway container can exhaust host memory and trigger the OOM killer, affecting every workload on the node.</p>
+</div>
+</details>
+
+<details><summary>What happens when a container exceeds its memory limit?</summary>
+<div><p>When a container's memory usage hits the cgroup limit, the Linux OOM killer terminates processes inside that container's cgroup  -  typically the main process, which causes the container to exit (often with code 137 = 128 + SIGKILL 9). Docker does not swap by default. Monitor with <code>docker stats</code> and set limits based on observed usage plus headroom. Java and other runtimes need their internal heap tuned to fit <em>within</em> the container limit, not the host's total RAM.</p></div>
+</details>
+
+<details><summary>What is <code>docker buildx</code> and when do you need it over plain <code>docker build</code>?</summary>
+<div><p>Buildx is Docker's extended build CLI built on BuildKit. Use it when you need <strong>multi-platform builds</strong> (arm64 + amd64 from a single CI job), <strong>remote builders</strong> (build on a more powerful machine or in the cloud), advanced <strong>cache exporters</strong> (registry-backed, inline, or local), or <strong>compose build integration</strong> with bake files. For simple single-platform local builds, <code>docker build</code> (which uses BuildKit under the hood) is sufficient.</p></div>
+</details>
+
+<details><summary>How do you reduce image size beyond multi-stage builds?</summary>
+<div>
+<ul>
+<li>Choose <strong>distroless</strong> or <strong>Alpine/slim</strong> bases instead of full OS images.</li>
+<li>Combine <code>RUN</code> instructions to reduce layer count and remove package manager caches in the same layer (<code>apt-get clean &amp;&amp; rm -rf /var/lib/apt/lists/*</code>).</li>
+<li>Use <code>.dockerignore</code> aggressively  -  every copied file can invalidate cache and bloat context upload.</li>
+<li>Install only production dependencies (<code>npm ci --omit=dev</code>, <code>pip install --no-cache-dir</code>).</li>
+<li>Squash is rarely needed if multi-stage builds are done correctly; prefer stage separation over <code>docker build --squash</code>.</li>
+</ul>
+</div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Heterogeneous Graphs | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Heterogeneous Graphs</p>
+  </nav>
+  <h1>Heterogeneous &amp; Knowledge Graphs</h1>
+  <p>Multiple node and edge types, metapaths, R-GCN, HGT, and link prediction on knowledge graphs.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#hetero">Heterogeneous Graphs</a></li>
+    <li><a href="#metapaths">Metapaths</a></li>
+    <li><a href="#rgcn">R-GCN</a></li>
+    <li><a href="#hgt">HGT</a></li>
+    <li><a href="#kg-embeddings">Knowledge Graph Embeddings</a></li>
+    <li><a href="#link-pred">Link Prediction</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="hetero">
+    <h2>1. Heterogeneous Graphs</h2>
+    <p>A <strong>heterogeneous graph</strong> has multiple node types and edge types. Example: Amazon graph with users, products, brands; edges: purchase, view, brand_of.</p>
+    <p>Homogeneous GNNs treat all nodes the same  -  wrong when types have different semantics and dimensions.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> A "purchase" edge and a "friend" edge mean different things. You need type-specific message functions.
+    </div>
+  </section>
+
+  <section id="metapaths">
+    <h2>2. Metapaths</h2>
+    <p>A <strong>metapath</strong> is a typed path schema: User → Purchase → Product → Brand. It defines semantic relationships between same-type nodes (two users who bought from same brand).</p>
+    <p><strong>HAN (Hu et al.):</strong> attention over metapath-based neighbor groups. <strong>MAGNN:</strong> embed metapath instances with intra- and inter-metapath attention.</p>
+  </section>
+
+  <section id="rgcn">
+    <h2>3. R-GCN</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1703.00356" rel="noopener noreferrer">Schlichtkrull et al.  -  Modeling Relational Data with GCNs (2018)</a></small></p>
+    $$\mathbf{h}_i^{(l+1)} = \sigma\left(\sum_{r \in \mathcal{R}} \sum_{j \in \mathcal{N}_r(i)} \frac{1}{c_{i,r}} \mathbf{W}_r^{(l)} \mathbf{h}_j^{(l)} + \mathbf{W}_0^{(l)}\mathbf{h}_i^{(l)}\right)$$
+    <p>Separate weight matrix $\mathbf{W}_r$ per relation type $r$. $c_{i,r}$ normalizes by neighborhood size. Basis or block-diagonal decomposition reduces parameters when many relation types exist.</p>
+  </section>
+
+  <section id="hgt">
+    <h2>4. HGT</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/2003.01332" rel="noopener noreferrer">Hu et al.  -  Heterogeneous Graph Transformer (2020)</a></small></p>
+    <p>Type-specific attention: meta-relation triple $(s, r, t)$ defines how source type $s$ sends message via relation $r$ to target type $t$. HGT scales to billion-edge graphs (Microsoft Academic Graph).</p>
+  </section>
+
+  <section id="kg-embeddings">
+    <h2>5. Knowledge Graph Embeddings</h2>
+    <p>Knowledge graphs store facts as triples $(h, r, t)$  -  head entity, relation, tail entity.</p>
+    <ul>
+      <li><strong>TransE:</strong> $\mathbf{h} + \mathbf{r} \approx \mathbf{t}$ (simple, fails on 1-to-N relations)</li>
+      <li><strong>DistMult:</strong> $\langle \mathbf{h}, \mathbf{r}, \mathbf{t} \rangle$ score (bilinear, symmetric)</li>
+      <li><strong>ComplEx:</strong> complex-valued embeddings (handles asymmetric relations)</li>
+      <li><strong>R-GCN + embeddings:</strong> combine structural GNN with translational scoring for link prediction</li>
+    </ul>
+  </section>
+
+  <section id="link-pred">
+    <h2>6. Link Prediction</h2>
+    <p>Score candidate edge $(i, j)$:</p>
+    <ul>
+      <li><strong>Decoder on embeddings:</strong> $\sigma(\mathbf{h}_i^T \mathbf{W} \mathbf{h}_j)$</li>
+      <li><strong>DistMult/TransE score</strong> on final GNN embeddings</li>
+      <li><strong>Negative sampling:</strong> corrupt true triples, train with BCE or margin ranking loss</li>
+    </ul>
+    <p>Metrics: <strong>MRR</strong>, <strong>Hits@K</strong>. Critical for recommendation and KG completion.</p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-temporal-dynamic-graphs.html">Temporal &amp; Dynamic Graphs →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

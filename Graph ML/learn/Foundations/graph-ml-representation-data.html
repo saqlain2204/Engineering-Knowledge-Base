@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Representation &amp; Data Preparation | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Representation &amp; Data Preparation</p>
+  </nav>
+  <h1>Representation &amp; Data Preparation</h1>
+  <p>How to turn raw data into a graph, engineer features, split correctly, and load into PyTorch Geometric  -  without leaking labels.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#feature-types">Node, Edge, and Graph Features</a></li>
+    <li><a href="#building-graphs">Building Graphs from Raw Data</a></li>
+    <li><a href="#graph-types">Graph Types</a></li>
+    <li><a href="#splits">Train/Val/Test Splits  -  The Right Way</a></li>
+    <li><a href="#leakage">Data Leakage Traps</a></li>
+    <li><a href="#pyg">PyTorch Geometric Basics</a></li>
+    <li><a href="#preprocessing">Preprocessing Checklist</a></li>
+    <li><a href="#datasets">Common Benchmark Datasets</a></li>
+    <li><a href="#full-pipeline">Full Pipeline Code</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="feature-types">
+    <h2>1. Node, Edge, and Graph Features</h2>
+    <h3>Node features $\mathbf{x}_i$</h3>
+    <ul>
+      <li><strong>Raw attributes:</strong> age, price, atom symbol one-hot</li>
+      <li><strong>Text embeddings:</strong> BERT/LLM encoding of node description (common in LLM+graph systems)</li>
+      <li><strong>Structural features:</strong> degree, clustering coefficient, PageRank score</li>
+      <li><strong>Positional:</strong> Laplacian eigenvector PE (used in graph transformers)</li>
+    </ul>
+    <h3>Edge features $\mathbf{e}_{ij}$</h3>
+    <ul>
+      <li>Relation type (one-hot), bond order, distance, timestamp, edge weight</li>
+    </ul>
+    <h3>Graph-level features</h3>
+    <p>For graph classification, you either:</p>
+    <ol>
+      <li>Provide a global feature vector per graph, or</li>
+      <li>Learn a graph embedding via <strong>readout</strong> (sum/mean/max over node embeddings)</li>
+    </ol>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Features tell the model what each node "is." Edges tell it "who talks to whom." GNNs combine both  -  features alone miss structure; structure alone misses content.
+    </div>
+  </section>
+
+  <section id="building-graphs">
+    <h2>2. Building Graphs from Raw Data</h2>
+    <table>
+      <thead><tr><th>Source</th><th>Nodes</th><th>Edges</th><th>Features</th></tr></thead>
+      <tbody>
+        <tr><td>Social network</td><td>Users</td><td>Follow/friend</td><td>Profile, posts embedding</td></tr>
+        <tr><td>Citations</td><td>Papers</td><td>Cites</td><td>TF-IDF, title embedding</td></tr>
+        <tr><td>E-commerce</td><td>Users + items</td><td>Purchase/click</td><td>User/item embeddings (bipartite)</td></tr>
+        <tr><td>Molecules</td><td>Atoms</td><td>Bonds</td><td>Atom type, charge</td></tr>
+        <tr><td>Knowledge base</td><td>Entities</td><td>Relations</td><td>Text description, type</td></tr>
+        <tr><td>Code repo</td><td>Functions/classes</td><td>Call/import</td><td>Code embedding</td></tr>
+      </tbody>
+    </table>
+    <h3>k-NN graphs from tabular data</h3>
+    <p>Sometimes you only have a feature table. Connect each point to its $k$ nearest neighbors in feature space. <strong>Warning:</strong> this invents structure  -  only do it if locality in feature space is meaningful.</p>
+    <h3>Threshold graphs</h3>
+    <p>Connect nodes if similarity $> \tau$. Sensitive to $\tau$  -  too low creates noise; too high disconnects the graph.</p>
+  </section>
+
+  <section id="graph-types">
+    <h2>3. Graph Types</h2>
+    <ul>
+      <li><strong>Homogeneous:</strong> one node type, one edge type (Cora citations)</li>
+      <li><strong>Heterogeneous:</strong> multiple node/edge types (Amazon: users, products, brands)</li>
+      <li><strong>Bipartite:</strong> two node sets, edges only across sets (users ↔ items)</li>
+      <li><strong>Hypergraph:</strong> edges connect more than two nodes (co-authorship of 3+ authors)</li>
+      <li><strong>Multigraph:</strong> multiple edges between same pair</li>
+    </ul>
+    <p>Heterogeneous graphs need special models  -  see <a href="../Advanced/graph-ml-heterogeneous-graphs.html">Heterogeneous Graphs</a>.</p>
+  </section>
+
+  <section id="splits">
+    <h2>4. Train/Val/Test Splits  -  The Right Way</h2>
+    <h3>Node classification on one graph</h3>
+    <ul>
+      <li><strong>Random split:</strong> sample labeled nodes. OK for homophily + transductive (Cora-style).</li>
+      <li><strong>Stratified:</strong> keep class balance per split.</li>
+      <li><strong>Temporal split:</strong> train on past, test on future edges/nodes (critical for dynamic data).</li>
+    </ul>
+    <h3>Inductive node split</h3>
+    <p>Hold out entire subgraphs or nodes with all their edges removed from training graph. Model must generalize to unseen structure.</p>
+    <h3>Link prediction split</h3>
+    <p>Hide edges (positive samples). Train on remaining graph. Validate on held-out edges + sampled non-edges (negatives).</p>
+    <h3>Graph classification</h3>
+    <p>Split at <strong>graph level</strong>: 80% graphs train, 10% val, 10% test. Never split nodes within one molecule and put halves in different splits.</p>
+  </section>
+
+  <section id="leakage">
+    <h2>5. Data Leakage Traps</h2>
+    <div class="callout">
+      <strong>Leakage kills GNN papers.</strong> If test labels or test edges influence training embeddings, metrics are fake.
+    </div>
+    <ul>
+      <li><strong>Transductive training:</strong> test nodes are in the graph during message passing  -  this is valid for transductive setting but must be stated. Inductive evaluation must mask test nodes entirely.</li>
+      <li><strong>Link prediction:</strong> if you include test edges in the graph before prediction, you cheated.</li>
+      <li><strong>Normalization:</strong> computing global statistics (mean/std of features) using test nodes  -  compute on train only.</li>
+      <li><strong>Duplicate nodes:</strong> same entity appearing twice bridges train and test.</li>
+      <li><strong>Future information in temporal graphs:</strong> using tomorrow's edge to predict today.</li>
+    </ul>
+  </section>
+
+  <section id="pyg">
+    <h2>6. PyTorch Geometric Basics</h2>
+    <p>PyG stores edges in <code>edge_index</code> shape <code>[2, num_edges]</code>  -  COO format. Row 0 = source, row 1 = target.</p>
+    <pre><code>from torch_geometric.data import Data
+
+# 3 nodes, undirected edges 0-1, 1-2
+edge_index = torch.tensor([[0, 1, 1, 2],
+                           [1, 0, 2, 1]], dtype=torch.long)
+x = torch.tensor([[1,0], [0,1], [1,1]], dtype=torch.float)  # node features
+y = torch.tensor([0, 1, 0], dtype=torch.long)               # labels
+
+data = Data(x=x, edge_index=edge_index, y=y)
+data.num_nodes  # 3</code></pre>
+    <p><strong>DGL</strong> (Deep Graph Library) is an alternative  -  popular in industry, strong for heterogeneous and distributed graphs. PyG is more common in research. Concepts transfer.</p>
+  </section>
+
+  <section id="preprocessing">
+    <h2>7. Preprocessing Checklist</h2>
+    <ol>
+      <li>Remove self-loops if model does not expect them (or add them if GCN)</li>
+      <li>Make undirected edges bidirectional in <code>edge_index</code> (two directed entries)</li>
+      <li>Handle isolated nodes (degree 0)  -  add self-loop or remove</li>
+      <li>Normalize features: standardize or L2-normalize</li>
+      <li>For large graphs: use <code>NeighborLoader</code> for mini-batch sampling</li>
+      <li>Store masks: <code>train_mask</code>, <code>val_mask</code>, <code>test_mask</code> as boolean tensors</li>
+    </ol>
+  </section>
+
+  <section id="datasets">
+    <h2>8. Common Benchmark Datasets</h2>
+    <table>
+      <thead><tr><th>Dataset</th><th>Task</th><th>Nodes/Edges/Graphs</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Cora</td><td>Node cls</td><td>2.7K / 5.4K</td><td>Citation, 7 classes, homophily</td></tr>
+        <tr><td>PubMed</td><td>Node cls</td><td>19K / 44K</td><td>Biomedical citations</td></tr>
+        <tr><td>OGBN-Arxiv</td><td>Node cls</td><td>169K / 1.1M</td><td>Large, temporal split</td></tr>
+        <tr><td>OGBN-Products</td><td>Node cls</td><td>2.4M / 61M</td><td>Amazon co-purchase</td></tr>
+        <tr><td>OGBG-MolHIV</td><td>Graph cls</td><td>41K graphs</td><td>Molecule property</td></tr>
+        <tr><td>ZINC</td><td>Graph reg</td><td>12K graphs</td><td>Molecular solubility</td></tr>
+      </tbody>
+    </table>
+    <p>Use <a href="https://ogb.stanford.edu/" rel="noopener noreferrer">Open Graph Benchmark (OGB)</a> for fair comparison.</p>
+  </section>
+
+  <section id="full-pipeline">
+    <h2>9. Full Pipeline Code</h2>
+    <pre><code>from torch_geometric.datasets import Planetoid
+from torch_geometric.transforms import NormalizeFeatures
+import torch
+
+dataset = Planetoid(root='./data', name='Cora', transform=NormalizeFeatures())
+data = dataset[0]
+
+# Planetoid provides fixed masks  -  use them, don't invent random splits
+print(data.train_mask.sum(), data.val_mask.sum(), data.test_mask.sum())
+
+# Simple GCN training skeleton
+import torch.nn.functional as F
+from torch_geometric.nn import GCNConv
+
+class GCN(torch.nn.Module):
+    def __init__(self, in_dim, hidden, out_dim):
+        super().__init__()
+        self.conv1 = GCNConv(in_dim, hidden)
+        self.conv2 = GCNConv(hidden, out_dim)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index).relu()
+        x = F.dropout(x, p=0.5, training=self.training)
+        return self.conv2(x, edge_index)
+
+model = GCN(dataset.num_features, 16, dataset.num_classes)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+
+for epoch in range(200):
+    model.train()
+    optimizer.zero_grad()
+    out = model(data.x, data.edge_index)
+    loss = F.cross_entropy(out[data.train_mask], data.y[data.train_mask])
+    loss.backward()
+    optimizer.step()</code></pre>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="../Core/graph-ml-message-passing.html">Message Passing Framework →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

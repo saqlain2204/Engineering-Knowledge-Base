@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Deep GNNs | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Deep GNNs</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Deep GNNs &amp; Limitations</h1>
+  <p><a href="../../learn/Advanced/graph-ml-deep-gnns-limitations.html">Read learning notes</a>.</p>
+</header>
+<main><section>
+<h2>Deep GNNs</h2>
+<details><summary>What is oversmoothing?</summary>
+<div><p>Stacking many GNN layers makes all node embeddings converge to similar values. Mathematically, repeated low-pass filtering minimizes Dirichlet energy $\mathbf{h}^T\mathbf{L}\mathbf{h}$. Nodes become indistinguishable  -  classification fails.</p></div></details>
+<details><summary>What is over-squashing?</summary>
+<div><p>Information from distant nodes must pass through low-degree bottleneck edges, compressed into fixed-size vectors. Exponential information loss with distance. Fix: graph rewiring, virtual nodes, graph transformers, subgraph GNNs.</p></div></details>
+<details><summary>How does Jumping Knowledge help?</summary>
+<div><p>Concatenate or aggregate embeddings from all layers $\mathbf{h}_i^{(1)}, \ldots, \mathbf{h}_i^{(L)}$ so the final representation keeps both local (shallow) and global (deep) information instead of only the last layer.</p></div></details>
+<details><summary>What fixes work for training deeper GNNs?</summary>
+<div><p>Residual connections, Jumping Knowledge, PairNorm/GraphNorm, DropEdge regularization, and limiting depth to 2-4 layers on most graphs. Graph transformers for global context without deep MPNN.</p></div></details>
+<details><summary>How many GNN layers should you use?</summary>
+<div><p>Start with 2. Try 3-4 for molecules needing wider receptive fields. If validation drops with more layers, you hit oversmoothing. Match depth to the diameter of relevant structure, not "deeper is always better."</p></div></details>
+<details><summary>What GNN architectures handle heterophily?</summary>
+<div><p>H2GCN (separate ego and neighbor features), GPR-GNN (learnable signed hop weights), FAGCN (signed attention). Standard GCN assumes homophily and fails when neighbors have different labels.</p></div></details>
+<details><summary>What are subgraph GNNs and why use them?</summary>
+<div><p>NGNN, ESAN  -  operate on subgraphs around each node to exceed 1-WL expressiveness. Can distinguish graphs that standard MPNNs cannot. More compute but stronger discrimination.</p></div></details>
+</section></main>
+<footer><p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p></footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

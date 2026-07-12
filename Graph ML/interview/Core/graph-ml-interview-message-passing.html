@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Message Passing | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Message Passing</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Message Passing</h1>
+  <p><a href="../../learn/Core/graph-ml-message-passing.html">Read learning notes</a>.</p>
+</header>
+<main><section>
+<h2>Message Passing</h2>
+<details><summary>What are the three steps of MPNN?</summary>
+<div><p><strong>Message:</strong> $\mathbf{m}_{ij} = \phi(\mathbf{h}_i, \mathbf{h}_j, \mathbf{e}_{ij})$. <strong>Aggregate:</strong> $\bar{\mathbf{m}}_i = \bigoplus_{j\in\mathcal{N}(i)} \mathbf{m}_{ij}$ (sum/mean/max). <strong>Update:</strong> $\mathbf{h}_i' = \gamma(\mathbf{h}_i, \bar{\mathbf{m}}_i)$. All GNNs are special cases of this framework.</p></div></details>
+<details><summary>What is permutation equivariance?</summary>
+<div><p>$f(\mathbf{P}\mathbf{A}\mathbf{P}^T, \mathbf{P}\mathbf{X}) = \mathbf{P}f(\mathbf{A}, \mathbf{X})$. Reordering node IDs reorders outputs the same way. GNN layers must satisfy this  -  node identity should not depend on arbitrary indexing.</p></div></details>
+<details><summary>What is permutation invariance for graph-level tasks?</summary>
+<div><p>$g(\mathbf{P}\mathbf{A}\mathbf{P}^T, \mathbf{P}\mathbf{X}) = g(\mathbf{A}, \mathbf{X})$. Graph-level predictions must not change when nodes are relabeled. Achieved by symmetric readout (sum, mean, max over nodes).</p></div></details>
+<details><summary>Why must aggregation be symmetric?</summary>
+<div><p>Neighbors have no canonical order. Summing, averaging, or max-pooling over neighbors gives the same result regardless of neighbor ordering. LSTM aggregator over neighbors is common but technically order-dependent (random permutations used in practice).</p></div></details>
+<details><summary>What is READOUT in MPNN?</summary>
+<div><p>A permutation-invariant function mapping all node embeddings $\{\mathbf{h}_i\}$ to a single graph embedding $\mathbf{h}_G$ for graph classification/regression. Examples: sum, mean, max, attention pooling, Jumping Knowledge.</p></div></details>
+<details><summary>How does message passing relate to matrix multiplication?</summary>
+<div><p>$\mathbf{A}\mathbf{H}$ aggregates neighbor features in one step  -  each row $i$ sums (or averages) features of neighbors. GCN adds normalization and learnable $\mathbf{W}$: $\tilde{\mathbf{A}}\mathbf{H}\mathbf{W}$.</p></div></details>
+<details><summary>How do you batch multiple graphs in PyG?</summary>
+<div><p>Disjoint union: concatenate all nodes and edges, offset edge indices, add a <code>batch</code> vector indicating graph membership per node. PyG DataLoader handles this automatically.</p></div></details>
+<details><summary>What makes an aggregation injective?</summary>
+<div><p>Injective means different multisets of neighbor features produce different outputs. Sum + universal MLP (GIN) is injective. Mean is not  -  different counts with same mean collapse.</p></div></details>
+</section></main>
+<footer><p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p></footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

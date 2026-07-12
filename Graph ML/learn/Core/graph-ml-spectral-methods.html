@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Spectral Methods | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Spectral Methods</p>
+  </nav>
+  <h1>Spectral Graph Neural Networks</h1>
+  <p>Where GCN really comes from  -  graph Fourier transform, spectral convolution, ChebNet, and why spatial methods won in practice.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#fourier">Graph Fourier Transform</a></li>
+    <li><a href="#spectral-conv">Spectral Convolution</a></li>
+    <li><a href="#chebnet">ChebNet</a></li>
+    <li><a href="#gcn-link">GCN as First-Order ChebNet</a></li>
+    <li><a href="#tradeoffs">Spectral vs Spatial</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="fourier">
+    <h2>1. Graph Fourier Transform</h2>
+    <p>On a regular grid, the Fourier transform uses sine/cosine eigenfunctions of the Laplacian. On a graph, the eigenvectors of the graph Laplacian $\mathbf{L}$ play the same role.</p>
+    <p>Eigendecomposition: $\mathbf{L} = \mathbf{U} \mathbf{\Lambda} \mathbf{U}^T$ where $\mathbf{U}$ are eigenvectors, $\mathbf{\Lambda}$ diagonal eigenvalues.</p>
+    <p><strong>Graph Fourier transform:</strong> $\hat{\mathbf{f}} = \mathbf{U}^T \mathbf{f}$. <strong>Inverse:</strong> $\mathbf{f} = \mathbf{U}\hat{\mathbf{f}}$.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Low eigenvalue eigenvectors vary slowly across edges (smooth). High eigenvalue eigenvectors oscillate rapidly (local detail). Filtering = keeping some frequencies, dropping others.
+    </div>
+  </section>
+
+  <section id="spectral-conv">
+    <h2>2. Spectral Convolution</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1312.6203" rel="noopener noreferrer">Bruna et al.  -  Spectral Networks (2014)</a></small></p>
+    <p>Convolution theorem on graphs: convolution in spatial domain = multiplication in spectral domain.</p>
+    $$\mathbf{g} * \mathbf{f} = \mathbf{U}\left((\mathbf{U}^T\mathbf{g}) \odot (\mathbf{U}^T\mathbf{f})\right)$$
+    <p>Learn a filter $\mathbf{g}_\theta = \text{diag}(\theta)$ in spectral domain:</p>
+    $$\mathbf{h}^{(l+1)} = \sigma\left(\mathbf{U}\, \mathbf{g}_\theta\, \mathbf{U}^T \mathbf{h}^{(l)}\right)$$
+    <p><strong>Problem:</strong> $\mathbf{U}$ is $O(n^3)$ to compute, not localized (one filter taps all nodes), and not transferable across graphs (different $\mathbf{U}$ per graph).</p>
+  </section>
+
+  <section id="chebnet">
+    <h2>3. ChebNet</h2>
+    <p class="refer-link"><small>Paper: <a href="https://arxiv.org/abs/1606.09375" rel="noopener noreferrer">Defferrard et al.  -  Convolutional Neural Networks on Graphs with Fast Localized Filtering (2016)</a></small></p>
+    <p>Approximate spectral filter with Chebyshev polynomials of order $K$:</p>
+    $$\mathbf{g}_\theta * \mathbf{f} \approx \sum_{k=0}^{K} \theta_k T_k(\tilde{\mathbf{L}})\mathbf{f}$$
+    <p>where $\tilde{\mathbf{L}} = 2\mathbf{L}/\lambda_{\max} - \mathbf{I}$ and $T_k$ are Chebyshev polynomials defined by $T_0(x)=1$, $T_1(x)=x$, $T_{k}(x) = 2xT_{k-1}(x) - T_{k-2}(x)$.</p>
+    <div class="callout callout-intuition">
+      <strong>Key win:</strong> $T_k(\tilde{\mathbf{L}})\mathbf{f}$ only mixes nodes $k$ hops away  -  localized filters without computing $\mathbf{U}$. Complexity scales with edges, not $n^2$.
+    </div>
+  </section>
+
+  <section id="gcn-link">
+    <h2>4. GCN as First-Order ChebNet</h2>
+    <p>Kipf &amp; Welling set $K=1$, $\lambda_{\max} \approx 2$, and added renormalization trick:</p>
+    $$\mathbf{H}^{(l+1)} = \sigma\left(\tilde{\mathbf{D}}^{-1/2}\tilde{\mathbf{A}}\tilde{\mathbf{D}}^{-1/2} \mathbf{H}^{(l)} \mathbf{W}^{(l)}\right)$$
+    <p>This is the GCN you use daily  -  a simplified, fast spectral approximation.</p>
+  </section>
+
+  <section id="tradeoffs">
+    <h2>5. Spectral vs Spatial</h2>
+    <table>
+      <thead><tr><th></th><th>Spectral (ChebNet)</th><th>Spatial (GCN, GAT, GIN)</th></tr></thead>
+      <tbody>
+        <tr><td>Localization</td><td>$K$-hop via polynomial order</td><td>Explicit neighbor aggregation</td></tr>
+        <tr><td>Transferability</td><td>Same polynomial across graphs</td><td>Natural across graphs</td></tr>
+        <tr><td>Speed</td><td>Good with sparse ops</td><td>Good, more flexible</td></tr>
+        <tr><td>Adoption</td><td>Research heritage</td><td>Industry default</td></tr>
+      </tbody>
+    </table>
+    <p>Modern graph transformers use Laplacian eigenvectors as <strong>positional encodings</strong>  -  spectral ideas live on in spatial models.</p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="../Advanced/graph-ml-deep-gnns-limitations.html">Deep GNNs &amp; Limitations →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

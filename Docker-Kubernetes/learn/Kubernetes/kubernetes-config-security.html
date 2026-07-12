@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Config, Secrets &amp; Security | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Kubernetes ConfigMaps, Secrets, RBAC, ServiceAccounts, Pod Security Standards, OPA Gatekeeper, and security hardening.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Config, Secrets &amp; Security</p>
+  </nav>
+  <h1>Config, Secrets &amp; Security</h1>
+  <p>Inject configuration safely, control who can do what, and harden Pods against compromise.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#configmaps">ConfigMaps</a></li>
+    <li><a href="#secrets">Secrets</a></li>
+    <li><a href="#serviceaccounts">ServiceAccounts</a></li>
+    <li><a href="#rbac">RBAC</a></li>
+    <li><a href="#pod-security">Pod Security Standards</a></li>
+    <li><a href="#admission">Admission Controllers &amp; OPA</a></li>
+    <li><a href="#hardening">Pod Hardening Checklist</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="configmaps">
+    <h2>1. ConfigMaps</h2>
+    <p><strong>ConfigMaps</strong> store non-sensitive configuration as key-value pairs. They can be mounted as files or injected as environment variables.</p>
+    <pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: production
+data:
+  APP_ENV: production
+  LOG_LEVEL: info
+  config.yaml: |
+    server:
+      port: 8080
+      timeout: 30s
+    database:
+      pool_size: 20</code></pre>
+
+    <h3>Mount as environment variables</h3>
+    <pre><code>env:
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
+        name: app-config
+        key: APP_ENV
+envFrom:
+  - configMapRef:
+      name: app-config   # all keys become env vars</code></pre>
+
+    <h3>Mount as files</h3>
+    <pre><code>volumeMounts:
+  - name: config
+    mountPath: /etc/app/config.yaml
+    subPath: config.yaml
+    readOnly: true
+volumes:
+  - name: config
+    configMap:
+      name: app-config</code></pre>
+    <div class="callout">
+      <strong>Hot reload:</strong> ConfigMap updates do not automatically restart Pods. Use a sidecar (Reloader, Stakater Reloader) or roll out a new Deployment revision to pick up changes.
+    </div>
+  </section>
+
+  <section id="secrets">
+    <h2>2. Secrets</h2>
+    <p><strong>Secrets</strong> store sensitive data (passwords, tokens, TLS certs). They are base64-encoded in etcd  -  <strong>not encrypted by default</strong>. Enable encryption at rest for production.</p>
+    <pre><code>apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+stringData:          # preferred  -  Kubernetes encodes to base64 for you
+  DB_USER: appuser
+  DB_PASSWORD: s3cr3tP@ss
+  DB_HOST: postgres.production.svc.cluster.local</code></pre>
+
+    <h3>Secret types</h3>
+    <table>
+      <thead><tr><th>Type</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>Opaque</code></td><td>Arbitrary user-defined data</td></tr>
+        <tr><td><code>kubernetes.io/tls</code></td><td>TLS cert + key (<code>tls.crt</code>, <code>tls.key</code>)</td></tr>
+        <tr><td><code>kubernetes.io/dockerconfigjson</code></td><td>Docker registry credentials</td></tr>
+        <tr><td><code>kubernetes.io/service-account-token</code></td><td>Legacy SA token (avoid; use TokenRequest API)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Encryption at rest</h3>
+    <pre><code># /etc/kubernetes/encryption-config.yaml
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+    providers:
+      - aescbc:
+          keys:
+            - name: key1
+              secret: &lt;base64-encoded-32-byte-key&gt;
+      - identity: {}   # fallback for unencrypted secrets</code></pre>
+
+    <h3>External secret management</h3>
+    <p>For production, prefer external secret stores integrated via:</p>
+    <ul>
+      <li><strong>External Secrets Operator</strong>  -  syncs AWS Secrets Manager, GCP Secret Manager, Vault into K8s Secrets</li>
+      <li><strong>Sealed Secrets</strong>  -  encrypt Secrets for safe storage in Git</li>
+      <li><strong>HashiCorp Vault</strong>  -  inject secrets via Vault Agent sidecar or CSI driver</li>
+    </ul>
+    <pre><code># External Secrets Operator example
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: db-credentials
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: db-credentials
+  data:
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: production/db
+        property: password</code></pre>
+  </section>
+
+  <section id="serviceaccounts">
+    <h2>3. ServiceAccounts</h2>
+    <p>Every Pod runs as a <strong>ServiceAccount</strong>. It provides an identity for in-cluster API access and (optionally) cloud IAM via workload identity.</p>
+    <pre><code>apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-sa
+  namespace: production
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/api-pod-role</code></pre>
+    <pre><code>spec:
+  serviceAccountName: api-sa
+  automountServiceAccountToken: false   # disable if Pod doesn't need K8s API access</code></pre>
+    <div class="callout">
+      <strong>Default ServiceAccount:</strong> Every namespace has a <code>default</code> ServiceAccount. Never run production workloads with it  -  create dedicated ServiceAccounts with minimal permissions.
+    </div>
+  </section>
+
+  <section id="rbac">
+    <h2>4. RBAC</h2>
+    <p><strong>Role-Based Access Control</strong> restricts who (subjects) can perform what actions (verbs) on which resources.</p>
+    <pre><code>┌──────────────┐  bound by  ┌──────────────┐  grants  ┌──────────────┐
+│    Subject   │ ─────────▶ │ RoleBinding  │ ───────▶ │     Role     │
+│ (User/Group/ │            │              │          │ (permissions)│
+│  ServiceAcct)│            └──────────────┘          └──────────────┘
+└──────────────┘
+# ClusterRole + ClusterRoleBinding = cluster-wide
+# Role + RoleBinding = namespace-scoped</code></pre>
+
+    <h3>Role (namespace-scoped)</h3>
+    <pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: production
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]</code></pre>
+
+    <h3>RoleBinding</h3>
+    <pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-pods
+  namespace: production
+subjects:
+  - kind: ServiceAccount
+    name: api-sa
+    namespace: production
+  - kind: Group
+    name: dev-team
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io</code></pre>
+
+    <h3>ClusterRole for cluster-wide access</h3>
+    <pre><code>apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-viewer
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]</code></pre>
+
+    <h3>Common verbs</h3>
+    <p><code>get</code>, <code>list</code>, <code>watch</code>, <code>create</code>, <code>update</code>, <code>patch</code>, <code>delete</code>, <code>deletecollection</code></p>
+
+    <pre><code># Check permissions
+kubectl auth can-i create pods --namespace=production
+kubectl auth can-i delete secrets --as=system:serviceaccount:production:api-sa
+
+# Who can do what?
+kubectl auth can-i --list --as=system:serviceaccount:production:api-sa</code></pre>
+  </section>
+
+  <section id="pod-security">
+    <h2>5. Pod Security Standards</h2>
+    <p><strong>Pod Security Admission</strong> (built-in since K8s 1.25) enforces three policy levels on namespaces:</p>
+    <table>
+      <thead><tr><th>Level</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>privileged</code></td><td>Unrestricted  -  system workloads only</td></tr>
+        <tr><td><code>baseline</code></td><td>Prevents known privilege escalations</td></tr>
+        <tr><td><code>restricted</code></td><td>Heavily hardened  -  production apps</td></tr>
+      </tbody>
+    </table>
+    <pre><code># Label namespace for enforcement
+kubectl label namespace production \
+  pod-security.kubernetes.io/enforce=restricted \
+  pod-security.kubernetes.io/enforce-version=latest \
+  pod-security.kubernetes.io/audit=restricted \
+  pod-security.kubernetes.io/warn=restricted</code></pre>
+
+    <h3>Restricted-compliant Pod spec</h3>
+    <pre><code>spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: app
+      image: myapp:1.0
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 10001
+        capabilities:
+          drop: ["ALL"]</code></pre>
+  </section>
+
+  <section id="admission">
+    <h2>6. Admission Controllers &amp; OPA</h2>
+    <p><strong>Admission controllers</strong> intercept API requests after authentication/authorization but before persistence. They can mutate or reject resources.</p>
+    <ul>
+      <li><strong>Mutating:</strong> modify objects (inject sidecars, set defaults)</li>
+      <li><strong>Validating:</strong> reject non-compliant objects</li>
+    </ul>
+
+    <h3>OPA Gatekeeper</h3>
+    <p><a class="refer-link" href="https://open-policy-agent.github.io/gatekeeper/" rel="noopener noreferrer">Gatekeeper</a> enforces custom policies using Rego. Common use cases: require labels, block <code>:latest</code> tags, enforce resource limits.</p>
+    <pre><code>apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-app-label
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+  parameters:
+    labels: ["app", "team", "env"]</code></pre>
+
+    <h3>Kyverno (alternative)</h3>
+    <p>Kyverno uses Kubernetes-style YAML policies instead of Rego  -  easier for teams without OPA expertise.</p>
+    <pre><code>apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: check-non-root
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      validate:
+        message: "Containers must run as non-root"
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  runAsNonRoot: true</code></pre>
+  </section>
+
+  <section id="hardening">
+    <h2>7. Pod Hardening Checklist</h2>
+    <ul>
+      <li>Run as non-root user with <code>runAsNonRoot: true</code> and explicit <code>runAsUser</code></li>
+      <li>Drop all capabilities: <code>capabilities: { drop: ["ALL"] }</code></li>
+      <li>Disable privilege escalation: <code>allowPrivilegeEscalation: false</code></li>
+      <li>Read-only root filesystem with explicit writable <code>emptyDir</code> mounts</li>
+      <li>Enable seccomp: <code>seccompProfile: { type: RuntimeDefault }</code></li>
+      <li>Set resource requests and limits on every container</li>
+      <li>Use dedicated ServiceAccounts with minimal RBAC</li>
+      <li>Disable automount of SA token if not needed</li>
+      <li>Never store secrets in images or ConfigMaps</li>
+      <li>Enable etcd encryption at rest and audit logging</li>
+      <li>Apply NetworkPolicies to restrict east-west traffic</li>
+      <li>Scan images for CVEs in CI (Trivy, Grype, Snyk)</li>
+      <li>Pin image digests, not just tags</li>
+    </ul>
+    <pre><code># Audit who accessed secrets (enable audit logging)
+# /etc/kubernetes/audit-policy.yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+rules:
+  - level: RequestResponse
+    resources:
+      - group: ""
+        resources: ["secrets"]</code></pre>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>8. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>Create ConfigMap from file</td><td><code>kubectl create configmap app-config --from-file=config.yaml</code></td></tr>
+        <tr><td>Create Secret</td><td><code>kubectl create secret generic db --from-literal=password=secret</code></td></tr>
+        <tr><td>View Secret (decoded)</td><td><code>kubectl get secret db -o jsonpath='{.data.password}' | base64 -d</code></td></tr>
+        <tr><td>Check permissions</td><td><code>kubectl auth can-i create deployments -n production</code></td></tr>
+        <tr><td>List RBAC</td><td><code>kubectl get role,rolebinding -n production</code></td></tr>
+        <tr><td>PSA namespace label</td><td><code>kubectl label ns production pod-security.kubernetes.io/enforce=restricted</code></td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheet: <a href="../../cheatsheets/kubectl-cheatsheet.html">kubectl Cheat Sheet</a></p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="kubernetes-helm-observability.html">Helm &amp; Observability →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

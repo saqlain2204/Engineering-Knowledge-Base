@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Helm &amp; Observability | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Helm charts, releases, values, Prometheus, Grafana, logging, tracing, and resource quotas for Kubernetes.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Helm &amp; Observability</p>
+  </nav>
+  <h1>Helm &amp; Observability</h1>
+  <p>Package and deploy applications with Helm, then monitor, log, and trace everything running in your cluster.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#helm-basics">Helm Basics</a></li>
+    <li><a href="#chart-anatomy">Chart Anatomy</a></li>
+    <li><a href="#templates-values">Templates &amp; Values</a></li>
+    <li><a href="#helm-workflow">Helm Workflow</a></li>
+    <li><a href="#prometheus">Prometheus &amp; Metrics</a></li>
+    <li><a href="#grafana">Grafana Dashboards</a></li>
+    <li><a href="#logging">Logging</a></li>
+    <li><a href="#tracing">Distributed Tracing</a></li>
+    <li><a href="#quotas">Resource Quotas &amp; Limits</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="helm-basics">
+    <h2>1. Helm Basics</h2>
+    <p><strong>Helm</strong> is the package manager for Kubernetes. A <strong>chart</strong> is a collection of templated YAML manifests. A <strong>release</strong> is a deployed instance of a chart in a cluster.</p>
+    <pre><code># Install Helm
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# Add a chart repository
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# Search charts
+helm search repo nginx
+helm search hub postgres</code></pre>
+    <div class="callout">
+      <strong>Helm 3 vs Helm 2:</strong> Helm 3 has no Tiller (in-cluster server). Releases are stored as Secrets in the release namespace. Always use Helm 3.
+    </div>
+  </section>
+
+  <section id="chart-anatomy">
+    <h2>2. Chart Anatomy</h2>
+    <pre><code>mychart/
+├── Chart.yaml          # chart metadata (name, version, dependencies)
+├── values.yaml         # default configuration values
+├── charts/             # dependent charts (subcharts)
+├── templates/          # Kubernetes manifest templates
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── ingress.yaml
+│   ├── _helpers.tpl    # reusable template functions
+│   └── NOTES.txt       # post-install instructions
+└── .helmignore</code></pre>
+
+    <h3>Chart.yaml</h3>
+    <pre><code>apiVersion: v2
+name: myapp
+description: My application Helm chart
+type: application
+version: 1.2.0        # chart version
+appVersion: "2.3.1"   # application version
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled</code></pre>
+  </section>
+
+  <section id="templates-values">
+    <h2>3. Templates &amp; Values</h2>
+    <p>Helm uses Go templates with Sprig functions. Values from <code>values.yaml</code> (and overrides) are injected into templates.</p>
+
+    <h3>values.yaml</h3>
+    <pre><code>replicaCount: 3
+
+image:
+  repository: mycompany/api
+  tag: "2.3.1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  host: api.example.com
+  tls: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilization: 70</code></pre>
+
+    <h3>deployment.yaml template</h3>
+    <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "myapp.fullname" . }}
+  labels:
+    {{- include "myapp.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "myapp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "myapp.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080</code></pre>
+
+    <h3>Common template functions</h3>
+    <pre><code>{{ .Values.replicaCount }}           # access value
+{{ .Release.Name }}                 # release name
+{{ .Release.Namespace }}            # target namespace
+{{ include "myapp.fullname" . }}    # call named template
+{{ .Values.ingress.enabled | ternary "enabled" "disabled" }}
+{{- if .Values.ingress.enabled }}   # conditional block
+{{- range .Values.env }}            # loop
+{{- toYaml .Values.resources | nindent 12 }}  # indent YAML block</code></pre>
+  </section>
+
+  <section id="helm-workflow">
+    <h2>4. Helm Workflow</h2>
+    <pre><code># Install a release
+helm install my-api bitnami/nginx \
+  --namespace production \
+  --create-namespace \
+  --set replicaCount=3 \
+  --set service.type=LoadBalancer
+
+# Install with values file
+helm install my-api ./mychart -f values-prod.yaml -f values-secrets.yaml
+
+# Upgrade (deploy new version)
+helm upgrade my-api ./mychart --set image.tag=2.4.0
+
+# Upgrade or install (idempotent)
+helm upgrade --install my-api ./mychart -f values-prod.yaml
+
+# Rollback
+helm rollback my-api 2        # rollback to revision 2
+helm history my-api
+
+# Uninstall
+helm uninstall my-api -n production
+
+# Dry-run (render templates without applying)
+helm template my-api ./mychart -f values-prod.yaml
+helm install my-api ./mychart --dry-run --debug
+
+# Lint chart
+helm lint ./mychart
+
+# Package chart for distribution
+helm package ./mychart
+helm push mychart-1.2.0.tgz oci://registry.example.com/charts</code></pre>
+
+    <h3>Helm hooks</h3>
+    <p>Run Jobs at specific lifecycle points:</p>
+    <pre><code>metadata:
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation</code></pre>
+  </section>
+
+  <section id="prometheus">
+    <h2>5. Prometheus &amp; Metrics</h2>
+    <p><strong>Prometheus</strong> scrapes metrics from Pods and stores them as time-series data. Install via kube-prometheus-stack Helm chart for a full monitoring stack.</p>
+    <pre><code>helm install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace</code></pre>
+
+    <h3>Expose metrics from your app</h3>
+    <pre><code># Annotate Pod/Service for auto-discovery
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"</code></pre>
+
+    <h3>ServiceMonitor (Prometheus Operator)</h3>
+    <pre><code>apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-metrics
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: api
+  namespaceSelector:
+    matchNames:
+      - production
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics</code></pre>
+
+    <h3>Key metrics to monitor</h3>
+    <table>
+      <thead><tr><th>Category</th><th>Metrics</th></tr></thead>
+      <tbody>
+        <tr><td>Cluster</td><td>Node CPU/memory, Pod count, Pending Pods</td></tr>
+        <tr><td>Workload</td><td>Request rate, error rate, latency (RED method)</td></tr>
+        <tr><td>Resources</td><td>CPU/memory usage vs requests/limits</td></tr>
+        <tr><td>Storage</td><td>PVC usage, volume attach errors</td></tr>
+        <tr><td>Networking</td><td>Service endpoints, ingress 5xx rate</td></tr>
+      </tbody>
+    </table>
+
+    <h3>PromQL examples</h3>
+    <pre><code># CPU usage as % of request
+sum(rate(container_cpu_usage_seconds_total{namespace="production"}[5m])) by (pod)
+  / sum(kube_pod_container_resource_requests{resource="cpu"}) by (pod) * 100
+
+# HTTP error rate
+sum(rate(http_requests_total{status=~"5.."}[5m]))
+  / sum(rate(http_requests_total[5m])) * 100
+
+# Pods not ready
+kube_pod_status_ready{condition="false", namespace="production"}</code></pre>
+  </section>
+
+  <section id="grafana">
+    <h2>6. Grafana Dashboards</h2>
+    <p><strong>Grafana</strong> visualises Prometheus (and other) data sources. The kube-prometheus-stack includes pre-built dashboards for cluster, node, and workload monitoring.</p>
+    <pre><code># Port-forward Grafana (default admin/prom-operator)
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+
+# Import community dashboards from grafana.com/dashboards
+# Popular IDs: 315 (Kubernetes cluster), 6417 (Node Exporter), 12006 (K8s resources)</code></pre>
+    <p>Dashboard-as-code with Grafana Operator or provisioning files:</p>
+    <pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-api
+  labels:
+    grafana_dashboard: "1"
+data:
+  api-dashboard.json: |
+    { "title": "API Service", ... }</code></pre>
+  </section>
+
+  <section id="logging">
+    <h2>7. Logging</h2>
+    <p>Kubernetes does not have a built-in log aggregation system. Common stacks:</p>
+    <table>
+      <thead><tr><th>Stack</th><th>Components</th></tr></thead>
+      <tbody>
+        <tr><td>EFK</td><td>Elasticsearch, Fluentd/Fluent Bit, Kibana</td></tr>
+        <tr><td>Loki</td><td>Grafana Loki + Promtail/Alloy (lightweight, label-based)</td></tr>
+        <tr><td>Cloud-native</td><td>CloudWatch (EKS), Cloud Logging (GKE), Azure Monitor</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code># View Pod logs
+kubectl logs deployment/api -n production
+kubectl logs -f pod/api-7d8f9c-abc12 -c app --tail=100
+kubectl logs --previous pod/api-7d8f9c-abc12   # crashed container
+
+# Logs from all Pods matching label
+kubectl logs -l app=api -n production --tail=50
+
+# Install Loki stack via Helm
+helm install loki grafana/loki-stack \
+  --namespace monitoring \
+  --set promtail.enabled=true \
+  --set grafana.enabled=true</code></pre>
+
+    <h3>Structured logging best practices</h3>
+    <ul>
+      <li>Log to stdout/stderr (not files)  -  Kubernetes captures container streams</li>
+      <li>Use JSON format for machine parsing</li>
+      <li>Include correlation IDs for request tracing</li>
+      <li>Set log levels appropriately (INFO in prod, DEBUG in dev)</li>
+    </ul>
+  </section>
+
+  <section id="tracing">
+    <h2>8. Distributed Tracing</h2>
+    <p><strong>Distributed tracing</strong> tracks requests across microservices. OpenTelemetry is the standard instrumentation API.</p>
+    <table>
+      <thead><tr><th>Backend</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Jaeger</td><td>CNCF graduated, popular in K8s</td></tr>
+        <tr><td>Tempo</td><td>Grafana-native, integrates with Loki/Prometheus</td></tr>
+        <tr><td>Zipkin</td><td>Older, simpler</td></tr>
+      </tbody>
+    </table>
+    <pre><code># OpenTelemetry Collector deployment (receives traces, exports to backend)
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+spec:
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+    exporters:
+      otlp/jaeger:
+        endpoint: jaeger-collector:4317
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [otlp/jaeger]</code></pre>
+    <p>Instrument apps with OpenTelemetry SDKs  -  auto-instrumentation available for Python, Node.js, Java, Go.</p>
+  </section>
+
+  <section id="quotas">
+    <h2>9. Resource Quotas &amp; Limits</h2>
+    <p><strong>ResourceQuota</strong> limits total resource consumption per namespace. <strong>LimitRange</strong> sets defaults and constraints per Pod/container.</p>
+
+    <h3>ResourceQuota</h3>
+    <pre><code>apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: production-quota
+  namespace: production
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    pods: "50"
+    persistentvolumeclaims: "10"
+    services.loadbalancers: "2"</code></pre>
+
+    <h3>LimitRange</h3>
+    <pre><code>apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: production
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 512Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      max:
+        cpu: "2"
+        memory: 4Gi
+      min:
+        cpu: 50m
+        memory: 64Mi</code></pre>
+
+    <pre><code># Check quota usage
+kubectl describe resourcequota -n production
+kubectl describe limitrange -n production
+
+# PriorityClasses for critical workloads
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000000
+globalDefault: false
+description: "Critical production services"</code></pre>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>10. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>Install chart</td><td><code>helm install &lt;release&gt; &lt;chart&gt; -n &lt;ns&gt;</code></td></tr>
+        <tr><td>Upgrade</td><td><code>helm upgrade &lt;release&gt; &lt;chart&gt; -f values.yaml</code></td></tr>
+        <tr><td>Rollback</td><td><code>helm rollback &lt;release&gt; &lt;revision&gt;</code></td></tr>
+        <tr><td>Render templates</td><td><code>helm template &lt;release&gt; ./chart</code></td></tr>
+        <tr><td>List releases</td><td><code>helm list -A</code></td></tr>
+        <tr><td>Pod logs</td><td><code>kubectl logs -f -l app=api --tail=100</code></td></tr>
+        <tr><td>Port-forward Grafana</td><td><code>kubectl port-forward svc/grafana 3000:80 -n monitoring</code></td></tr>
+        <tr><td>Check quotas</td><td><code>kubectl describe resourcequota -n production</code></td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheets: <a href="../../cheatsheets/kubectl-cheatsheet.html">kubectl</a> &middot; <a href="../../cheatsheets/yaml-recipes-cheatsheet.html">YAML Recipes</a></p>
+
+    <div class="page-footer-nav">
+      <p>You have completed the Kubernetes learning track.</p>
+      <a class="interview-link" href="../../interview/docker-kubernetes-interview.html">Start Interview Prep →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Graph Foundations | Graph Machine Learning</title>
+  <meta name="description" content="Graph ML from zero: what graphs are, adjacency matrix, Laplacian, graph tasks, homophily, and why relational data needs special models.">
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Graph Foundations</p>
+  </nav>
+  <h1>Graph Foundations</h1>
+  <p>Start here. We build every idea from scratch  -  no graph theory background needed beyond basic ML.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#what-is-graph">What Is a Graph?</a></li>
+    <li><a href="#why-graphs">Why Use Graphs for Machine Learning?</a></li>
+    <li><a href="#notation">Notation and Vocabulary</a></li>
+    <li><a href="#adjacency">Adjacency Matrix and Degree</a></li>
+    <li><a href="#laplacian">Graph Laplacian  -  Full Derivation</a></li>
+    <li><a href="#tasks">Graph Machine Learning Tasks</a></li>
+    <li><a href="#homophily">Homophily vs Heterophily</a></li>
+    <li><a href="#vs-other">Graphs vs Grids vs Sequences</a></li>
+    <li><a href="#metrics">Useful Graph Metrics</a></li>
+    <li><a href="#papers">Key Papers and Further Reading</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="what-is-graph">
+    <h2>1. What Is a Graph?</h2>
+    <p>A <strong>graph</strong> $G = (V, E)$ is a set of <strong>nodes</strong> (also called vertices) $V$ and <strong>edges</strong> $E$ that connect pairs of nodes.</p>
+    <p>Think of nodes as "things" and edges as "relationships between things."</p>
+    <ul>
+      <li><strong>Social network:</strong> nodes = people, edges = friendship</li>
+      <li><strong>Citation network:</strong> nodes = papers, edges = "paper A cites paper B"</li>
+      <li><strong>Molecule:</strong> nodes = atoms, edges = chemical bonds</li>
+      <li><strong>Knowledge graph:</strong> nodes = entities (Paris, France), edges = relations (capital_of)</li>
+    </ul>
+
+    <h3>Directed vs undirected</h3>
+    <ul>
+      <li><strong>Undirected:</strong> edge $(i,j)$ is the same as $(j,i)$. Friendship is usually undirected.</li>
+      <li><strong>Directed:</strong> edge has a direction. Citations are directed: A cites B does not mean B cites A.</li>
+    </ul>
+
+    <h3>Weighted vs unweighted</h3>
+    <ul>
+      <li><strong>Unweighted:</strong> edge exists (1) or does not (0).</li>
+      <li><strong>Weighted:</strong> each edge has a number  -  distance, strength, probability, etc.</li>
+    </ul>
+
+    <h3>Attributed graphs</h3>
+    <p>Real graphs almost always carry extra data:</p>
+    <ul>
+      <li><strong>Node features</strong> $\mathbf{x}_i \in \mathbb{R}^d$  -  age, text embedding, atom type</li>
+      <li><strong>Edge features</strong> $\mathbf{e}_{ij}$  -  bond type, relation label, timestamp</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> A graph is just a flexible way to store "who is connected to whom" plus optional attributes. Tables store rows independently; graphs store <em>relationships</em> explicitly.
+    </div>
+
+    <h3>Why not just use a table?</h3>
+    <p>Suppose you have users and their friends. In a table, each row is one user. Where do you put "friend of friend" patterns? You would need hand-crafted columns or join many tables. In a graph, multi-hop relationships are natural  -  you follow edges.</p>
+    <p><strong>When a table is enough:</strong> if rows are independent (no useful relationships), use regular ML. We cover this decision in <a href="../Practice/graph-ml-when-to-use-evaluation.html">When to Use GNNs</a>.</p>
+  </section>
+
+  <section id="why-graphs">
+    <h2>2. Why Use Graphs for Machine Learning?</h2>
+    <p>Standard neural nets assume a fixed input size and order:</p>
+    <ul>
+      <li><strong>MLP:</strong> fixed-length feature vector per sample</li>
+      <li><strong>CNN:</strong> fixed grid (image)</li>
+      <li><strong>RNN/Transformer:</strong> sequence with an order</li>
+    </ul>
+    <p>Graphs break these assumptions: <strong>no fixed size</strong>, <strong>no canonical node order</strong>, and <strong>structure matters</strong>.</p>
+
+    <h3>Relational inductive bias</h3>
+    <p>An <strong>inductive bias</strong> is an assumption baked into a model. CNNs assume locality on a grid. RNNs assume sequential dependence. <strong>Graph neural networks (GNNs)</strong> assume:</p>
+    <ol>
+      <li><strong>Locality:</strong> useful information often comes from neighbors</li>
+      <li><strong>Permutation invariance:</strong> shuffling node IDs should not change the graph's meaning</li>
+      <li><strong>Compositional structure:</strong> patterns repeat across similar local neighborhoods</li>
+    </ol>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> If your problem is "predict this node's label, and similar nodes that are connected tend to share labels," a GNN is a natural fit. That is the <strong>homophily</strong> assumption (Section 6).
+    </div>
+
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1706.02216" rel="noopener noreferrer">Hamilton et al.  -  Representation Learning on Graphs (survey)</a> · <a href="https://arxiv.org/abs/2104.13478" rel="noopener noreferrer">Bronstein et al.  -  Geometric Deep Learning Grid</a></small></p>
+  </section>
+
+  <section id="notation">
+    <h2>3. Notation and Vocabulary</h2>
+    <table>
+      <thead><tr><th>Symbol</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>$G = (V, E)$</td><td>Graph with nodes $V$, edges $E$</td></tr>
+        <tr><td>$n = |V|$</td><td>Number of nodes</td></tr>
+        <tr><td>$m = |E|$</td><td>Number of edges</td></tr>
+        <tr><td>$\mathcal{N}(i)$</td><td>Neighbors of node $i$</td></tr>
+        <tr><td>$\mathbf{A} \in \mathbb{R}^{n \times n}$</td><td>Adjacency matrix</td></tr>
+        <tr><td>$\mathbf{D}$</td><td>Degree matrix (diagonal)</td></tr>
+        <tr><td>$\mathbf{L}$</td><td>Graph Laplacian</td></tr>
+        <tr><td>$\mathbf{x}_i$</td><td>Feature vector of node $i$</td></tr>
+        <tr><td>$\mathbf{h}_i^{(l)}$</td><td>Hidden embedding of node $i$ at layer $l$</td></tr>
+        <tr><td>$k$-hop neighborhood</td><td>Nodes reachable in $k$ edge steps</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="adjacency">
+    <h2>4. Adjacency Matrix and Degree</h2>
+    <p>The <strong>adjacency matrix</strong> $\mathbf{A}$ encodes connections. For an undirected unweighted graph:</p>
+    $$A_{ij} = \begin{cases} 1 & \text{if } (i,j) \in E \\ 0 & \text{otherwise} \end{cases}$$
+    <p>For directed graphs, $A_{ij}=1$ means an edge from $i$ to $j$. The matrix may be asymmetric.</p>
+
+    <h3>Degree</h3>
+    <p>The <strong>degree</strong> of node $i$ is how many edges touch it:</p>
+    $$d_i = \sum_j A_{ij}$$
+    <p>Store all degrees in a diagonal matrix:</p>
+    $$\mathbf{D} = \text{diag}(d_1, d_2, \ldots, d_n)$$
+
+    <h3>Normalized adjacency (used in GCN)</h3>
+    <p>Raw adjacency sums can explode for high-degree nodes. GCN uses a symmetric normalization:</p>
+    $$\tilde{\mathbf{A}} = \mathbf{D}^{-1/2} \mathbf{A} \mathbf{D}^{-1/2}$$
+    <p>Add self-loops ($\mathbf{A} + \mathbf{I}$) so a node can keep its own signal. We derive why in <a href="../Core/graph-ml-classic-architectures.html">Classic Architectures (GCN)</a>.</p>
+
+    <div class="callout callout-derivation">
+      <strong>Why normalize?</strong> Without $\mathbf{D}^{-1/2}$, multiplying $\mathbf{A}\mathbf{x}$ gives huge values for hub nodes (celebrities with millions of followers). Normalization balances influence so each neighbor contributes fairly relative to degree.
+    </div>
+
+    <pre><code>import torch
+
+# 4-node cycle: 0-1-2-3-0
+edge_index = torch.tensor([[0,1,1,2,2,3,3,0],
+                           [1,0,2,1,3,2,0,3]], dtype=torch.long)
+n = 4
+A = torch.zeros(n, n)
+A[edge_index[0], edge_index[1]] = 1
+
+D = torch.diag(A.sum(dim=1))
+D_inv_sqrt = torch.diag(1.0 / torch.sqrt(D.diag() + 1e-8))
+A_norm = D_inv_sqrt @ A @ D_inv_sqrt</code></pre>
+  </section>
+
+  <section id="laplacian">
+    <h2>5. Graph Laplacian  -  Full Derivation</h2>
+    <p>The <strong>graph Laplacian</strong> is the most important matrix in spectral graph theory. It appears in GCN derivations, graph signal processing, and positional encodings.</p>
+
+    <h3>Definition</h3>
+    $$\mathbf{L} = \mathbf{D} - \mathbf{A}$$
+    <p>Entry-wise: $L_{ii} = d_i$ (degree on diagonal), $L_{ij} = -1$ if $(i,j) \in E$, else $0$.</p>
+
+    <h3>Equivalent form</h3>
+    $$\mathbf{L} = \mathbf{B}^T \mathbf{B}$$
+    where $\mathbf{B}$ is the signed incidence matrix (each edge row has $+1$ and $-1$ at endpoints). This shows $\mathbf{L}$ is positive semi-definite.
+
+    <h3>Quadratic form  -  smoothness measure</h3>
+    <p>For signal $\mathbf{f} \in \mathbb{R}^n$ on nodes:</p>
+    $$\mathbf{f}^T \mathbf{L} \mathbf{f} = \frac{1}{2} \sum_{(i,j) \in E} (f_i - f_j)^2$$
+    <div class="callout callout-derivation">
+      <strong>Derivation sketch:</strong> Expand $\mathbf{f}^T(\mathbf{D}-\mathbf{A})\mathbf{f} = \sum_i d_i f_i^2 - \sum_{(i,j)\in E} f_i f_j$. Pair each undirected edge once and complete the square: $(f_i - f_j)^2 = f_i^2 + f_j^2 - 2f_i f_j$. Summing over edges gives the result.
+    </div>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> $\mathbf{f}^T \mathbf{L} \mathbf{f}$ is small when connected nodes have similar values  -  a <em>smooth</em> signal on the graph. Large when neighbors disagree. GNN oversmoothing (later) pushes embeddings toward this smoothness too aggressively.
+    </div>
+
+    <h3>Normalized Laplacian</h3>
+    $$\mathcal{L}_{\text{sym}} = \mathbf{I} - \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2}$$
+    $$\mathcal{L}_{\text{rw}} = \mathbf{I} - \mathbf{D}^{-1}\mathbf{A}$$
+    <p>Eigenvalues of $\mathcal{L}_{\text{sym}}$ lie in $[0, 2]$. The number of zero eigenvalues equals the number of connected components.</p>
+
+    <h3>Why eigenvectors matter</h3>
+    <p>Eigenvectors of $\mathbf{L}$ with small eigenvalues are smooth across the graph. They act like "Fourier bases" on non-grid data. Spectral GNNs use them as filters  -  see <a href="../Core/graph-ml-spectral-methods.html">Spectral Methods</a>.</p>
+  </section>
+
+  <section id="tasks">
+    <h2>6. Graph Machine Learning Tasks</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Input</th><th>Output</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Node classification</strong></td><td>Graph + some labels</td><td>Label for each node</td><td>Categorize papers by topic</td></tr>
+        <tr><td><strong>Node regression</strong></td><td>Graph</td><td>Continuous value per node</td><td>Predict traffic at intersections</td></tr>
+        <tr><td><strong>Link prediction</strong></td><td>Graph (edges hidden)</td><td>Score for missing edges</td><td>Friend recommendation</td></tr>
+        <tr><td><strong>Graph classification</strong></td><td>Many graphs</td><td>One label per graph</td><td>Toxic vs non-toxic molecule</td></tr>
+        <tr><td><strong>Graph regression</strong></td><td>Many graphs</td><td>Scalar per graph</td><td>Predict molecular energy</td></tr>
+        <tr><td><strong>Community detection</strong></td><td>Graph</td><td>Cluster assignment</td><td>Find research subfields</td></tr>
+        <tr><td><strong>Graph generation</strong></td><td>Distribution</td><td>New graphs</td><td>Generate drug candidates</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Transductive vs inductive</h3>
+    <ul>
+      <li><strong>Transductive:</strong> test nodes are visible at training time (only labels hidden). Example: Cora citation network  -  all papers exist, classify unlabeled ones.</li>
+      <li><strong>Inductive:</strong> test on completely new graphs or nodes not seen during training. Example: classify new molecules with a model trained on other molecules.</li>
+    </ul>
+    <div class="callout">
+      <strong>Common mistake:</strong> random train/test split on one graph without checking leakage across edges. We fix this in <a href="graph-ml-representation-data.html">Data Preparation</a>.
+    </div>
+  </section>
+
+  <section id="homophily">
+    <h2>7. Homophily vs Heterophily</h2>
+    <p><strong>Homophily</strong> ("birds of a feather"): connected nodes tend to be similar. Social networks often show this  -  friends share interests.</p>
+    <p><strong>Heterophily</strong>: connected nodes tend to be <em>different</em>. Example: protein interaction networks (different types interact), fraud detection (fraudsters connect to victims).</p>
+
+    <h3>Homophily ratio (Zhu et al.)</h3>
+    $$h = \frac{|\{(u,v) : (u,v) \in E \land y_u = y_v\}|}{|E|}$$
+    <p>$h \approx 1$ means strong homophily. $h \approx 0$ means strong heterophily.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Why this matters for GNNs:</strong> Classic GNNs aggregate neighbor features  -  they assume neighbors help predict your label. That works under homophily. Under heterophily, neighbors may mislead you; you need different architectures (H2GCN, GPR-GNN, etc. in <a href="../Advanced/graph-ml-deep-gnns-limitations.html">Deep GNNs</a>).
+    </div>
+  </section>
+
+  <section id="vs-other">
+    <h2>8. Graphs vs Grids vs Sequences</h2>
+    <table>
+      <thead><tr><th>Structure</th><th>Neighbors per node</th><th>Order matters?</th><th>Typical model</th></tr></thead>
+      <tbody>
+        <tr><td>Sequence</td><td>2 (prev, next)</td><td>Yes</td><td>RNN, Transformer</td></tr>
+        <tr><td>Grid (image)</td><td>4 or 8 fixed</td><td>Yes (position)</td><td>CNN</td></tr>
+        <tr><td>Graph</td><td>Varies (0 to millions)</td><td>No canonical order</td><td>GNN</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Why not run a CNN on a graph?</strong> CNNs need a regular grid and fixed neighbor layout. Graph neighborhoods have arbitrary size and no left/right/up/down.</p>
+    <p><strong>Why not sort nodes and use an RNN?</strong> Any sorting is arbitrary and destroys permutation invariance. Different orderings would give different outputs  -  wrong.</p>
+    <p><strong>Solution:</strong> aggregate over neighbors in a symmetric way  -  message passing (next chapter).</p>
+  </section>
+
+  <section id="metrics">
+    <h2>9. Useful Graph Metrics</h2>
+    <ul>
+      <li><strong>Clustering coefficient:</strong> how tightly a node's neighbors connect to each other (local triangle density)</li>
+      <li><strong>Betweenness centrality:</strong> how often a node lies on shortest paths  -  bridge nodes</li>
+      <li><strong>PageRank:</strong> importance based on incoming links from important nodes</li>
+      <li><strong>Diameter:</strong> longest shortest path  -  graph "width"</li>
+      <li><strong>Degree distribution:</strong> many real graphs are scale-free (few hubs, many low-degree nodes)</li>
+    </ul>
+    <p>These can be used as <strong>input features</strong> or to understand whether a GNN can even reach distant nodes (over-squashing, later).</p>
+  </section>
+
+  <section id="papers">
+    <h2>10. Key Papers and Further Reading</h2>
+    <ul>
+      <li><a class="refer-link" href="https://arxiv.org/abs/1706.02216" rel="noopener noreferrer">Hamilton, Ying, Leskovec  -  Representation Learning on Graphs: Methods and Applications</a>  -  best survey to read after this page</li>
+      <li><a class="refer-link" href="https://arxiv.org/abs/2104.13478" rel="noopener noreferrer">Bronstein et al.  -  Geometric Deep Learning Grids, Groups, Graphs, Geodesics, and Gauges</a>  -  theoretical blueprint</li>
+      <li><a class="refer-link" href="https://arxiv.org/abs/1901.00596" rel="noopener noreferrer">Zhu et al.  -  Beyond Homophily in GNNs</a>  -  heterophily</li>
+      <li>Textbook: <em>Graph Representation Learning</em> by William L. Hamilton (free online)</li>
+    </ul>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-representation-data.html">Representation &amp; Data Preparation →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

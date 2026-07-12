@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Architecture | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Kubernetes architecture: control plane, worker nodes, etcd, API server, scheduler, controllers, kubelet, kube-proxy, kubectl, and reconciliation.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Architecture</p>
+  </nav>
+  <h1>Kubernetes Architecture</h1>
+  <p>How a Kubernetes cluster is structured, how the control plane and worker nodes cooperate, and how kubectl talks to the API.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why-kubernetes">Why Kubernetes?</a></li>
+    <li><a href="#cluster-overview">Cluster Overview</a></li>
+    <li><a href="#control-plane">Control Plane Components</a></li>
+    <li><a href="#worker-nodes">Worker Node Components</a></li>
+    <li><a href="#kubectl">kubectl Mastery</a></li>
+    <li><a href="#api-resources">API Resources &amp; Objects</a></li>
+    <li><a href="#reconciliation">The Reconciliation Loop</a></li>
+    <li><a href="#cluster-setup">Cluster Setup Options</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="why-kubernetes">
+    <h2>1. Why Kubernetes?</h2>
+    <p>Running containers on a single host is easy. Running hundreds of microservices across dozens of machines is not. Kubernetes (K8s) solves the operational problems of distributed container orchestration:</p>
+    <ul>
+      <li><strong>Scheduling</strong>  -  place containers on nodes with available CPU, memory, and affinity rules.</li>
+      <li><strong>Self-healing</strong>  -  restart failed containers, replace unhealthy Pods, reschedule when nodes die.</li>
+      <li><strong>Scaling</strong>  -  scale replicas up or down manually or automatically (HPA).</li>
+      <li><strong>Service discovery &amp; load balancing</strong>  -  stable DNS names and virtual IPs for ephemeral Pods.</li>
+      <li><strong>Declarative config</strong>  -  describe desired state in YAML; controllers reconcile reality to match.</li>
+      <li><strong>Rolling updates &amp; rollbacks</strong>  -  zero-downtime deploys with version history.</li>
+      <li><strong>Secrets &amp; config management</strong>  -  inject configuration without baking it into images.</li>
+      <li><strong>Storage orchestration</strong>  -  attach cloud or network storage to any Pod.</li>
+    </ul>
+    <table>
+      <thead><tr><th>Without K8s</th><th>With K8s</th></tr></thead>
+      <tbody>
+        <tr><td>SSH into servers, run <code>docker run</code> manually</td><td>Apply a Deployment; scheduler places Pods automatically</td></tr>
+        <tr><td>Custom scripts for health checks and restarts</td><td>kubelet + controllers restart and replace failed Pods</td></tr>
+        <tr><td>Hard-coded IPs or external load balancers per service</td><td>ClusterIP Services with built-in DNS</td></tr>
+        <tr><td>Manual blue/green deploys</td><td>RollingUpdate strategy with <code>kubectl rollout undo</code></td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>Kubernetes is not a PaaS.</strong> It provides primitives (Pods, Services, Deployments) that you compose into a platform. You still choose ingress, CI/CD, observability, and policy tooling on top.
+    </div>
+  </section>
+
+  <section id="cluster-overview">
+    <h2>2. Cluster Overview</h2>
+    <p>A Kubernetes <strong>cluster</strong> consists of at least one <strong>control plane</strong> and one or more <strong>worker nodes</strong>. The control plane makes global decisions (scheduling, API, state storage). Worker nodes run your workloads.</p>
+    <pre><code>┌──────────────────────────────────────────────────────────────────────┐
+│                        CONTROL PLANE                                   │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  ┌────────────┐  │
+│  │ API Server  │  │  Scheduler  │  │  Controller  │  │   etcd     │  │
+│  │  (REST)     │  │             │  │   Manager    │  │ (key-value)│  │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘  └─────┬──────┘  │
+│         └────────────────┴────────────────┴─────────────────┘         │
+│                    all components talk to API server                   │
+└──────────────────────────────────────────────────────────────────────┘
+         │                           │                           │
+         ▼                           ▼                           ▼
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│  Worker Node 1  │       │  Worker Node 2  │       │  Worker Node N  │
+│  kubelet        │       │  kubelet        │       │  kubelet        │
+│  kube-proxy     │       │  kube-proxy     │       │  kube-proxy     │
+│  container rt   │       │  container rt   │       │  container rt   │
+│  CNI plugin     │       │  CNI plugin     │       │  CNI plugin     │
+│  ┌────┐ ┌────┐  │       │  ┌────┐ ┌────┐  │       │  ┌────┐         │
+│  │Pod │ │Pod │  │       │  │Pod │ │Pod │  │       │  │Pod │ ...     │
+│  └────┘ └────┘  │       │  └────┘ └────┘  │       │  └────┘         │
+└─────────────────┘       └─────────────────┘       └─────────────────┘</code></pre>
+    <p>High-availability control planes run multiple API server instances behind a load balancer, with etcd deployed as a 3- or 5-node quorum cluster. Worker nodes are cattle  -  add or remove them without manual reconfiguration.</p>
+    <h3>Namespaces</h3>
+    <p>Logical partitions inside a cluster. Resources in different namespaces can share the same physical nodes but are isolated by RBAC and naming.</p>
+    <pre><code>kubectl get namespaces
+# default, kube-system, kube-public, kube-node-lease  -  plus your own
+
+kubectl create namespace production
+kubectl get pods -n production</code></pre>
+  </section>
+
+  <section id="control-plane">
+    <h2>3. Control Plane Components</h2>
+    <p>Every control plane component is a process (or Pod in managed clusters) that watches or writes cluster state through the <strong>API server</strong>. etcd is the sole source of truth for persisted state.</p>
+
+    <h3>API Server (<code>kube-apiserver</code>)</h3>
+    <p>The front door to the cluster. All clients (kubectl, kubelet, controllers, scheduler) communicate exclusively via the REST API. It validates requests, applies admission webhooks, persists objects to etcd, and serves watch streams.</p>
+    <ul>
+      <li>Authenticates requests (certs, bearer tokens, OIDC)</li>
+      <li>Authorizes via RBAC, Node, or webhook modes</li>
+      <li>Admits or mutates objects through admission controllers</li>
+      <li>Exposes <code>/api/v1</code>, <code>/apis/apps/v1</code>, etc. grouped by API group</li>
+    </ul>
+    <pre><code># Direct API call (requires valid credentials)
+kubectl proxy &amp;
+curl http://localhost:8001/api/v1/namespaces/default/pods
+
+# Raw request with verbose output
+kubectl get pods -v=8</code></pre>
+
+    <h3>etcd</h3>
+    <p>A consistent, distributed key-value store holding all cluster data: Pod specs, Secrets (encrypted at rest), ConfigMaps, RBAC policies, and more. Only the API server reads and writes etcd directly.</p>
+    <pre><code># etcd data layout (simplified)
+/registry/pods/default/nginx-abc123
+/registry/deployments/production/api
+/registry/secrets/kube-system/bootstrap-token-xyz</code></pre>
+    <div class="callout">
+      <strong>Backup etcd regularly.</strong> Losing etcd without a snapshot means losing the entire cluster state. Use <code>etcdctl snapshot save</code> or your cloud provider's automated backups on managed control planes.
+    </div>
+
+    <h3>Scheduler (<code>kube-scheduler</code>)</h3>
+    <p>Watches for newly created Pods with <code>spec.nodeName</code> unset and selects a suitable node based on:</p>
+    <ul>
+      <li>Resource requests (CPU, memory, ephemeral storage)</li>
+      <li>Node selectors, affinity, anti-affinity, taints/tolerations</li>
+      <li>Pod topology spread constraints</li>
+      <li>Custom scheduler plugins (scheduling framework)</li>
+    </ul>
+    <pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-worker
+spec:
+  nodeSelector:
+    accelerator: nvidia-tesla-v100
+  tolerations:
+    - key: "gpu"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+  containers:
+    - name: trainer
+      image: ml-trainer:latest
+      resources:
+        requests:
+          nvidia.com/gpu: 1</code></pre>
+
+    <h3>Controller Manager (<code>kube-controller-manager</code>)</h3>
+    <p>Runs controller loops that watch API objects and drive the cluster toward desired state. Each controller is responsible for one resource type or relationship.</p>
+    <table>
+      <thead><tr><th>Controller</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td>Deployment controller</td><td>Manages ReplicaSets; performs rolling updates</td></tr>
+        <tr><td>ReplicaSet controller</td><td>Maintains the correct number of Pod replicas</td></tr>
+        <tr><td>Node controller</td><td>Monitors node health; evicts Pods from unreachable nodes</td></tr>
+        <tr><td>Job controller</td><td>Runs Pods to completion for batch work</td></tr>
+        <tr><td>EndpointSlice controller</td><td>Populates backend lists for Services</td></tr>
+        <tr><td>Namespace controller</td><td>Creates/deletes resources when namespaces change</td></tr>
+        <tr><td>ServiceAccount controller</td><td>Creates default ServiceAccounts and tokens</td></tr>
+      </tbody>
+    </table>
+    <p>Cloud-specific controllers (e.g. cloud node lifecycle, route controllers) run in the <strong>cloud-controller-manager</strong> on cloud-hosted clusters.</p>
+  </section>
+
+  <section id="worker-nodes">
+    <h2>4. Worker Node Components</h2>
+    <p>Worker nodes host Pods. Each node runs a fixed set of agents that register with the API server and maintain local runtime state.</p>
+
+    <h3>kubelet</h3>
+    <p>The primary node agent. Registers the node, watches PodSpecs assigned to its node, and instructs the container runtime to start/stop containers. Reports node and Pod status back to the API server.</p>
+    <ul>
+      <li>Mounts volumes (ConfigMaps, Secrets, PVCs)</li>
+      <li>Runs liveness, readiness, and startup probes</li>
+      <li>Enforces Pod resource limits via cgroups</li>
+      <li>Pulls images using configured credentials</li>
+    </ul>
+    <pre><code># Check kubelet health and node status
+kubectl get nodes -o wide
+kubectl describe node worker-1
+
+# kubelet logs (on the node itself)
+journalctl -u kubelet -f</code></pre>
+
+    <h3>kube-proxy</h3>
+    <p>Programs network rules on each node so Services work. Implements ClusterIP, NodePort, and LoadBalancer semantics via iptables, IPVS, or eBPF (depending on mode).</p>
+    <pre><code># Traffic flow for ClusterIP Service "api" on port 80
+Client Pod  →  DNS resolves api.default.svc  →  virtual IP 10.96.0.10:80
+             →  kube-proxy DNAT  →  one of Pod IPs :8080 (round-robin)</code></pre>
+
+    <h3>Container Runtime</h3>
+    <p>Kubernetes talks to runtimes through the <strong>Container Runtime Interface (CRI)</strong>. Supported runtimes:</p>
+    <table>
+      <thead><tr><th>Runtime</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>containerd</td><td>Default (1.24+)</td><td>Industry standard; used by Docker Engine internally</td></tr>
+        <tr><td>CRI-O</td><td>Supported</td><td>Lightweight; common on OpenShift</td></tr>
+        <tr><td>Docker Engine</td><td>Removed (1.24+)</td><td>Requires cri-dockerd shim if still needed</td></tr>
+      </tbody>
+    </table>
+    <pre><code># On a node  -  list running containers via crictl
+sudo crictl ps
+sudo crictl inspect &lt;container-id&gt;
+sudo crictl logs &lt;container-id&gt;</code></pre>
+
+    <h3>CNI (Container Network Interface)</h3>
+    <p>When kubelet creates a Pod sandbox, it calls the CNI plugin to assign an IP, configure routes, and set up the network namespace. See <a href="kubernetes-networking.html">Networking &amp; Services</a> for CNI details.</p>
+    <pre><code>┌─────────────────────────────────────────┐
+│  Pod network namespace                  │
+│  eth0  10.244.2.15/24                   │
+│       │                                 │
+│  veth pair ──► bridge cni0 on host      │
+│              ──► overlay / BGP routing  │
+└─────────────────────────────────────────┘</code></pre>
+  </section>
+
+  <section id="kubectl">
+    <h2>5. kubectl Mastery</h2>
+    <p><strong>kubectl</strong> is the CLI for the Kubernetes API. It reads kubeconfig (<code>~/.kube/config</code>) for cluster URL, credentials, and current context.</p>
+
+    <h3>Essential commands</h3>
+    <pre><code># Context and cluster info
+kubectl config get-contexts
+kubectl config use-context prod-eks
+kubectl cluster-info
+
+# CRUD operations
+kubectl apply -f deployment.yaml      # declarative (preferred)
+kubectl create deployment nginx --image=nginx:1.25
+kubectl get pods -o wide -w           # watch mode
+kubectl describe pod nginx-abc123
+kubectl delete pod nginx-abc123 --grace-period=30
+
+# Imperative edits
+kubectl scale deployment api --replicas=5
+kubectl set image deployment/api api=myregistry/api:v2.1
+kubectl rollout status deployment/api
+kubectl rollout undo deployment/api</code></pre>
+
+    <h3>Output formats</h3>
+    <table>
+      <thead><tr><th>Flag</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>-o wide</code></td><td>Extra columns (node, IP)</td></tr>
+        <tr><td><code>-o yaml</code></td><td>Full manifest (includes cluster-managed fields)</td></tr>
+        <tr><td><code>-o json</code></td><td>JSON output for scripting</td></tr>
+        <tr><td><code>-o jsonpath='{.items[*].metadata.name}'</code></td><td>Extract specific fields</td></tr>
+        <tr><td><code>-o custom-columns=NAME:.metadata.name,STATUS:.status.phase</code></td><td>Custom table</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Debugging shortcuts</h3>
+    <pre><code>kubectl logs pod/api-xyz -c api --previous    # crashed container logs
+kubectl exec -it pod/api-xyz -c api -- sh     # shell into container
+kubectl port-forward svc/api 8080:80          # local access
+kubectl top pods -n production                # metrics (needs metrics-server)
+kubectl api-resources                         # list all resource types
+kubectl explain pod.spec.containers           # OpenAPI docs in terminal</code></pre>
+
+    <h3>Generating YAML</h3>
+    <pre><code>kubectl create deployment nginx --image=nginx --dry-run=client -o yaml &gt; deploy.yaml
+kubectl run debug --image=busybox --restart=Never --dry-run=client -o yaml</code></pre>
+    <div class="callout">
+      <strong>Prefer <code>apply</code> over <code>create</code>.</strong> <code>kubectl apply</code> uses server-side or client-side three-way merge and is idempotent. <code>create</code> fails if the object already exists.
+    </div>
+  </section>
+
+  <section id="api-resources">
+    <h2>6. API Resources &amp; Objects</h2>
+    <p>Everything in Kubernetes is an <strong>API object</strong> with <code>apiVersion</code>, <code>kind</code>, <code>metadata</code>, <code>spec</code> (desired state), and <code>status</code> (observed state).</p>
+
+    <h3>Core object anatomy</h3>
+    <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: production
+  labels:
+    app: api
+    team: platform
+  annotations:
+    deployment.kubernetes.io/revision: "3"
+spec:          # what you want
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: myregistry/api:1.2.0
+status:        # what the cluster reports (read-only via kubectl)
+  replicas: 3
+  availableReplicas: 3
+  conditions: [...]</code></pre>
+
+    <h3>Common API groups</h3>
+    <table>
+      <thead><tr><th>API Group</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td><code>v1</code> (core)</td><td>Pod, Service, ConfigMap, Secret, Namespace, PV, PVC</td></tr>
+        <tr><td><code>apps/v1</code></td><td>Deployment, ReplicaSet, StatefulSet, DaemonSet</td></tr>
+        <tr><td><code>batch/v1</code></td><td>Job, CronJob</td></tr>
+        <tr><td><code>networking.k8s.io/v1</code></td><td>Ingress, NetworkPolicy</td></tr>
+        <tr><td><code>rbac.authorization.k8s.io/v1</code></td><td>Role, RoleBinding, ClusterRole</td></tr>
+        <tr><td><code>autoscaling/v2</code></td><td>HorizontalPodAutoscaler</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Labels and selectors</h3>
+    <p>Labels are key/value pairs on objects. Selectors connect resources: a Service selects Pods; a Deployment selects ReplicaSets; a ReplicaSet selects Pods.</p>
+    <pre><code>metadata:
+  labels:
+    app: api
+    env: production
+    version: v2
+
+# Service routes to Pods with matching labels
+spec:
+  selector:
+    app: api
+    env: production</code></pre>
+
+    <h3>Owner references and garbage collection</h3>
+    <p>Child objects (Pods owned by ReplicaSets) have <code>ownerReferences</code>. Deleting a Deployment cascades to its ReplicaSets and Pods. Set <code>orphanDependents</code> or use <code>--cascade=orphan</code> to keep children.</p>
+    <pre><code>kubectl delete deployment api --cascade=orphan   # keep ReplicaSets/Pods</code></pre>
+  </section>
+
+  <section id="reconciliation">
+    <h2>7. The Reconciliation Loop</h2>
+    <p>Kubernetes is built on the <strong>control loop</strong> pattern: observe current state, compare to desired state, act to reduce the difference, repeat.</p>
+    <pre><code>         ┌──────────────────────────────────────────┐
+         │           DESIRED STATE (spec)              │
+         │   Deployment: replicas: 3, image: v2     │
+         └──────────────────┬───────────────────────┘
+                            │
+    ┌───────────────────────▼───────────────────────┐
+    │              API SERVER / etcd                 │
+    └───────────────────────┬───────────────────────┘
+                            │ watch
+         ┌──────────────────┼──────────────────┐
+         ▼                  ▼                  ▼
+   Deployment ctrl    ReplicaSet ctrl     Scheduler
+         │                  │                  │
+         │ creates/         │ creates/         │ assigns
+         │ updates RS       │ deletes Pods     │ nodeName
+         ▼                  ▼                  ▼
+   ReplicaSet          Pods (actual)      Worker Node
+                            │
+                     kubelet runs containers
+                            │
+                     status reported back ──► loop repeats</code></pre>
+
+    <h3>Example: scaling a Deployment</h3>
+    <ol>
+      <li>You run <code>kubectl scale deployment api --replicas=5</code></li>
+      <li>API server updates Deployment spec in etcd</li>
+      <li>Deployment controller sees spec.replicas=5, current RS has 3 Pods</li>
+      <li>ReplicaSet controller creates 2 new Pods</li>
+      <li>Scheduler assigns them to nodes; kubelet starts containers</li>
+      <li>kubelet reports Pod status; Deployment status shows 5/5 available</li>
+    </ol>
+
+    <h3>Level-triggered vs edge-triggered</h3>
+    <p>Kubernetes controllers are <strong>level-triggered</strong>: they reconcile the full desired state on every loop, not just the last change. If a Pod is deleted manually, the ReplicaSet controller recreates it without a new event. This makes the system resilient to missed events or restarts.</p>
+
+    <h3>Finalizers</h3>
+    <p>Objects with <code>metadata.finalizers</code> cannot be deleted until each finalizer is removed by its controller. Used for graceful cleanup (e.g. removing LoadBalancer IPs, volume detachment).</p>
+    <pre><code>kubectl get pod stuck-terminating -o yaml | grep finalizers -A 3
+# Remove finalizer only when you understand the risk (break-glass)
+kubectl patch pod stuck-terminating -p '{"metadata":{"finalizers":[]}}' --type=merge</code></pre>
+  </section>
+
+  <section id="cluster-setup">
+    <h2>8. Cluster Setup Options</h2>
+    <p>How you run Kubernetes depends on environment, team size, and operational appetite.</p>
+    <table>
+      <thead><tr><th>Option</th><th>Best for</th><th>Trade-offs</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Managed (EKS, GKE, AKS)</strong></td><td>Production, most teams</td><td>Control plane managed; you pay for nodes + control plane fee</td></tr>
+        <tr><td><strong>kind</strong></td><td>Local dev, CI</td><td>Multi-node clusters in Docker; not for production</td></tr>
+        <tr><td><strong>minikube</strong></td><td>Local learning</td><td>Single-node; addons for ingress, metrics</td></tr>
+        <tr><td><strong>k3s / k3d</strong></td><td>Edge, IoT, lightweight prod</td><td>Stripped-down distribution; easy HA with embedded etcd</td></tr>
+        <tr><td><strong>kubeadm</strong></td><td>Self-managed on VMs</td><td>Official bootstrap tool; you operate upgrades and etcd</td></tr>
+        <tr><td><strong>Rancher / OpenShift</strong></td><td>Enterprise multi-cluster</td><td>Extra UI, policy, and platform features</td></tr>
+      </tbody>
+    </table>
+
+    <h3>kind quick start</h3>
+    <pre><code># Install: go install sigs.k8s.io/kind@latest
+kind create cluster --name dev --config - &lt;&lt;EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+EOF
+
+kubectl cluster-info --context kind-dev
+kubectl get nodes</code></pre>
+
+    <h3>minikube quick start</h3>
+    <pre><code>minikube start --cpus=4 --memory=8192 --driver=docker
+minikube addons enable ingress
+minikube addons enable metrics-server
+kubectl get pods -A</code></pre>
+
+    <h3>Production checklist</h3>
+    <ul>
+      <li>HA control plane (managed or 3+ control plane nodes with kubeadm)</li>
+      <li>etcd backups and tested restore procedure</li>
+      <li>Node auto-repair and auto-scaling (cluster autoscaler)</li>
+      <li>RBAC, Pod Security Standards, and network policies</li>
+      <li>Separate node pools for system vs workload vs GPU workloads</li>
+      <li>Upgrade strategy (surge upgrades, blue/green node pools)</li>
+    </ul>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>9. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>Cluster info</td><td><code>kubectl cluster-info</code></td></tr>
+        <tr><td>List nodes</td><td><code>kubectl get nodes -o wide</code></td></tr>
+        <tr><td>Control plane Pods</td><td><code>kubectl get pods -n kube-system</code></td></tr>
+        <tr><td>Switch context</td><td><code>kubectl config use-context &lt;name&gt;</code></td></tr>
+        <tr><td>All API resources</td><td><code>kubectl api-resources</code></td></tr>
+        <tr><td>Explain a field</td><td><code>kubectl explain pod.spec</code></td></tr>
+        <tr><td>Watch events</td><td><code>kubectl get events -A --sort-by=.lastTimestamp</code></td></tr>
+        <tr><td>Component status</td><td><code>kubectl get componentstatuses</code> (deprecated; use node conditions)</td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheet: <a href="../../cheatsheets/kubectl-cheatsheet.html">kubectl Cheat Sheet</a></p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="kubernetes-workloads.html">Workloads →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

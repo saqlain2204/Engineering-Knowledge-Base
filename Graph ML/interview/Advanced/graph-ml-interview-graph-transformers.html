@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Graph Transformers | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Graph Transformers</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Graph Transformers</h1>
+  <p><a href="../../learn/Advanced/graph-ml-graph-transformers.html">Read learning notes</a>.</p>
+</header>
+<main><section>
+<h2>Graph Transformers</h2>
+<details><summary>Why use transformers on graphs instead of MPNN?</summary>
+<div><p>MPNN has local receptive field per layer  -  distant nodes need many layers, causing oversmoothing and over-squashing. Transformers attend globally in one layer. Cost: $O(n^2)$ vs $O(|E|)$.</p></div></details>
+<details><summary>What positional encodings do graph transformers need?</summary>
+<div><p>Graphs have no canonical order. Inject structure via Laplacian eigenvectors, random-walk structural encoding (RWSE), shortest-path distance biases, or centrality encodings (Graphormer).</p></div></details>
+<details><summary>What is Graphormer?</summary>
+<div><p>Transformer with three structural biases: centrality encoding (degree), spatial encoding (shortest-path distance), edge encoding (edge features in attention). Showed transformers can beat MPNNs on molecules with right encodings.</p></div></details>
+<details><summary>What is the GPS architecture?</summary>
+<div><p>General Powerful Scalable Graph Transformer = parallel MPNN branch (local) + Transformer branch (global), combined with MLP. Best of both. State-of-the-art on many OGB benchmarks.</p></div></details>
+<details><summary>When choose MPNN over graph transformer?</summary>
+<div><p>Sparse million-node graphs (cost), latency-sensitive production, strong local structure (molecules with few layers). Transformers win when over-squashing limits MPNN and graph is small/medium.</p></div></details>
+</section></main>
+<footer><p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p></footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

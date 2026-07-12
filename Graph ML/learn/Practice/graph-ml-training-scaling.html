@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Training &amp; Scaling | Graph Machine Learning</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-learn.html">Learn</a> &rsaquo; Training &amp; Scaling</p>
+  </nav>
+  <h1>Training, Optimization &amp; Scaling</h1>
+  <p>Losses, sampling, mini-batch training on billion-edge graphs, and debugging GNN training.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#losses">Loss Functions</a></li>
+    <li><a href="#full-vs-mini">Full-Batch vs Mini-Batch</a></li>
+    <li><a href="#sampling">Neighbor &amp; Subgraph Sampling</a></li>
+    <li><a href="#link-training">Training Link Prediction</a></li>
+    <li><a href="#optimization">Optimization Tricks</a></li>
+    <li><a href="#debugging">Debugging Checklist</a></li>
+    <li><a href="#frameworks">Frameworks</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="losses">
+    <h2>1. Loss Functions</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Loss</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Node classification</td><td>Cross-entropy</td><td>Only on labeled train nodes</td></tr>
+        <tr><td>Multi-label</td><td>BCE with logits</td><td>Nodes can have multiple labels</td></tr>
+        <tr><td>Link prediction</td><td>BCE / margin ranking</td><td>Need negative samples</td></tr>
+        <tr><td>Graph regression</td><td>MSE / MAE</td><td>On graph-level readout</td></tr>
+        <tr><td>Self-supervised</td><td>Contrastive (InfoNCE)</td><td>GraphMAE, DGI  -  pretrain then finetune</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="full-vs-mini">
+    <h2>2. Full-Batch vs Mini-Batch</h2>
+    <p><strong>Full-batch:</strong> entire graph in memory, one gradient step per epoch. Works for Cora (2.7K nodes). Fails for OGBN-Products (2.4M nodes).</p>
+    <p><strong>Mini-batch:</strong> sample subset of nodes/edges per step. Required for large graphs.</p>
+  </section>
+
+  <section id="sampling">
+    <h2>3. Neighbor &amp; Subgraph Sampling</h2>
+    <ul>
+      <li><strong>Neighbor sampling (GraphSAGE):</strong> sample fixed fanout per layer, e.g. [25, 10]  -  25 neighbors layer 1, 10 layer 2</li>
+      <li><strong>GraphSAINT:</strong> sample random subgraphs (random walk, forest fire)</li>
+      <li><strong>Cluster-GCN:</strong> partition graph into clusters, batch clusters</li>
+      <li><strong>FastGCN:</strong> importance sampling of nodes</li>
+    </ul>
+    <pre><code>from torch_geometric.loader import NeighborLoader
+
+loader = NeighborLoader(
+    data,
+    num_neighbors=[25, 10],
+    batch_size=1024,
+    input_nodes=data.train_mask,
+)</code></pre>
+  </section>
+
+  <section id="link-training">
+    <h2>4. Training Link Prediction</h2>
+    <ol>
+      <li>Split edges into train/val/test</li>
+      <li>Train GNN on train edges only</li>
+      <li>Positive pairs: held-out edges</li>
+      <li>Negative pairs: random non-edges (sample 1:1 or 1:k ratio)</li>
+      <li>Score: dot product or MLP on $(\mathbf{h}_i, \mathbf{h}_j)$</li>
+    </ol>
+    <div class="callout">
+      <strong>Never</strong> include validation/test edges in the message-passing graph during training.
+    </div>
+  </section>
+
+  <section id="optimization">
+    <h2>5. Optimization Tricks</h2>
+    <ul>
+      <li><strong>Adam</strong> lr 0.01 (GCN) to 0.001 (GAT)  -  always tune</li>
+      <li><strong>Weight decay</strong> 5e-4 standard for citation networks</li>
+      <li><strong>Dropout</strong> 0.5 on embeddings (GCN paper default)</li>
+      <li><strong>Early stopping</strong> on validation metric</li>
+      <li><strong>Gradient clipping</strong> for deep/unstable models</li>
+      <li><strong>Mixed precision</strong> (AMP) for large graph batches</li>
+    </ul>
+  </section>
+
+  <section id="debugging">
+    <h2>6. Debugging Checklist</h2>
+    <ol>
+      <li>Does a <strong>label propagation</strong> or <strong>MLP baseline</strong> work? If MLP beats GNN, structure may not help.</li>
+      <li>Check <strong>train accuracy</strong>  -  can't fit train = bug or too few layers</li>
+      <li>Verify <strong>masks</strong> and <strong>edge splits</strong> for leakage</li>
+      <li>Plot <strong>loss curve</strong>  -  diverging = lr too high</li>
+      <li>Check <strong>isolated nodes</strong>  -  get zero or self-loop-only messages</li>
+      <li>Compare <strong>2 vs 4 layers</strong>  -  val drops at 4 = oversmoothing</li>
+    </ol>
+  </section>
+
+  <section id="frameworks">
+    <h2>7. Frameworks</h2>
+    <table>
+      <thead><tr><th>Framework</th><th>Strength</th></tr></thead>
+      <tbody>
+        <tr><td>PyTorch Geometric</td><td>Research default, huge model zoo</td></tr>
+        <tr><td>DGL</td><td>Large-scale, heterogeneous, distributed</td></tr>
+        <tr><td>PyG + OGB</td><td>Standardized benchmarks</td></tr>
+        <tr><td>DeepSNAP</td><td>Bridge NetworkX and PyG</td></tr>
+      </tbody>
+    </table>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="graph-ml-when-to-use-evaluation.html">When to Use GNNs &amp; Evaluation →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../graph-ml-learn.html">Back to Learn</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

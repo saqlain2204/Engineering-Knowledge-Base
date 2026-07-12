@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>LLM Metrics and Observability | AI Engineering</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body class="learn-page">
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; LLM Metrics and Observability</p>
+  </nav>
+  <h1>LLM Metrics and Observability: Complete Reference</h1>
+  <p>From metric taxonomy and trace schemas through quality, retrieval, latency, cost, safety, drift, SLOs, Prometheus/Grafana, alerting, and production Python pipelines for LLM systems.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#metrics-hierarchy">Metrics Hierarchy</a></li>
+    <li><a href="#quality-metrics">Quality Metrics</a></li>
+    <li><a href="#retrieval-metrics">Retrieval Metrics</a></li>
+    <li><a href="#generation-metrics">Generation Metrics</a></li>
+    <li><a href="#latency-metrics">Latency Metrics</a></li>
+    <li><a href="#cost-tokens">Cost and Token Metrics</a></li>
+    <li><a href="#throughput-metrics">Throughput Metrics</a></li>
+    <li><a href="#agent-metrics">Agent Metrics</a></li>
+    <li><a href="#safety-metrics">Safety Metrics</a></li>
+    <li><a href="#user-feedback">User Feedback Metrics</a></li>
+    <li><a href="#drift-metrics">Drift Metrics</a></li>
+    <li><a href="#slos">SLOs for LLM Services</a></li>
+    <li><a href="#trace-schema">Trace Schema</a></li>
+    <li><a href="#dashboards">Dashboards</a></li>
+    <li><a href="#prometheus-grafana">Prometheus and Grafana</a></li>
+    <li><a href="#platform-tools">Platform Tools</a></li>
+    <li><a href="#alerting">Alerting</a></li>
+    <li><a href="#cost-attribution">Cost Attribution</a></li>
+    <li><a href="#metrics-pipeline">Metrics Pipeline (Python)</a></li>
+    <li><a href="#metrics-catalog">Master Metrics Catalog</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="metrics-hierarchy">
+    <h2>1. Metrics Hierarchy</h2>
+    <p>LLM observability spans four layers. Each layer answers a different question and uses different storage, cardinality, and retention policies. Treating all signals as one flat dashboard leads to alert fatigue and blind spots.</p>
+
+    <h3>Four-layer model</h3>
+    <table>
+      <thead><tr><th>Layer</th><th>Question</th><th>Examples</th><th>Typical store</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Business</strong></td><td>Is the product working for users and revenue?</td><td>Task completion rate, CSAT, conversion lift, support deflection</td><td>Product analytics, warehouse</td></tr>
+        <tr><td><strong>Quality</strong></td><td>Are answers correct, grounded, and on-brand?</td><td>Faithfulness, hallucination rate, rubric scores, eval pass rate</td><td>Eval DB, labeling platform</td></tr>
+        <tr><td><strong>System</strong></td><td>Is infrastructure healthy?</td><td>p95 latency, error rate, GPU utilization, queue depth</td><td>Prometheus, Datadog</td></tr>
+        <tr><td><strong>Cost</strong></td><td>Are we spending efficiently?</td><td>Tokens per task, $/successful answer, cache hit rate</td><td>FinOps warehouse, billing API</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Golden signals adapted for LLMs</h3>
+    <p>Google SRE golden signals (latency, traffic, errors, saturation) still apply, but LLM services add <strong>quality</strong> and <strong>cost</strong> as first-class dimensions:</p>
+    <ul>
+      <li><strong>Latency:</strong> time to first token (TTFT), time per output token (TPOT), end-to-end request time.</li>
+      <li><strong>Traffic:</strong> requests per second, tokens in/out per second, concurrent sessions.</li>
+      <li><strong>Errors:</strong> HTTP 5xx, provider timeouts, tool failures, schema validation failures.</li>
+      <li><strong>Saturation:</strong> GPU memory, KV cache pressure, embedding queue backlog, rate-limit headroom.</li>
+      <li><strong>Quality:</strong> rolling eval scores, thumbs-up rate, escalation rate.</li>
+      <li><strong>Cost:</strong> spend per feature, per tenant, per successful outcome.</li>
+    </ul>
+
+    <h3>Metric types</h3>
+    <table>
+      <thead><tr><th>Type</th><th>Use when</th><th>Cardinality risk</th></tr></thead>
+      <tbody>
+        <tr><td>Counter</td><td>Monotonically increasing totals (requests, tokens, errors)</td><td>Low if labels bounded</td></tr>
+        <tr><td>Gauge</td><td>Point-in-time values (queue depth, active users)</td><td>Medium</td></tr>
+        <tr><td>Histogram</td><td>Latency and size distributions (p50, p95, p99)</td><td>Low to medium</td></tr>
+        <tr><td>Summary</td><td>Client-side quantiles (less common in Prometheus)</td><td>Medium</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Business metrics lag. System metrics are fast but say nothing about hallucinations. Quality metrics are slow but decisive. A healthy stack instruments all three and correlates them on <code>trace_id</code>.
+    </div>
+
+    <h3>Cardinality discipline</h3>
+    <p>Never attach unbounded labels (raw <code>user_id</code>, full prompt text, chunk content) to Prometheus metrics. Use bounded enums: <code>model</code>, <code>feature</code>, <code>tenant_tier</code>, <code>prompt_version</code>. Store high-cardinality detail in trace backends (Langfuse, Phoenix, ClickHouse).</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="quality-metrics">
+    <h2>2. Quality Metrics</h2>
+    <p>Quality metrics measure whether model outputs satisfy task requirements. Unlike latency, quality is rarely observable from infrastructure alone. You need eval harnesses, judges, human labels, or proxy signals.</p>
+
+    <h3>Offline vs online quality</h3>
+    <ul>
+      <li><strong>Offline:</strong> fixed golden sets scored on schedule or in CI. High precision, low freshness.</li>
+      <li><strong>Online:</strong> sampled production traffic scored asynchronously. Higher freshness, sampling bias risk.</li>
+      <li><strong>Proxy:</strong> user feedback, edit distance, retry rate. Cheap but noisy.</li>
+    </ul>
+
+    <h3>Core quality dimensions</h3>
+    <table>
+      <thead><tr><th>Dimension</th><th>Definition</th><th>How to measure</th></tr></thead>
+      <tbody>
+        <tr><td>Correctness</td><td>Answer matches ground truth or expert label</td><td>Exact match, F1, unit tests</td></tr>
+        <tr><td>Faithfulness</td><td>Answer supported by provided context</td><td>RAGAS faithfulness, citation check</td></tr>
+        <tr><td>Relevance</td><td>Answer addresses the user question</td><td>LLM-as-judge, answer relevancy</td></tr>
+        <tr><td>Coherence</td><td>Logical, readable, well structured</td><td>Rubric score, perplexity (weak)</td></tr>
+        <tr><td>Instruction following</td><td>Format, tone, constraints respected</td><td>Schema validation, regex, judge</td></tr>
+        <tr><td>Helpfulness</td><td>User would find it useful</td><td>Thumbs, MT-Bench style rubric</td></tr>
+      </tbody>
+    </table>
+
+    <h3>LLM-as-judge metrics</h3>
+    <p>A strong model scores candidate outputs on a 1-5 rubric. Track:</p>
+    <ul>
+      <li>Mean judge score per prompt version and model.</li>
+      <li>Win rate in pairwise A/B (model A vs baseline B).</li>
+      <li>Judge-human agreement (calibration set).</li>
+      <li>Judge variance across repeated runs (temperature 0 for stability).</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Judge bias:</strong> Judges favor verbosity, their own model family, and confident tone. Re-calibrate monthly against human labels. Never use a single judge score as the only launch gate.
+    </div>
+
+    <h3>Regression detection</h3>
+    <p>Store eval results keyed by <code>config_hash</code> (model + prompt + tools + retrieval settings). Alert when:</p>
+    $$|\text{score}_{\text{new}} - \text{score}_{\text{baseline}}| &gt; \delta$$
+    <p>for any stratified slice (language, task type, tenant). Aggregate averages hide regressions on minority slices that carry legal or revenue risk.</p>
+
+    <h3>Quality SLO examples</h3>
+    <ul>
+      <li>Golden-set faithfulness ≥ 0.92 weekly.</li>
+      <li>JSON schema pass rate ≥ 99.5% for structured extraction.</li>
+      <li>Pairwise win rate vs baseline ≥ 55% on custom eval.</li>
+    </ul>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="retrieval-metrics">
+    <h2>3. Retrieval Metrics</h2>
+    <p>RAG systems fail in retrieval before generation. Split metrics across the retrieval pipeline: embedding, index lookup, reranking, and context assembly.</p>
+
+    <h3>Classic IR metrics</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Formula / meaning</th><th>When to use</th></tr></thead>
+      <tbody>
+        <tr><td>Recall@k</td><td>Fraction of relevant docs in top-k</td><td>Recall-oriented QA, support bots</td></tr>
+        <tr><td>Precision@k</td><td>Fraction of top-k that are relevant</td><td>Short context windows</td></tr>
+        <tr><td>MRR</td><td>Mean reciprocal rank of first relevant hit</td><td>Single correct document expected</td></tr>
+        <tr><td>nDCG@k</td><td>Discounted cumulative gain normalized</td><td>Graded relevance labels</td></tr>
+        <tr><td>Hit rate</td><td>% queries with ≥1 relevant doc in top-k</td><td>Operational dashboard</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Production retrieval proxies</h3>
+    <p>When labeled q-d pairs are scarce, monitor proxies:</p>
+    <ul>
+      <li><strong>Empty result rate:</strong> queries returning zero chunks above score threshold.</li>
+      <li><strong>Low score rate:</strong> top-1 similarity below threshold (tune per corpus).</li>
+      <li><strong>Context length distribution:</strong> sudden drop may mean retrieval failure.</li>
+      <li><strong>Chunk diversity:</strong> redundant chunks waste context budget.</li>
+      <li><strong>Rerank lift:</strong> mean score delta pre vs post reranker.</li>
+    </ul>
+
+    <h3>Embedding and index health</h3>
+    <ul>
+      <li>Embedding latency p95 and error rate.</li>
+      <li>Index staleness: lag between source doc update and index refresh.</li>
+      <li>Version skew: query embedder version ≠ index embedder version.</li>
+      <li>ANN recall vs brute force on sample queries (index degradation).</li>
+    </ul>
+
+    <h3>Context assembly metrics</h3>
+    <pre><code>retrieval_trace = {
+  "query_hash": "a9f2",
+  "embed_ms": 38,
+  "search_ms": 112,
+  "rerank_ms": 67,
+  "chunks_retrieved": 20,
+  "chunks_after_rerank": 5,
+  "chunks_after_dedup": 4,
+  "total_context_tokens": 1840,
+  "top_score": 0.87,
+  "hit": true
+}</code></pre>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> High generation quality with poor retrieval metrics means the model is hallucinating from parametric memory. Fix retrieval before fine-tuning the LLM.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="generation-metrics">
+    <h2>4. Generation Metrics</h2>
+    <p>Generation metrics cover the LLM inference step: decoding behavior, output shape, streaming performance, and post-processing success.</p>
+
+    <h3>Output structure metrics</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Output token count</td><td>Distribution of completion length; spikes may indicate runaway generation</td></tr>
+        <tr><td>Finish reason rate</td><td><code>stop</code> vs <code>length</code> vs <code>content_filter</code></td></tr>
+        <tr><td>Schema pass rate</td><td>JSON/XML/tool-call parse success</td></tr>
+        <tr><td>Refusal rate</td><td>Model declines to answer (may be correct or over-refusal)</td></tr>
+        <tr><td>Repetition score</td><td>n-gram repetition, loop detection in agents</td></tr>
+        <tr><td>Citation coverage</td><td>% factual claims with valid source pointers</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Decoding parameters to log</h3>
+    <ul>
+      <li>Model ID and version (provider snapshot date for APIs).</li>
+      <li>Temperature, top_p, max_tokens, stop sequences.</li>
+      <li>Prompt template version and hash.</li>
+      <li>System vs user token counts (context window utilization).</li>
+    </ul>
+
+    <h3>Streaming metrics</h3>
+    <ul>
+      <li><strong>TTFT:</strong> time from request start to first token byte.</li>
+      <li><strong>TPOT:</strong> median ms between consecutive output tokens.</li>
+      <li><strong>Stream abort rate:</strong> client disconnected before completion.</li>
+      <li><strong>Inter-token gap p99:</strong> detects batching stalls and preemption.</li>
+    </ul>
+
+    <h3>Logprob and confidence (when available)</h3>
+    <p>Mean token logprob, entropy per step, and calibrated uncertainty help flag low-confidence answers for human review or retrieval fallback. Not all APIs expose logprobs; treat absence as a known gap.</p>
+
+    <h3>Post-generation pipeline</h3>
+    <p>Track success rates for moderation filters, PII redaction, format repair loops, and tool-call validation. A generation can be "good" yet fail downstream parsing.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="latency-metrics">
+    <h2>5. Latency Metrics</h2>
+    <p>Latency drives user experience and infrastructure sizing. LLM latency is multi-modal: prefill (prompt processing) and decode (token generation) have different scaling behavior.</p>
+
+    <h3>Key latency definitions</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Definition</th><th>Typical target (interactive)</th></tr></thead>
+      <tbody>
+        <tr><td>TTFT</td><td>Request accepted → first token streamed</td><td>&lt; 500 ms (small model) to 2 s (large)</td></tr>
+        <tr><td>TPOT</td><td>Time per output token after first</td><td>20-80 ms/token depending on hardware</td></tr>
+        <tr><td>E2E latency</td><td>Full response ready (non-streaming)</td><td>Task-dependent</td></tr>
+        <tr><td>Prefill latency</td><td>Process prompt tokens (often ∝ input length)</td><td>Monitor separately from decode</td></tr>
+        <tr><td>Queue wait</td><td>Time in scheduler before GPU work starts</td><td>Should be &lt; 5% of E2E at normal load</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Span breakdown (standard)</h3>
+    <pre><code>latency_ms: {
+  "auth": 3,
+  "rate_limit_check": 1,
+  "embed": 45,
+  "retrieve": 120,
+  "rerank": 68,
+  "prompt_build": 5,
+  "prefill": 210,
+  "decode": 890,
+  "postprocess": 12,
+  "total": 1354
+}</code></pre>
+
+    <h3>Percentiles, not averages</h3>
+    <p>Report p50, p90, p95, p99 for each span. Means are misleading because LLM latency distributions are heavy-tailed (long outputs, cache misses, cold starts). SLOs should reference percentiles.</p>
+
+    <h3>Factors that inflate latency</h3>
+    <ul>
+      <li>Long prompts and large retrieved context (prefill grows).</li>
+      <li>High concurrency without continuous batching.</li>
+      <li>CPU-bound tokenization on gateway.</li>
+      <li>Synchronous tool calls inside the generation path.</li>
+      <li>Cross-region provider routing.</li>
+      <li>KV cache eviction under memory pressure.</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Users perceive TTFT most acutely. Optimize perceived speed with streaming even if total E2E is unchanged. Show partial output early.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="cost-tokens">
+    <h2>6. Cost and Token Metrics</h2>
+    <p>Token usage is the billing unit for most LLM APIs and the primary driver of self-hosted GPU cost (via throughput and model size). Cost metrics must tie to outcomes, not raw request counts.</p>
+
+    <h3>Token accounting</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Input tokens</td><td>System + user + retrieved context + tool results</td></tr>
+        <tr><td>Output tokens</td><td>Completion including hidden chain-of-thought if logged</td></tr>
+        <tr><td>Cached input tokens</td><td>Provider prompt cache hits (discounted billing)</td></tr>
+        <tr><td>Embedding tokens</td><td>Separate from generation; often forgotten in budgets</td></tr>
+        <tr><td>Reranker calls</td><td>Per-document or per-query pricing</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Cost estimation</h3>
+    $$C_{\text{request}} = \frac{N_{\text{in}} \cdot p_{\text{in}} + N_{\text{out}} \cdot p_{\text{out}}}{10^6} + C_{\text{embed}} + C_{\text{tools}}$$
+    <p>Store price tables per model version. Providers change rates; version your pricing config.</p>
+
+    <h3>Efficiency ratios</h3>
+    <ul>
+      <li><strong>Tokens per successful task:</strong> only count tasks that pass validation.</li>
+      <li><strong>Context efficiency:</strong> useful answer tokens / total input tokens.</li>
+      <li><strong>Retry multiplier:</strong> total tokens including failed attempts / first-attempt tokens.</li>
+      <li><strong>Cache savings:</strong> $ avoided via prompt caching and response caching.</li>
+    </ul>
+
+    <h3>Budget guardrails</h3>
+    <p>Enforce per-tenant daily caps, per-request max_tokens, retrieval top-k limits, and agent max_steps at the gateway. Emit metrics when requests are truncated or rejected by budget policy.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="throughput-metrics">
+    <h2>7. Throughput Metrics</h2>
+    <p>Throughput measures how much work the system completes per unit time. For GPUs, the key units are tokens/sec (prefill and decode reported separately) and concurrent sequences.</p>
+
+    <h3>Service-level throughput</h3>
+    <ul>
+      <li>Requests per second (RPS) by endpoint and priority tier.</li>
+      <li>Input tokens/sec and output tokens/sec (aggregate and per GPU).</li>
+      <li>Successful tasks per hour (business throughput).</li>
+      <li>Batch job completion rate for offline pipelines.</li>
+    </ul>
+
+    <h3>Hardware utilization</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Healthy range</th><th>Interpretation</th></tr></thead>
+      <tbody>
+        <tr><td>GPU utilization</td><td>70-90% sustained</td><td>Too low: over-provisioned; too high: queue buildup</td></tr>
+        <tr><td>GPU memory used</td><td>Below OOM threshold with headroom</td><td>KV cache dominates at high concurrency</td></tr>
+        <tr><td>Batch size (continuous batching)</td><td>Varies dynamically</td><td>Small batches → low throughput; huge → latency spikes</td></tr>
+        <tr><td>MFU / HFU</td><td>Model FLOPs utilization</td><td>Training metric; inference uses tokens/GPU/s</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Backpressure signals</h3>
+    <ul>
+      <li>Queue depth and wait time growth.</li>
+      <li>Rate-limit 429 rate from provider or self-imposed.</li>
+      <li>Autoscaling lag (pods pending, cold start frequency).</li>
+      <li>Rejected requests due to circuit breaker open.</li>
+    </ul>
+
+    <p>Throughput and latency trade off via batching. Document the operating point: max RPS at p95 latency target.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="agent-metrics">
+    <h2>8. Agent Metrics</h2>
+    <p>Agents loop: plan, call tools, observe results, repeat. Metrics must capture loop structure, tool reliability, and termination behavior. A single "request" can span dozens of LLM calls.</p>
+
+    <h3>Agent session metrics</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>Steps per session</td><td>Detect runaway loops; correlate with cost</td></tr>
+        <tr><td>LLM calls per session</td><td>Each call bills tokens</td></tr>
+        <tr><td>Tool calls per session</td><td>External API load and failure surface</td></tr>
+        <tr><td>Termination reason</td><td>success, max_steps, timeout, user_cancel, error</td></tr>
+        <tr><td>Time to resolution</td><td>Wall clock for end-to-end task</td></tr>
+        <tr><td>Replan rate</td><td>How often agent revises strategy mid-session</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Tool-specific metrics</h3>
+    <ul>
+      <li>Per-tool call count, latency p95, error rate, timeout rate.</li>
+      <li>Retry count and idempotency violations.</li>
+      <li>Permission denied rate (auth misconfiguration signal).</li>
+      <li>Result payload size (large tool outputs blow context).</li>
+    </ul>
+
+    <h3>Planning quality proxies</h3>
+    <ul>
+      <li><strong>Redundant tool calls:</strong> same args repeated without state change.</li>
+      <li><strong>Dead-end rate:</strong> tool returns error or empty, agent continues anyway.</li>
+      <li><strong>Human takeover rate:</strong> escalation to operator mid-session.</li>
+      <li><strong>Task success rate:</strong> objective verifier pass (code tests, DB row created).</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Agent cost explosions:</strong> A loop with 30 GPT-4 calls and 15 web searches can cost dollars per user message. Hard caps on steps, tokens, and tool spend are mandatory production controls, not optional optimizations.
+    </div>
+
+    <h3>Multi-agent systems</h3>
+    <p>Track handoff count, message fan-out, supervisor override rate, and per-role token share. Without role-level attribution, you cannot tell whether the planner or executor wastes budget.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="safety-metrics">
+    <h2>9. Safety Metrics</h2>
+    <p>Safety metrics quantify policy compliance, harm prevention, and attack resistance. They complement quality metrics: an answer can be fluent yet unsafe or leak confidential data.</p>
+
+    <h3>Input-side metrics</h3>
+    <ul>
+      <li>Jailbreak attempt rate (classifier score above threshold).</li>
+      <li>Prompt injection detection rate in retrieved documents.</li>
+      <li>PII detected in user input (block or redact counts).</li>
+      <li>Blocked topic rate (policy categories).</li>
+    </ul>
+
+    <h3>Output-side metrics</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>Toxicity score distribution</td><td>Classifier on output text</td></tr>
+        <tr><td>PII leakage rate</td><td>Secrets, emails, SSN patterns in output</td></tr>
+        <tr><td>Over-refusal rate</td><td>Safe queries incorrectly refused</td></tr>
+        <tr><td>Under-refusal rate</td><td>Unsafe queries answered (red team)</td></tr>
+        <tr><td>Policy violation rate</td><td>Custom rules (medical advice, legal claims)</td></tr>
+        <tr><td>Hallucinated authority</td><td>Cites nonexistent sources or laws</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Red team and eval cadence</h3>
+    <p>Run scheduled adversarial suites (harmful instructions, injection payloads, multilingual attacks). Track pass rate over time and alert on regressions after model or prompt changes.</p>
+
+    <h3>Human review queue</h3>
+    <ul>
+      <li>Flagged conversation volume per day.</li>
+      <li>Time to human review (SLA).</li>
+      <li>Confirmed violation rate (precision of automated flags).</li>
+      <li>False negative reports from users (missed unsafe content).</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Safety metrics are sparse-event statistics. Use Wilson score intervals or Bayesian smoothing for rates below 1%. A drop from 0.1% to 0.05% may be noise; a jump from 0.1% to 2% is an incident.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="user-feedback">
+    <h2>10. User Feedback Metrics</h2>
+    <p>User feedback is the ultimate ground truth for product quality, but it is biased, sparse, and delayed. Treat it as a first-class metric stream linked to traces.</p>
+
+    <h3>Explicit feedback</h3>
+    <table>
+      <thead><tr><th>Signal</th><th>Metric</th><th>Caveats</th></tr></thead>
+      <tbody>
+        <tr><td>Thumbs up/down</td><td>Positive rate, net score</td><td>Angry users over-report; satisfied users stay silent</td></tr>
+        <tr><td>Star ratings</td><td>Mean, distribution</td><td>Survey fatigue lowers volume</td></tr>
+        <tr><td>Free-text comments</td><td>Theme clustering</td><td>Requires NLP pipeline; high signal</td></tr>
+        <tr><td>Report / flag</td><td>Report rate per 1k sessions</td><td>Serious issues; low volume</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Implicit feedback</h3>
+    <ul>
+      <li><strong>Copy rate:</strong> user copied answer (positive proxy).</li>
+      <li><strong>Regenerate rate:</strong> user asked for another answer (negative proxy).</li>
+      <li><strong>Edit distance:</strong> user changed suggested text before sending.</li>
+      <li><strong>Abandon rate:</strong> session ended without action after response.</li>
+      <li><strong>Follow-up clarification rate:</strong> user re-asks similar question.</li>
+      <li><strong>Time on response:</strong> very short may mean dismiss; very long may mean careful read.</li>
+    </ul>
+
+    <h3>Feedback loop engineering</h3>
+    <p>Every thumbs-down should enqueue: trace replay link, prompt version, model, retrieval chunks, and optional label for eval set. Measure <strong>time from feedback to fix deployed</strong> as an organizational metric.</p>
+
+    <h3>Segmentation</h3>
+    <p>Break feedback rates by locale, subscription tier, feature flag, and new vs returning users. A global thumbs-up rate hiding a broken locale is a common failure mode.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="drift-metrics">
+    <h2>11. Drift Metrics</h2>
+    <p>Drift is change in behavior or data distribution that degrades performance without a code deploy. LLM systems drift from model updates, corpus aging, user behavior shifts, and embedding index decay.</p>
+
+    <h3>Types of drift</h3>
+    <table>
+      <thead><tr><th>Type</th><th>What shifts</th><th>Detection approach</th></tr></thead>
+      <tbody>
+        <tr><td>Data drift</td><td>Input query distribution, language, length</td><td>Embedding distance, PSI on features</td></tr>
+        <tr><td>Concept drift</td><td>Mapping from input to correct answer</td><td>Golden eval regression, feedback drop</td></tr>
+        <tr><td>Upstream model drift</td><td>Provider silently updates weights</td><td>Eval suite on fixed prompts, output hash shifts</td></tr>
+        <tr><td>Corpus drift</td><td>Retrieved docs stale or wrong</td><td>Index age, source freshness metrics</td></tr>
+        <tr><td>Prompt drift</td><td>Unversioned prompt edits in prod</td><td>Config registry, hash mismatch alerts</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Population Stability Index (PSI)</h3>
+    <p>Compare binned distributions of a feature (e.g., query length, retrieval score) between reference and current windows:</p>
+    $$\text{PSI} = \sum_i (A_i - E_i) \ln\frac{A_i}{E_i}$$
+    <p>PSI &lt; 0.1 stable; 0.1-0.25 moderate shift; &gt; 0.25 investigate.</p>
+
+    <h3>Operational drift dashboard</h3>
+    <ul>
+      <li>Rolling 7-day eval score vs 30-day baseline.</li>
+      <li>Thumbs-up rate trend with confidence bands.</li>
+      <li>Mean retrieval top-1 score trend.</li>
+      <li>New intent cluster rate (embedding clustering on queries).</li>
+      <li>Out-of-vocabulary token rate in user inputs.</li>
+    </ul>
+
+    <p>Correlate drift timestamps with deploy events: prompt version, model ID change, index rebuild, data pipeline failure.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="slos">
+    <h2>12. SLOs for LLM Services</h2>
+    <p>Service Level Objectives define measurable targets over a window. Error budgets connect reliability work to product velocity. LLM SLOs must include latency, availability, quality, and cost.</p>
+
+    <h3>SLI vs SLO vs SLA</h3>
+    <ul>
+      <li><strong>SLI (indicator):</strong> measured metric (e.g., p95 latency &lt; 3 s).</li>
+      <li><strong>SLO (objective):</strong> target over window (e.g., 99% of hours meet SLI).</li>
+      <li><strong>SLA (agreement):</strong> contractual consequence if SLO missed (refunds, credits).</li>
+    </ul>
+
+    <h3>Example SLO set</h3>
+    <table>
+      <thead><tr><th>SLI</th><th>SLO target</th><th>Window</th></tr></thead>
+      <tbody>
+        <tr><td>Availability (non-5xx)</td><td>99.9%</td><td>30 days</td></tr>
+        <tr><td>p95 E2E latency (chat)</td><td>&lt; 4 s</td><td>30 days</td></tr>
+        <tr><td>p95 TTFT (streaming)</td><td>&lt; 1.2 s</td><td>30 days</td></tr>
+        <tr><td>Golden eval pass rate</td><td>≥ 94%</td><td>7 days</td></tr>
+        <tr><td>Safety red-team pass</td><td>≥ 99%</td><td>7 days</td></tr>
+        <tr><td>Cost per task (p50)</td><td>&lt; $0.02</td><td>30 days</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Error budget policy</h3>
+    <p>When latency error budget is exhausted: freeze non-critical deploys, enable aggressive caching, route to faster model tier. When quality budget is exhausted: block prompt experiments, roll back last config change, increase human review sampling.</p>
+
+    <h3>Multi-window alerting</h3>
+    <p>Google SRE recommends burn-rate alerts on multiple windows (e.g., 1h and 6h) to catch fast and slow burns. Apply the same pattern to quality SLOs, not only availability.</p>
+
+    <div class="callout">
+      <strong>User-facing vs internal SLOs:</strong> External chat may target 4 s p95 while internal batch summarization targets throughput. Do not use one SLO for all surfaces.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="trace-schema">
+    <h2>13. Trace Schema</h2>
+    <p>A consistent trace schema is the contract between application code, observability backends, and analysts. Use OpenTelemetry conventions where possible; extend with LLM-specific attributes.</p>
+
+    <h3>Top-level trace fields</h3>
+    <pre><code>{
+  "trace_id": "7f3a9c2e1b8d4f6a",
+  "span_id": "a1b2c3d4",
+  "parent_span_id": null,
+  "service_name": "rag-gateway",
+  "operation": "chat.completion",
+  "start_time": "2026-07-12T10:15:30.123Z",
+  "duration_ms": 1456,
+  "status": "ok",
+  "user_id_hash": "u_8f3e2a",
+  "session_id": "sess_9912",
+  "tenant_id": "acme_corp",
+  "feature": "support_copilot",
+  "environment": "production"
+}</code></pre>
+
+    <h3>LLM span attributes</h3>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>llm.model</code></td><td>string</td><td>Provider model identifier</td></tr>
+        <tr><td><code>llm.prompt_version</code></td><td>string</td><td>Template registry version</td></tr>
+        <tr><td><code>llm.prompt_hash</code></td><td>string</td><td>SHA-256 of rendered prompt (no raw PII)</td></tr>
+        <tr><td><code>llm.input_tokens</code></td><td>int</td><td>Billable input tokens</td></tr>
+        <tr><td><code>llm.output_tokens</code></td><td>int</td><td>Completion tokens</td></tr>
+        <tr><td><code>llm.finish_reason</code></td><td>enum</td><td>stop, length, content_filter, tool_calls</td></tr>
+        <tr><td><code>llm.temperature</code></td><td>float</td><td>Decoding temperature</td></tr>
+        <tr><td><code>llm.ttft_ms</code></td><td>float</td><td>Time to first token</td></tr>
+        <tr><td><code>llm.estimated_cost_usd</code></td><td>float</td><td>From price table</td></tr>
+      </tbody>
+    </table>
+
+    <h3>RAG span attributes</h3>
+    <ul>
+      <li><code>retrieval.query_hash</code>, <code>retrieval.top_k</code>, <code>retrieval.chunk_ids[]</code></li>
+      <li><code>retrieval.scores[]</code>, <code>retrieval.embed_model</code>, <code>retrieval.index_version</code></li>
+      <li><code>retrieval.hit</code> (boolean), <code>retrieval.context_tokens</code></li>
+    </ul>
+
+    <h3>Agent span attributes</h3>
+    <ul>
+      <li><code>agent.step_index</code>, <code>agent.max_steps</code>, <code>agent.termination_reason</code></li>
+      <li><code>tool.name</code>, <code>tool.latency_ms</code>, <code>tool.status</code>, <code>tool.error_type</code></li>
+    </ul>
+
+    <h3>Privacy and retention</h3>
+    <p>Store hashes and IDs by default. Raw prompts and completions go to restricted stores with TTL and access audit. GDPR/CCPA deletion must cascade to trace stores by <code>user_id_hash</code>.</p>
+
+    <p class="refer-link"><small>Refer: <a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" rel="noopener noreferrer">OpenTelemetry Gen AI Semantic Conventions</a></small></p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="dashboards">
+    <h2>14. Dashboards</h2>
+    <p>Dashboards translate metrics into decisions. Organize by persona and incident type, not by raw metric names.</p>
+
+    <h3>Dashboard hierarchy</h3>
+    <table>
+      <thead><tr><th>Dashboard</th><th>Audience</th><th>Top panels</th></tr></thead>
+      <tbody>
+        <tr><td>Executive health</td><td>Leadership</td><td>DAU, task success, cost/day, CSAT trend</td></tr>
+        <tr><td>On-call operations</td><td>SRE</td><td>Error rate, p95 latency, queue depth, burn rate</td></tr>
+        <tr><td>Quality review</td><td>ML / PM</td><td>Eval scores, feedback rate, drift PSI, slice breakdown</td></tr>
+        <tr><td>Cost FinOps</td><td>Finance / Eng</td><td>$ by tenant, tokens/task, cache savings</td></tr>
+        <tr><td>Safety</td><td>Trust &amp; Safety</td><td>Flag volume, red-team pass, injection rate</td></tr>
+        <tr><td>RAG deep dive</td><td>Retrieval owners</td><td>Recall@k, empty hits, index lag, rerank lift</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Design principles</h3>
+    <ul>
+      <li>Every panel links to a runbook or owner.</li>
+      <li>Use consistent time ranges and compare-to-yesterday overlays.</li>
+      <li>Show percentiles, not only means.</li>
+      <li>Include annotation layers for deploys and config changes.</li>
+      <li>Limit to 12-15 panels per page; drill-down dashboards for detail.</li>
+    </ul>
+
+    <h3>USE and RED methods</h3>
+    <ul>
+      <li><strong>RED</strong> (Rate, Errors, Duration) for request-serving paths.</li>
+      <li><strong>USE</strong> (Utilization, Saturation, Errors) for GPU and queue resources.</li>
+    </ul>
+
+    <h3>Sample on-call row</h3>
+    <p>Single screen answering: "Is the system up?", "Is it slow?", "Is it wrong?", "Is it expensive?"</p>
+    <ol>
+      <li>Availability and 5xx rate (last 1h vs SLO).</li>
+      <li>p95 latency by stage (embed, retrieve, generate).</li>
+      <li>Thumbs-down rate spike detector.</li>
+      <li>Cost per hour vs budget.</li>
+    </ol>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="prometheus-grafana">
+    <h2>15. Prometheus and Grafana</h2>
+    <p>Prometheus pulls or receives time-series metrics. Grafana visualizes them. This stack is the default for self-hosted LLM inference and gateway services.</p>
+
+    <h3>Instrumenting Python services</h3>
+    <pre><code>from prometheus_client import Counter, Histogram, start_http_server
+
+LLM_REQUESTS = Counter(
+    "llm_requests_total",
+    "Total LLM requests",
+    ["model", "feature", "status"],
+)
+LLM_LATENCY = Histogram(
+    "llm_request_duration_seconds",
+    "End-to-end request latency",
+    ["model", "feature"],
+    buckets=[0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
+)
+LLM_TOKENS = Counter(
+    "llm_tokens_total",
+    "Token usage",
+    ["model", "direction"],  # direction: input | output
+)
+
+def handle_request(model, feature, fn):
+    with LLM_LATENCY.labels(model=model, feature=feature).time():
+        try:
+            result = fn()
+            LLM_REQUESTS.labels(model=model, feature=feature, status="ok").inc()
+            return result
+        except Exception:
+            LLM_REQUESTS.labels(model=model, feature=feature, status="error").inc()
+            raise
+
+start_http_server(8000)  # /metrics endpoint</code></pre>
+
+    <h3>PromQL examples</h3>
+    <pre><code># p95 latency over 5m
+histogram_quantile(0.95,
+  sum(rate(llm_request_duration_seconds_bucket[5m])) by (le, feature)
+)
+
+# Error rate
+sum(rate(llm_requests_total{status="error"}[5m]))
+  / sum(rate(llm_requests_total[5m]))
+
+# Output tokens per second
+sum(rate(llm_tokens_total{direction="output"}[5m])) by (model)</code></pre>
+
+    <h3>Grafana setup tips</h3>
+    <ul>
+      <li>Use recording rules for expensive quantiles (pre-aggregate in Prometheus).</li>
+      <li>Template variables: <code>feature</code>, <code>model</code>, <code>environment</code>.</li>
+      <li>Mix Prometheus (system) with ClickHouse or Postgres (quality) via mixed datasources.</li>
+      <li>Export dashboards as JSON in git; review changes like code.</li>
+    </ul>
+
+    <h3>Histogram bucket selection</h3>
+    <p>Choose buckets that match SLO thresholds. If p95 SLO is 3 s, include buckets around 1, 2, 3, 5, 10 seconds. Misaligned buckets make quantile estimation noisy.</p>
+
+    <h3>Exporters for GPU nodes</h3>
+    <p>DCGM exporter for NVIDIA metrics: GPU util, memory, temperature, power. Correlate GPU saturation with queue wait spans.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="platform-tools">
+    <h2>16. Platform Tools</h2>
+    <p>Specialized LLM observability platforms add trace UI, eval integration, and prompt versioning beyond raw Prometheus. Teams often run Prometheus for SRE plus a LLM platform for debugging.</p>
+
+    <h3>Tool comparison</h3>
+    <table>
+      <thead><tr><th>Tool</th><th>Strengths</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr><td>Langfuse</td><td>Open source, traces, scores, prompt mgmt</td><td>Self-hosted LLM apps</td></tr>
+        <tr><td>LangSmith</td><td>LangChain integration, datasets, eval</td><td>LangChain/LangGraph stacks</td></tr>
+        <tr><td>Phoenix (Arize)</td><td>Embeddings viz, drift, eval</td><td>RAG debugging</td></tr>
+        <tr><td>Helicone</td><td>Gateway proxy, cost, caching</td><td>API cost tracking</td></tr>
+        <tr><td>Weights &amp; Biases</td><td>Experiment tracking, eval tables</td><td>Research to prod bridge</td></tr>
+        <tr><td>Datadog / New Relic</td><td>Unified APM + LLM modules</td><td>Enterprise existing APM</td></tr>
+        <tr><td>OpenTelemetry + Jaeger</td><td>Vendor-neutral tracing</td><td>Multi-service mesh</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Selection criteria</h3>
+    <ul>
+      <li>Self-hosted vs SaaS and data residency requirements.</li>
+      <li>Trace schema compatibility (OTel export).</li>
+      <li>Eval and human annotation workflow built-in.</li>
+      <li>Cost accounting per tenant and feature.</li>
+      <li>PII handling and retention policies.</li>
+      <li>Integration with your gateway (not only SDK wrapper).</li>
+    </ul>
+
+    <h3>Avoid tool sprawl</h3>
+    <p>Pick one system of record for traces and one for time-series metrics. Duplicate instrumentation across five vendors creates conflicting numbers and double billing.</p>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Platform tools win at debugging single bad traces. Prometheus wins at paging on-call at 3 AM. You need both workflows, not a single tool miracle.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="alerting">
+    <h2>17. Alerting</h2>
+    <p>Alerts must be actionable, routed to owners, and tied to runbooks. Alert on symptoms users feel, not every metric fluctuation.</p>
+
+    <h3>Alert tiers</h3>
+    <table>
+      <thead><tr><th>Tier</th><th>Response</th><th>Examples</th></tr></thead>
+      <tbody>
+        <tr><td>P1 page</td><td>Immediate human wake-up</td><td>Availability &lt; 99% over 15m, safety leak spike</td></tr>
+        <tr><td>P2 ticket</td><td>Business hours escalation</td><td>p95 latency 2x baseline 1h, eval drop 5%</td></tr>
+        <tr><td>P3 info</td><td>Dashboard review</td><td>Cost 20% above forecast, PSI moderate</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Recommended alert rules</h3>
+    <ul>
+      <li><strong>High error rate:</strong> &gt; 1% 5xx for 10m (adjust to traffic volume).</li>
+      <li><strong>Latency burn:</strong> p95 &gt; SLO threshold for 30m with multi-window confirm.</li>
+      <li><strong>Provider degradation:</strong> upstream timeout rate &gt; 5%.</li>
+      <li><strong>Eval regression:</strong> nightly job score &lt; baseline − δ.</li>
+      <li><strong>Feedback anomaly:</strong> thumbs-down rate &gt; 3σ above 7-day mean.</li>
+      <li><strong>Cost runaway:</strong> hourly spend &gt; 2x trailing average (agent loops).</li>
+      <li><strong>Queue saturation:</strong> wait time p95 &gt; 10s for 15m.</li>
+      <li><strong>Safety:</strong> confirmed PII leakage &gt; 0 in any 1h window.</li>
+    </ul>
+
+    <h3>Alert hygiene</h3>
+    <ul>
+      <li>Every alert has <code>runbook_url</code> and <code>owner_team</code> labels.</li>
+      <li>Suppress alerts during planned maintenance windows.</li>
+      <li>Use inhibition: do not page latency if availability alert already firing.</li>
+      <li>Review alert fatigue monthly: mute or fix noisy rules.</li>
+    </ul>
+
+    <h3>Example Alertmanager route</h3>
+    <pre><code>route:
+  receiver: default
+  routes:
+    - match: { severity: critical }
+      receiver: pagerduty
+    - match: { team: safety }
+      receiver: safety-slack
+    - match: { alertname: CostRunaway }
+      receiver: finops-email</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="cost-attribution">
+    <h2>18. Cost Attribution</h2>
+    <p>Cost attribution assigns spend to teams, features, tenants, and outcomes. Without it, LLM bills appear as a single opaque line item and nobody optimizes.</p>
+
+    <h3>Attribution dimensions</h3>
+    <table>
+      <thead><tr><th>Dimension</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td>Tenant / customer</td><td>Usage-based billing, quota enforcement</td></tr>
+        <tr><td>Feature / product surface</td><td>ROI per feature, kill low-value experiments</td></tr>
+        <tr><td>Team / cost center</td><td>Internal chargeback</td></tr>
+        <tr><td>Model tier</td><td>Compare cheap vs premium routing policies</td></tr>
+        <tr><td>Environment</td><td>Separate prod vs staging waste</td></tr>
+        <tr><td>Prompt version</td><td>Cost impact of prompt changes</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Unit economics</h3>
+    <ul>
+      <li><strong>Cost per request:</strong> simple but ignores success/failure.</li>
+      <li><strong>Cost per successful task:</strong> divide spend by verifier-pass count.</li>
+      <li><strong>Cost per active user (month):</strong> product planning metric.</li>
+      <li><strong>Margin per AI feature:</strong> revenue attributed minus inference cost.</li>
+    </ul>
+
+    <h3>Shared cost allocation</h3>
+    <p>GPU cluster costs split by measured GPU-seconds per feature (from labels on jobs) or by token share. Embedding index storage split by corpus owner. Avoid equal split across teams; it hides heavy users.</p>
+
+    <h3>Tagging discipline</h3>
+    <p>Require <code>tenant_id</code> and <code>feature</code> on every internal API call. Reject untagged calls in production. Backfill tags from trace_id in batch jobs for legacy paths.</p>
+
+    <h3>FinOps review cadence</h3>
+    <p>Weekly: top 10 expensive tenants and features. Monthly: model routing opportunities (swap 20% of traffic to smaller model with &lt; 2% quality loss). Quarterly: reserved capacity vs on-demand for self-hosted.</p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="metrics-pipeline">
+    <h2>19. Metrics Pipeline (Python)</h2>
+    <p>A production metrics pipeline collects spans from the app, aggregates low-cardinality series to Prometheus, and ships rich events to a warehouse for quality and cost analysis.</p>
+
+    <h3>Architecture overview</h3>
+    <ol>
+      <li>App emits OpenTelemetry spans + Prometheus counters/histograms.</li>
+      <li>OTel Collector receives, batches, redacts PII fields.</li>
+      <li>Exporter fan-out: Prometheus scrape endpoint, ClickHouse for traces, S3 parquet for batch eval.</li>
+      <li>Nightly job joins traces with feedback and eval labels.</li>
+    </ol>
+
+    <h3>End-to-end Python example</h3>
+    <pre><code>"""
+Minimal LLM metrics pipeline: trace + Prometheus + structured log.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+import uuid
+from dataclasses import dataclass, field
+from typing import Any
+
+from prometheus_client import Counter, Histogram
+
+# --- Prometheus metrics (low cardinality labels only) ---
+REQUESTS = Counter("llm_requests_total", "Requests", ["feature", "model", "status"])
+LATENCY = Histogram("llm_latency_seconds", "E2E latency", ["feature"], buckets=[0.5, 1, 2, 5, 10, 30])
+TOKENS = Counter("llm_tokens_total", "Tokens", ["model", "direction"])
+COST = Counter("llm_cost_usd_micros", "Cost in micro-dollars", ["feature", "model"])
+
+PRICE_PER_1M = {"gpt-4o-mini": {"input": 0.15, "output": 0.60}}
+
+
+@dataclass
+class LLMTrace:
+    trace_id: str
+    feature: str
+    model: str
+    prompt_version: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    spans: list[dict[str, Any]] = field(default_factory=list)
+    status: str = "ok"
+
+    def add_span(self, name: str, duration_ms: float, attrs: dict | None = None):
+        self.spans.append({
+            "name": name,
+            "duration_ms": duration_ms,
+            "attributes": attrs or {},
+        })
+
+    def prompt_hash(self, text: str) -> str:
+        return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+    def estimated_cost_usd(self) -> float:
+        p = PRICE_PER_1M[self.model]
+        return (self.input_tokens * p["input"] + self.output_tokens * p["output"]) / 1_000_000
+
+    def flush_log(self):
+        """Ship to structured log / OTel / warehouse."""
+        record = {
+            "trace_id": self.trace_id,
+            "feature": self.feature,
+            "model": self.model,
+            "prompt_version": self.prompt_version,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cost_usd": self.estimated_cost_usd(),
+            "spans": self.spans,
+            "status": self.status,
+        }
+        print(json.dumps(record))  # replace with OTel exporter
+
+
+def run_rag_request(feature: str, model: str, prompt: str) -> str:
+    trace = LLMTrace(
+        trace_id=str(uuid.uuid4()),
+        feature=feature,
+        model=model,
+        prompt_version="v3.2",
+    )
+    t0 = time.perf_counter()
+    try:
+        # Embed
+        t_embed = time.perf_counter()
+        time.sleep(0.04)
+        trace.add_span("embed", (time.perf_counter() - t_embed) * 1000)
+
+        # Retrieve
+        t_ret = time.perf_counter()
+        time.sleep(0.11)
+        trace.add_span("retrieve", (time.perf_counter() - t_ret) * 1000, {"hit": True, "top_k": 5})
+
+        # Generate
+        t_gen = time.perf_counter()
+        time.sleep(0.35)
+        trace.input_tokens = 1800
+        trace.output_tokens = 240
+        trace.add_span("generate", (time.perf_counter() - t_gen) * 1000, {
+            "prompt_hash": trace.prompt_hash(prompt),
+            "finish_reason": "stop",
+        })
+
+        answer = "Synthetic answer for metrics demo."
+        status = "ok"
+    except Exception:
+        trace.status = "error"
+        status = "error"
+        raise
+    finally:
+        elapsed = time.perf_counter() - t0
+        LATENCY.labels(feature=feature).observe(elapsed)
+        REQUESTS.labels(feature=feature, model=model, status=trace.status).inc()
+        TOKENS.labels(model=model, direction="input").inc(trace.input_tokens)
+        TOKENS.labels(model=model, direction="output").inc(trace.output_tokens)
+        micros = int(trace.estimated_cost_usd() * 1_000_000)
+        COST.labels(feature=feature, model=model).inc(micros)
+        trace.flush_log()
+    return answer
+
+
+if __name__ == "__main__":
+    run_rag_request("support_copilot", "gpt-4o-mini", "How do I reset my password?")</code></pre>
+
+    <h3>Pipeline hardening</h3>
+    <ul>
+      <li>Async non-blocking exporters; never block the request path on metric I/O.</li>
+      <li>Sampling: 100% errors, 1-10% success traces for high QPS.</li>
+      <li>Dead letter queue for failed exports.</li>
+      <li>Schema registry for trace JSON evolution.</li>
+      <li>Idempotent warehouse loads keyed by <code>trace_id</code>.</li>
+    </ul>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="metrics-catalog">
+    <h2>20. Master Metrics Catalog</h2>
+    <p>Complete reference of LLM production metrics. Use as an instrumentation checklist when designing or auditing observability.</p>
+    <table>
+      <thead><tr><th>Category</th><th>Metric</th><th>Type</th><th>Labels (bounded)</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Traffic</td><td><code>llm_requests_total</code></td><td>Counter</td><td>feature, model, status</td><td>Core RED rate numerator</td></tr>
+        <tr><td>Traffic</td><td><code>llm_tokens_total</code></td><td>Counter</td><td>model, direction</td><td>input | output | cached_input</td></tr>
+        <tr><td>Latency</td><td><code>llm_latency_seconds</code></td><td>Histogram</td><td>feature, stage</td><td>stage: e2e, ttft, prefill, decode</td></tr>
+        <tr><td>Latency</td><td><code>llm_span_duration_seconds</code></td><td>Histogram</td><td>span_name</td><td>embed, retrieve, rerank, generate</td></tr>
+        <tr><td>Errors</td><td><code>llm_errors_total</code></td><td>Counter</td><td>error_type, model</td><td>timeout, rate_limit, parse, provider</td></tr>
+        <tr><td>Cost</td><td><code>llm_cost_usd_micros</code></td><td>Counter</td><td>feature, model, tenant_tier</td><td>Integer micro-dollars avoids float drift</td></tr>
+        <tr><td>Cost</td><td><code>llm_cache_hits_total</code></td><td>Counter</td><td>cache_type</td><td>prompt_cache, semantic_cache</td></tr>
+        <tr><td>Quality</td><td><code>llm_eval_score</code></td><td>Gauge</td><td>eval_suite, slice</td><td>From nightly jobs, not per-request</td></tr>
+        <tr><td>Quality</td><td><code>llm_schema_pass_total</code></td><td>Counter</td><td>feature, schema_version</td><td>Structured output validation</td></tr>
+        <tr><td>Quality</td><td><code>llm_judge_score_histogram</code></td><td>Histogram</td><td>rubric</td><td>Sampled online eval</td></tr>
+        <tr><td>Retrieval</td><td><code>rag_retrieval_hit_total</code></td><td>Counter</td><td>corpus, feature</td><td>At least one chunk above threshold</td></tr>
+        <tr><td>Retrieval</td><td><code>rag_top_score</code></td><td>Histogram</td><td>corpus</td><td>Distribution shift detector</td></tr>
+        <tr><td>Retrieval</td><td><code>rag_recall_at_k</code></td><td>Gauge</td><td>eval_suite</td><td>Offline labeled eval only</td></tr>
+        <tr><td>Retrieval</td><td><code>rag_index_lag_seconds</code></td><td>Gauge</td><td>corpus</td><td>Source update to index fresh</td></tr>
+        <tr><td>Generation</td><td><code>llm_finish_reason_total</code></td><td>Counter</td><td>reason, model</td><td>stop, length, content_filter</td></tr>
+        <tr><td>Generation</td><td><code>llm_output_tokens</code></td><td>Histogram</td><td>feature</td><td>Detect runaway length</td></tr>
+        <tr><td>Generation</td><td><code>llm_refusal_total</code></td><td>Counter</td><td>feature, category</td><td>Track over/under refusal</td></tr>
+        <tr><td>Throughput</td><td><code>llm_inflight_requests</code></td><td>Gauge</td><td>feature</td><td>Concurrency saturation</td></tr>
+        <tr><td>Throughput</td><td><code>gpu_tokens_per_second</code></td><td>Gauge</td><td>gpu_id, model</td><td>Self-hosted inference</td></tr>
+        <tr><td>Agent</td><td><code>agent_steps_total</code></td><td>Histogram</td><td>feature</td><td>Steps per session</td></tr>
+        <tr><td>Agent</td><td><code>agent_tool_calls_total</code></td><td>Counter</td><td>tool_name, status</td><td>Per-tool reliability</td></tr>
+        <tr><td>Agent</td><td><code>agent_termination_total</code></td><td>Counter</td><td>reason</td><td>success, max_steps, timeout</td></tr>
+        <tr><td>Safety</td><td><code>safety_flag_total</code></td><td>Counter</td><td>flag_type, action</td><td>block, redact, escalate</td></tr>
+        <tr><td>Safety</td><td><code>jailbreak_attempt_total</code></td><td>Counter</td><td>detector_version</td><td>Input classifier hits</td></tr>
+        <tr><td>Safety</td><td><code>pii_detected_total</code></td><td>Counter</td><td>field, direction</td><td>input | output</td></tr>
+        <tr><td>Feedback</td><td><code>user_feedback_total</code></td><td>Counter</td><td>signal, value</td><td>thumbs_up, thumbs_down, report</td></tr>
+        <tr><td>Feedback</td><td><code>user_regenerate_total</code></td><td>Counter</td><td>feature</td><td>Implicit negative signal</td></tr>
+        <tr><td>Drift</td><td><code>feature_psi</code></td><td>Gauge</td><td>feature_name</td><td>Population stability index</td></tr>
+        <tr><td>Drift</td><td><code>query_embedding_drift</code></td><td>Gauge</td><td>corpus</td><td>Centroid distance vs reference</td></tr>
+        <tr><td>SLO</td><td><code>slo_burn_rate</code></td><td>Gauge</td><td>slo_name, window</td><td>Multi-window alert input</td></tr>
+        <tr><td>SLO</td><td><code>slo_error_budget_remaining</code></td><td>Gauge</td><td>slo_name</td><td>0-1 fraction left in period</td></tr>
+        <tr><td>System</td><td><code>queue_depth</code></td><td>Gauge</td><td>queue_name</td><td>Backpressure indicator</td></tr>
+        <tr><td>System</td><td><code>provider_rate_limit_total</code></td><td>Counter</td><td>provider</td><td>429 responses</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-intuition">
+      <strong>Master observability by layers:</strong> (1) Instrument traces with a stable schema, (2) export bounded Prometheus metrics for paging, (3) join warehouse data for quality and cost attribution, (4) define SLOs per surface, (5) close the loop from alerts and feedback back to eval and prompts.
+    </div>
+  </section>
+
+  <nav class="page-footer-nav">
+    <p><a class="interview-link" href="../../interview/Inference-Deployment-Operations/ai-engineering-interview-metrics.html">Interview questions on LLM Metrics and Observability</a></p>
+    <p>Next: <a href="ai-engineering-llmops-monitoring.html">LLMOps and Monitoring</a></p>
+    <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
+  </nav>
+</main>
+<footer>
+  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

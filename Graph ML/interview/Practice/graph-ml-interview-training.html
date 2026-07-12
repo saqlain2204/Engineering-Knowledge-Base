@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Training &amp; Scaling | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Training</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Training &amp; Scaling</h1>
+  <p><a href="../../learn/Practice/graph-ml-training-scaling.html">Read learning notes</a>.</p>
+</header>
+<main><section>
+<h2>Training</h2>
+<details><summary>Full-batch vs mini-batch GNN training?</summary>
+<div><p>Full-batch: entire graph in memory, one gradient per epoch. Works for Cora-scale. Mini-batch: sample nodes/subgraphs per step  -  required for million-node graphs. Use NeighborLoader, GraphSAINT, or Cluster-GCN.</p></div></details>
+<details><summary>What is neighbor sampling?</summary>
+<div><p>Sample fixed fanout per layer (e.g., [25, 10])  -  25 neighbors at layer 1, 10 at layer 2. Controls memory and compute. Introduced in GraphSAGE for billion-edge graphs.</p></div></details>
+<details><summary>How do you train link prediction?</summary>
+<div><p>Hide test edges. Train on remaining graph. Positive loss on true held-out edges, negative loss on sampled non-edges. Score with dot product or MLP on node embeddings. Never include test edges in message passing during training.</p></div></details>
+<details><summary>What baselines must a GNN beat?</summary>
+<div><p>MLP on node features only, label propagation, Node2Vec/DeepWalk + classifier. If GNN does not beat these, structure may not help or there is a bug.</p></div></details>
+<details><summary>Common GNN training hyperparameters?</summary>
+<div><p>Adam lr 0.01 (GCN) to 0.001 (GAT), weight decay 5e-4, dropout 0.5, 2 layers, hidden dim 16-256. Always tune on validation. Early stopping on val metric.</p></div></details>
+<details><summary>How do you debug a GNN that won't learn?</summary>
+<div><p>Check masks and leakage, verify edge_index direction, test MLP baseline, check isolated nodes, reduce lr, try 2 vs 4 layers for oversmoothing, ensure loss computed only on train nodes.</p></div></details>
+</section></main>
+<footer><p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p></footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

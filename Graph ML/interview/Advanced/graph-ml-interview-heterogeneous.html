@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Heterogeneous Graphs | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
+</head>
+<body>
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../graph-ml.html">Graph ML</a> &rsaquo; <a href="../graph-ml-interview.html">Interview Prep</a> &rsaquo; Heterogeneous</p></nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Heterogeneous Graphs</h1>
+  <p><a href="../../learn/Advanced/graph-ml-heterogeneous-graphs.html">Read learning notes</a>.</p>
+</header>
+<main><section>
+<h2>Heterogeneous Graphs</h2>
+<details><summary>What is a heterogeneous graph?</summary>
+<div><p>A graph with multiple node types and/or edge types. Example: users, products, categories with purchase, view, and belongs_to edges. Each type has different semantics  -  one weight matrix is not enough.</p></div></details>
+<details><summary>How does R-GCN handle multiple relation types?</summary>
+<div><p>Separate weight matrix $\mathbf{W}_r$ per relation type $r$. Aggregate messages from each relation separately with normalization $c_{i,r}$, plus self-loop transform $\mathbf{W}_0$. Basis decomposition reduces parameters when there are many relations.</p></div></details>
+<details><summary>What is a metapath?</summary>
+<div><p>A typed path schema like User → Purchase → Product → Brand. Connects same-type nodes through semantic paths. HAN uses attention over metapath-based neighbor groups.</p></div></details>
+<details><summary>Explain TransE for knowledge graph embedding.</summary>
+<div><p>For triple $(h, r, t)$: minimize $\|\mathbf{h} + \mathbf{r} - \mathbf{t}\|$. Head plus relation should approximate tail. Simple but fails on 1-to-N relations (one head, many tails).</p></div></details>
+<details><summary>How do you evaluate link prediction on KGs?</summary>
+<div><p>Hide test triples, rank all candidate tails (or heads) for each query, report MRR and Hits@K. Use negative sampling during training. Filter out other true triples when ranking (filtered setting).</p></div></details>
+<details><summary>What is HGT?</summary>
+<div><p>Heterogeneous Graph Transformer  -  type-specific attention using meta-relation triples $(s, r, t)$. Scales to billion-edge heterogeneous graphs. Used on Microsoft Academic Graph.</p></div></details>
+</section></main>
+<footer><p><small><a href="../graph-ml-interview.html">Back to Interview Prep</a> &middot; <a href="../../graph-ml.html">Graph ML</a> &middot; <a href="../../../index.html">Home</a></small></p></footer>
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

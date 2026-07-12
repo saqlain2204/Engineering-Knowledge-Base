@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Docker Fundamentals | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Docker Fundamentals</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Docker Fundamentals</h1>
+  <p>Containers, images, Dockerfiles, networking, and volumes. <a href="../../learn/Docker/docker-fundamentals.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Docker Fundamentals</h2>
+<p>Core concepts every container engineer should know cold.</p>
+
+<details><summary>How do containers differ from virtual machines?</summary>
+<div><p>A VM runs a full guest OS on a hypervisor with its own kernel, drivers, and userland  -  typically gigabytes in size and seconds to minutes to boot. A container is an isolated process (or process tree) on the <strong>host</strong> kernel, using namespaces for isolation and cgroups for resource limits. Containers start in milliseconds and share the host kernel, so they are lighter and faster but have a weaker security boundary than a separate kernel per VM.</p></div>
+</details>
+
+<details><summary>What role do Linux namespaces and cgroups play in containers?</summary>
+<div>
+<ul>
+<li><strong>Namespaces</strong> isolate what a process can <em>see</em>: PID (process IDs), NET (network stack), MNT (mount points), UTS (hostname), IPC (inter-process communication), and USER (UID/GID mappings). Together they create the illusion of a private environment.</li>
+<li><strong>cgroups (control groups)</strong> limit and account for what a process can <em>consume</em>: CPU, memory, block I/O, and network bandwidth. Docker maps <code>--cpus</code>, <code>--memory</code>, and related flags to cgroup settings.</li>
+</ul>
+<p>Containers are not magic  -  they are standard Linux kernel features orchestrated by a runtime like containerd.</p>
+</div>
+</details>
+
+<details><summary>Describe Docker's client–server architecture.</summary>
+<div><p>The <strong>Docker client</strong> (<code>docker</code> CLI) sends REST API requests to the <strong>Docker daemon</strong> (<code>dockerd</code>), which runs on the host and manages images, containers, networks, and volumes. The daemon talks to <strong>containerd</strong> and <strong>runc</strong> to actually create and run containers. A <strong>registry</strong> (Docker Hub by default) stores and distributes images. On Linux the client typically connects via the Unix socket <code>/var/run/docker.sock</code>.</p></div>
+</details>
+
+<details><summary>How are Docker images structured, and what are layers?</summary>
+<div><p>An image is a read-only stack of filesystem layers, each produced by a Dockerfile instruction (<code>RUN</code>, <code>COPY</code>, etc.). Layers are content-addressable and shared across images  -  if two images share a base layer, it is stored once on disk. When you run a container, Docker adds a thin <strong>writable container layer</strong> on top via a copy-on-write (CoW) filesystem (overlay2 on Linux). Deleting a container removes its writable layer; the image layers remain.</p></div>
+</details>
+
+<details><summary>Walk through a well-structured Dockerfile for a production app.</summary>
+<div>
+<ul>
+<li>Start from a minimal, pinned base image (e.g., <code>node:20-bookworm-slim</code>).</li>
+<li>Copy dependency manifests first, install deps, <em>then</em> copy source  -  maximizes layer cache hits.</li>
+<li>Use <code>.dockerignore</code> to exclude <code>node_modules</code>, <code>.git</code>, and build artifacts.</li>
+<li>Run as a non-root <code>USER</code> when possible.</li>
+<li>Set <code>EXPOSE</code> for documentation; use <code>HEALTHCHECK</code> for runtime probes.</li>
+<li>Prefer <code>COPY</code> over <code>ADD</code> unless you need tar extraction or remote URLs.</li>
+<li>Use <code>CMD</code> for the default command and <code>ENTRYPOINT</code> for the fixed executable wrapper.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is the difference between CMD and ENTRYPOINT?</summary>
+<div><p><code>ENTRYPOINT</code> defines the main executable that always runs  -  it is the "what this container <em>is</em>." <code>CMD</code> supplies default arguments to that executable and is overridden easily at <code>docker run</code> time. A common pattern is <code>ENTRYPOINT ["python", "app.py"]</code> with <code>CMD ["--port", "8080"]</code>. If only <code>CMD</code> is set, passing arguments to <code>docker run myimage --flag</code> replaces the entire CMD rather than appending to it.</p></div>
+</details>
+
+<details><summary>Which Docker CLI commands do you use most in day-to-day work?</summary>
+<div>
+<ul>
+<li><code>docker build -t name:tag .</code>  -  build an image from a Dockerfile.</li>
+<li><code>docker run -d --name app -p 8080:80 image:tag</code>  -  start a detached container with port mapping.</li>
+<li><code>docker ps -a</code> / <code>docker logs -f container</code>  -  inspect running state and stream logs.</li>
+<li><code>docker exec -it container sh</code>  -  open a shell inside a running container for debugging.</li>
+<li><code>docker inspect</code>  -  dump low-level JSON metadata (network, mounts, env).</li>
+<li><code>docker system df</code> / <code>docker image prune</code>  -  reclaim disk from dangling images and stopped containers.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>Explain the container lifecycle: create, start, stop, remove.</summary>
+<div><p><code>docker create</code> allocates a container filesystem and config but does not start the process. <code>docker start</code> runs the main process. <code>docker stop</code> sends SIGTERM, waits for a grace period (default 10 s), then SIGKILL. <code>docker rm</code> deletes the container and its writable layer. <code>docker run</code> combines create + start. A stopped container retains its filesystem changes in the writable layer until removed.</p></div>
+</details>
+
+<details><summary>How does Docker networking work? Compare bridge, host, and none.</summary>
+<div>
+<ul>
+<li><strong>bridge</strong> (default): containers get a private network (<code>docker0</code> bridge) with internal IPs. Port publishing (<code>-p host:container</code>) sets up iptables NAT rules so external traffic reaches the container.</li>
+<li><strong>host</strong>: the container shares the host's network namespace  -  no port mapping needed, but no network isolation.</li>
+<li><strong>none</strong>: only a loopback interface; useful for batch jobs that need no network.</li>
+<li><strong>Custom bridge networks</strong>: user-defined networks provide automatic DNS resolution between containers by service/container name.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is the difference between a bind mount and a named volume?</summary>
+<div><p>A <strong>bind mount</strong> maps a specific host directory or file into the container (<code>-v /host/path:/container/path</code>). It is tied to the host filesystem layout and is common in local development. A <strong>named volume</strong> is managed by Docker under <code>/var/lib/docker/volumes/</code>, portable across hosts, and the recommended way to persist database data in production. Bind mounts can accidentally overwrite container paths; volumes are created and referenced by name, decoupling storage from host paths.</p></div>
+</details>
+
+<details><summary>How do image tags and digests differ, and why does it matter?</summary>
+<div><p>A <strong>tag</strong> (e.g., <code>nginx:1.25</code>) is a mutable pointer  -  the same tag can be repushed with different content. A <strong>digest</strong> (e.g., <code>nginx@sha256:abc123...</code>) is an immutable content hash of the image manifest. In production, pin images by digest to guarantee reproducible deployments. Tags are convenient for humans; digests are the source of truth for supply-chain integrity.</p></div>
+</details>
+
+<details><summary>What happens when you run <code>docker pull</code> and <code>docker push</code>?</summary>
+<div><p><code>docker pull</code> contacts the registry, resolves the image manifest (by tag or digest), downloads each layer blob that is not already cached locally, and assembles the image in the local store. <code>docker push</code> uploads new layers the registry does not have, then updates the manifest and tag pointer. Because layers are content-addressed, unchanged layers are never re-uploaded  -  only new or modified layers transfer over the network.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

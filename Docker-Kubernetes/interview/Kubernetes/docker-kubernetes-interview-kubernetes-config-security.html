@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Config, Secrets &amp; Security | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Config, Secrets &amp; Security</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+  <h1>Interview: Config, Secrets &amp; Security</h1>
+  <p>ConfigMaps, Secrets, RBAC, Pod Security Standards, and cluster hardening. <a href="../../learn/Kubernetes/kubernetes-config-security.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Config, Secrets &amp; Security</h2>
+<p>Configuration injection, identity, authorization, admission control, and production hardening practices.</p>
+
+<details><summary>What is a ConfigMap and how do you inject its data into a Pod?</summary>
+<div><p>A <strong>ConfigMap</strong> stores non-sensitive key-value configuration. Inject via <code>env</code>/<code>envFrom</code> (keys become environment variables) or mount as files with <code>volumes</code>/<code>volumeMounts</code> (supports multi-line files via <code>subPath</code>). ConfigMap updates do <strong>not</strong> automatically restart Pods  -  use a reloader sidecar, Argo CD sync waves, or a rolling restart to pick up changes.</p></div>
+</details>
+
+<details><summary>How are Secrets different from ConfigMaps, and are Secrets actually secure?</summary>
+<div><p>Secrets store sensitive data (passwords, tokens, TLS certs) and are base64-encoded in etcd  -  <strong>not encrypted by default</strong>. Enable <strong>encryption at rest</strong> via <code>EncryptionConfiguration</code> on the API server. Prefer <code>stringData</code> over manual base64 encoding. For production, use External Secrets Operator, Sealed Secrets, or Vault rather than committing Secrets to Git or relying on etcd alone.</p></div>
+</details>
+
+<details><summary>What is a ServiceAccount and why should you avoid the default one?</summary>
+<div><p>Every Pod runs as a <strong>ServiceAccount</strong>  -  an in-cluster identity for API access and cloud IAM (via workload identity annotations like <code>eks.amazonaws.com/role-arn</code>). The <code>default</code> ServiceAccount exists in every namespace with a mounted token. Never run production workloads with it; create dedicated ServiceAccounts with minimal RBAC. Set <code>automountServiceAccountToken: false</code> when the Pod does not need Kubernetes API access.</p></div>
+</details>
+
+<details><summary>Explain RBAC: Role, ClusterRole, RoleBinding, and ClusterRoleBinding.</summary>
+<div><p>RBAC controls <strong>who</strong> (subjects: User, Group, ServiceAccount) can perform <strong>what</strong> (verbs) on <strong>which resources</strong>. A <strong>Role</strong> defines permissions within a namespace; a <strong>ClusterRole</strong> is cluster-wide. <strong>RoleBinding</strong> links subjects to a Role in one namespace; <strong>ClusterRoleBinding</strong> grants cluster-wide access. Debug with <code>kubectl auth can-i create pods --as=system:serviceaccount:ns:sa-name</code>.</p></div>
+</details>
+
+<details><summary>What are the three Pod Security Standards levels?</summary>
+<div><p><strong>Pod Security Admission</strong> (built-in since K8s 1.25) enforces three levels via namespace labels: <code>privileged</code>  -  unrestricted, for system components only; <code>baseline</code>  -  blocks known privilege escalations (no host namespaces, no privileged containers); <code>restricted</code>  -  heavily hardened (non-root, drop all capabilities, read-only root filesystem, seccomp RuntimeDefault). Label namespaces with <code>pod-security.kubernetes.io/enforce=restricted</code> for production apps.</p></div>
+</details>
+
+<details><summary>What are admission controllers and how do mutating vs validating differ?</summary>
+<div><p><strong>Admission controllers</strong> intercept API requests after authentication and authorization but before persistence. <strong>Mutating</strong> controllers modify objects (inject sidecars, set defaults, add resource limits). <strong>Validating</strong> controllers reject non-compliant requests (Pod Security, resource policy). Built-in examples: <code>NamespaceLifecycle</code>, <code>LimitRanger</code>, <code>PodSecurity</code>. Custom policies often use <strong>OPA Gatekeeper</strong> or <strong>Kyverno</strong>.</p></div>
+</details>
+
+<details><summary>How would you enforce custom policies with OPA Gatekeeper?</summary>
+<div><p>Gatekeeper runs validating and mutating webhooks backed by <strong>Rego</strong> policies. Define a <code>ConstraintTemplate</code> (the Rego logic) and a <code>Constraint</code> (the enforcement instance). Common policies: require labels (<code>app</code>, <code>team</code>, <code>env</code>), block <code>:latest</code> image tags, enforce resource requests/limits, deny <code>hostPath</code> volumes. Gatekeeper complements Pod Security Standards with organization-specific rules.</p></div>
+</details>
+
+<details><summary>What does a production-hardened Pod securityContext look like?</summary>
+<div><p>At Pod level: <code>runAsNonRoot: true</code>, <code>seccompProfile: RuntimeDefault</code>. Per container: <code>allowPrivilegeEscalation: false</code>, <code>readOnlyRootFilesystem: true</code>, <code>runAsUser: 10001</code> (non-zero UID), <code>capabilities: drop: ["ALL"]</code>. Add an <code>emptyDir</code> mount for writable temp paths if the app needs them. Combine with NetworkPolicies, minimal ServiceAccount RBAC, and image scanning in CI.</p></div>
+</details>
+
+<details><summary>How do you manage secrets in GitOps workflows without storing plaintext?</summary>
+<div><p>Options: <strong>Sealed Secrets</strong>  -  encrypt Secrets with a cluster public key; only the controller can decrypt. <strong>External Secrets Operator</strong>  -  sync from AWS Secrets Manager, GCP Secret Manager, or Vault into native K8s Secrets at runtime. <strong>SOPS</strong>  -  encrypt YAML files in Git, decrypted by Flux or Argo CD. Never commit plaintext Secrets; rotate credentials and audit Secret access via RBAC.</p></div>
+</details>
+
+<details><summary>What is the principle of least privilege for Kubernetes RBAC in practice?</summary>
+<div><p>Grant only the verbs and resources each actor needs. App ServiceAccounts should not have <code>create/delete pods</code> unless they are operators. Developers get <code>get/list/watch</code> in dev namespaces, not cluster-admin. Use namespace-scoped Roles over ClusterRoles when possible. Audit bindings regularly; remove unused ServiceAccounts. Combine RBAC with admission policies so even over-permissioned tokens cannot deploy privileged Pods.</p></div>
+</details>
+
+<details><summary>How does Kubernetes encrypt Secrets at rest?</summary>
+<div><p>Configure <code>EncryptionConfiguration</code> on the API server with providers like <code>aescbc</code> or <code>kms</code> (envelope encryption via AWS KMS, GCP KMS, Azure Key Vault). Secrets are encrypted before writing to etcd. The <code>identity</code> provider serves as fallback for unencrypted legacy data during migration. Verify with <code>kubectl get secrets -o yaml</code>  -  values should not be readable from etcd directly without the encryption key.</p></div>
+</details>
+
+<details><summary>What network and runtime controls complement Pod Security Standards?</summary>
+<div><p>Pod Security Standards are necessary but not sufficient. Add <strong>NetworkPolicies</strong> for default-deny ingress/egress. Use <strong>Pod Security Standards</strong> + admission webhooks for policy enforcement. Enable <strong>audit logging</strong> on the API server. Run <strong>vulnerability scanning</strong> on images (Trivy, Grype). Consider <strong>runtime security</strong> (Falco) for anomaly detection. Restrict node SSH and use IRSA/workload identity instead of long-lived cloud credentials in Pods.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

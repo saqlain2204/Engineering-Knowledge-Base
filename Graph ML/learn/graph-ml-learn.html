@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+  <title>Graph ML Learn</title>
+  <meta name="description" content="Complete learning path for Graph Machine Learning and Graph Neural Networks  -  from basics to expert level.">
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body>
+
+  <header>
+    <nav aria-label="Breadcrumb">
+      <p><a href="../../index.html">Home</a> &rsaquo; <a href="../graph-ml.html">Graph ML</a> &rsaquo; Learn</p>
+    </nav>
+    <h1>Graph Machine Learning  -  Learning Path</h1>
+    <p>Read in order if you are new. Each page explains <em>what</em>, <em>why</em>, <em>how</em>, and <em>when not</em>  -  with derivations and code.</p>
+  </header>
+
+  <main class="wide">
+    <div class="learn-topics-grid">
+
+      <section>
+        <h2>Part 1  -  Foundations</h2>
+        <p>Start here if you only know basic ML (vectors, matrices, neural nets).</p>
+        <ul>
+          <li><a href="Foundations/graph-ml-foundations.html"><strong>Graph Foundations</strong></a><br>What is a graph, adjacency matrix, Laplacian, graph tasks, why graphs beat flat ML on relational data.</li>
+          <li><a href="Foundations/graph-ml-representation-data.html"><strong>Representation &amp; Data Preparation</strong></a><br>Node/edge/graph features, building graphs from raw data, splits, leakage, PyTorch Geometric, DGL.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Part 2  -  Core GNN Theory</h2>
+        <p>The heart of graph deep learning: message passing and classic architectures.</p>
+        <ul>
+          <li><a href="Core/graph-ml-message-passing.html"><strong>Message Passing Framework</strong></a><br>MPNN, permutation invariance/equivariance, aggregation, update  -  the unified view behind all GNNs.</li>
+          <li><a href="Core/graph-ml-classic-architectures.html"><strong>Classic Architectures</strong></a><br>GCN, GraphSAGE, GAT, GIN, MPNN  -  full math, intuition, code, and when to pick each.</li>
+          <li><a href="Core/graph-ml-spectral-methods.html"><strong>Spectral Methods</strong></a><br>Graph Fourier transform, ChebNet, spectral vs spatial convolution  -  where GCN really comes from.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Part 3  -  Advanced Architectures</h2>
+        <p>Going deeper: limitations, heterogeneous graphs, time, and transformers on graphs.</p>
+        <ul>
+          <li><a href="Advanced/graph-ml-deep-gnns-limitations.html"><strong>Deep GNNs &amp; Limitations</strong></a><br>Oversmoothing, over-squashing, expressiveness, Jumping Knowledge, residual connections, normalization.</li>
+          <li><a href="Advanced/graph-ml-heterogeneous-graphs.html"><strong>Heterogeneous &amp; Knowledge Graphs</strong></a><br>R-GCN, HGT, metapaths, link prediction, knowledge graph embedding + GNN hybrids.</li>
+          <li><a href="Advanced/graph-ml-temporal-dynamic-graphs.html"><strong>Temporal &amp; Dynamic Graphs</strong></a><br>Discrete snapshots, continuous-time (TGN), evolving graphs, temporal link prediction.</li>
+          <li><a href="Advanced/graph-ml-graph-transformers.html"><strong>Graph Transformers</strong></a><br>Graphormer, GPS, structure-aware attention, positional encodings on graphs.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Part 4  -  Practice &amp; Frontier</h2>
+        <p>Training at scale, choosing GNNs, LLM integration, and latest research.</p>
+        <ul>
+          <li><a href="Practice/graph-ml-training-scaling.html"><strong>Training, Optimization &amp; Scaling</strong></a><br>Losses, sampling, mini-batch, full-graph, distributed training, frameworks, debugging.</li>
+          <li><a href="Practice/graph-ml-when-to-use-evaluation.html"><strong>When to Use GNNs &amp; Evaluation</strong></a><br>Decision framework, metrics, benchmarks, GNN vs MLP vs Transformer  -  honest tradeoffs.</li>
+          <li><a href="Practice/graph-ml-gnns-and-llms.html"><strong>GNNs in the LLM Era</strong></a><br>Text-attributed graphs, GraphRAG, hybrid LLM+GNN systems, when graphs still matter.</li>
+          <li><a href="Practice/graph-ml-recent-advances-papers.html"><strong>Recent Advances &amp; Papers</strong></a><br>2020–2026 breakthroughs, foundation models on graphs, surveys, thesis pointers, code repos.</li>
+        </ul>
+      </section>
+
+    </div>
+
+    <section>
+      <h2>Quick Reference</h2>
+      <p>Formula cheat sheet: <a href="../formulas/graph-ml-formulas.html"><strong>GNN Formula Sheet</strong></a> &middot; Key papers: <a href="../research/papers-hub.html"><strong>Papers Hub</strong></a></p>
+    </section>
+  </main>
+
+  <footer>
+    <p><small><a href="../graph-ml.html">Back to Graph ML</a> &middot; <a href="../../index.html">Home</a></small></p>
+  </footer>
+
+  <script src="../../assets/site.js"></script>
+  <script src="../../assets/search.js" defer></script>
+</body>
+
+</html>

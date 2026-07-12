@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Storage | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Kubernetes storage: Volumes, PersistentVolumes, PVCs, StorageClasses, CSI drivers, and StatefulSet storage patterns.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Storage</p>
+  </nav>
+  <h1>Kubernetes Storage</h1>
+  <p>Persistent data for stateful workloads  -  from emptyDir to cloud block storage and CSI drivers.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#volume-types">Volume Types Overview</a></li>
+    <li><a href="#pv-pvc">PersistentVolumes &amp; PVCs</a></li>
+    <li><a href="#storage-classes">StorageClasses &amp; Dynamic Provisioning</a></li>
+    <li><a href="#csi">CSI Drivers</a></li>
+    <li><a href="#statefulset-storage">StatefulSet Storage Patterns</a></li>
+    <li><a href="#backup-restore">Backup &amp; Restore</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="volume-types">
+    <h2>1. Volume Types Overview</h2>
+    <table>
+      <thead><tr><th>Volume</th><th>Lifetime</th><th>Use case</th></tr></thead>
+      <tbody>
+        <tr><td><code>emptyDir</code></td><td>Pod lifetime</td><td>Scratch space, sidecar log sharing</td></tr>
+        <tr><td><code>configMap</code> / <code>secret</code></td><td>Pod lifetime</td><td>Config files, credentials as files</td></tr>
+        <tr><td><code>hostPath</code></td><td>Node filesystem</td><td>Node-level daemons (avoid for apps)</td></tr>
+        <tr><td><code>persistentVolumeClaim</code></td><td>Independent of Pod</td><td>Databases, any persistent data</td></tr>
+        <tr><td><code>projected</code></td><td>Pod lifetime</td><td>Combine multiple sources into one mount</td></tr>
+      </tbody>
+    </table>
+
+    <h3>emptyDir</h3>
+    <pre><code>volumes:
+  - name: cache
+    emptyDir:
+      medium: Memory   # tmpfs  -  fast, not persisted to disk
+      sizeLimit: 256Mi
+  - name: scratch
+    emptyDir: {}       # backed by node disk</code></pre>
+
+    <h3>configMap as volume</h3>
+    <pre><code>volumes:
+  - name: nginx-config
+    configMap:
+      name: nginx-config
+      items:
+        - key: nginx.conf
+          path: nginx.conf
+volumeMounts:
+  - name: nginx-config
+    mountPath: /etc/nginx/nginx.conf
+    subPath: nginx.conf
+    readOnly: true</code></pre>
+  </section>
+
+  <section id="pv-pvc">
+    <h2>2. PersistentVolumes &amp; PVCs</h2>
+    <p>Storage in Kubernetes follows a two-layer model:</p>
+    <ul>
+      <li><strong>PersistentVolume (PV)</strong>  -  cluster-level storage resource (like a disk)</li>
+      <li><strong>PersistentVolumeClaim (PVC)</strong>  -  Pod's request for storage (like a claim ticket)</li>
+    </ul>
+    <pre><code>┌─────────────┐  binds to   ┌─────────────┐  used by   ┌─────────────┐
+│     PVC     │ ──────────▶ │     PV      │ ◀────────── │     Pod     │
+│  (request)  │             │  (resource) │             │ (consumer)  │
+└─────────────┘             └─────────────┘             └─────────────┘</code></pre>
+
+    <h3>Static PV (admin pre-provisions)</h3>
+    <pre><code>apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs-001
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+  nfs:
+    server: nfs.example.com
+    path: /exports/data</code></pre>
+
+    <h3>PVC</h3>
+    <pre><code>apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 50Gi</code></pre>
+
+    <h3>Access modes</h3>
+    <table>
+      <thead><tr><th>Mode</th><th>Abbreviation</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>ReadWriteOnce</td><td>RWO</td><td>One node can mount read-write (most block storage)</td></tr>
+        <tr><td>ReadOnlyMany</td><td>ROX</td><td>Many nodes read-only</td></tr>
+        <tr><td>ReadWriteMany</td><td>RWX</td><td>Many nodes read-write (NFS, EFS, CephFS)</td></tr>
+        <tr><td>ReadWriteOncePod</td><td>RWOP</td><td>Single Pod only (K8s 1.22+)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Reclaim policies</h3>
+    <ul>
+      <li><code>Retain</code>  -  PV kept after PVC deleted; data preserved, manual cleanup required</li>
+      <li><code>Delete</code>  -  PV and underlying storage deleted when PVC is deleted (default for dynamic)</li>
+      <li><code>Recycle</code>  -  deprecated; scrubs data and makes PV available again</li>
+    </ul>
+
+    <h3>Using PVC in a Pod</h3>
+    <pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres-0
+spec:
+  containers:
+    - name: postgres
+      image: postgres:16
+      volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: postgres-data</code></pre>
+  </section>
+
+  <section id="storage-classes">
+    <h2>3. StorageClasses &amp; Dynamic Provisioning</h2>
+    <p><strong>Dynamic provisioning</strong> automatically creates a PV when a PVC is created  -  no admin pre-provisioning needed. A <strong>StorageClass</strong> defines the provisioner and parameters.</p>
+    <pre><code>apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer   # delay binding until Pod scheduled
+allowVolumeExpansion: true
+reclaimPolicy: Delete</code></pre>
+
+    <h3>volumeBindingMode</h3>
+    <ul>
+      <li><code>Immediate</code>  -  PV provisioned and bound as soon as PVC is created</li>
+      <li><code>WaitForFirstConsumer</code>  -  waits until a Pod using the PVC is scheduled, then provisions in the correct AZ (recommended for cloud block storage)</li>
+    </ul>
+
+    <pre><code># List storage classes
+kubectl get storageclass
+
+# Check PVC status
+kubectl get pvc -A
+kubectl describe pvc postgres-data
+
+# Expand PVC (requires allowVolumeExpansion: true)
+kubectl patch pvc postgres-data -p '{"spec":{"resources":{"requests":{"storage":"100Gi"}}}}'</code></pre>
+  </section>
+
+  <section id="csi">
+    <h2>4. CSI Drivers</h2>
+    <p>The <strong>Container Storage Interface (CSI)</strong> is the standard plugin API for storage vendors. CSI drivers run as Pods in the cluster and handle create/mount/snapshot/resize operations.</p>
+    <pre><code># Common CSI drivers
+# AWS:   ebs.csi.aws.com, efs.csi.aws.com
+# GCP:   pd.csi.storage.gke.io
+# Azure: disk.csi.azure.com, file.csi.azure.com
+# NFS:   nfs.csi.k8s.io
+
+# Check CSI driver pods
+kubectl get pods -n kube-system | grep csi
+
+# VolumeSnapshot (backup a PVC)
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name: postgres-snap-20240101
+spec:
+  volumeSnapshotClassName: csi-aws-vsc
+  source:
+    persistentVolumeClaimName: postgres-data</code></pre>
+    <p>Restore from snapshot by creating a new PVC with <code>dataSource</code>:</p>
+    <pre><code>apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-restored
+spec:
+  storageClassName: gp3
+  dataSource:
+    name: postgres-snap-20240101
+    kind: VolumeSnapshot
+    apiGroup: snapshot.storage.k8s.io
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi</code></pre>
+  </section>
+
+  <section id="statefulset-storage">
+    <h2>5. StatefulSet Storage Patterns</h2>
+    <p><strong>StatefulSets</strong> provide stable network identity and stable storage per replica via <code>volumeClaimTemplates</code>.</p>
+    <pre><code>apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 3
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 50Gi</code></pre>
+    <p>Each Pod gets its own PVC: <code>data-postgres-0</code>, <code>data-postgres-1</code>, <code>data-postgres-2</code>. PVCs persist even if the StatefulSet is deleted (unless you delete them manually).</p>
+    <div class="callout">
+      <strong>Scaling down:</strong> StatefulSet scale-down does NOT delete PVCs. You must manually delete orphaned PVCs if you want to reclaim storage.
+    </div>
+  </section>
+
+  <section id="backup-restore">
+    <h2>6. Backup &amp; Restore</h2>
+    <h3>Volume snapshots (CSI)</h3>
+    <pre><code>kubectl get volumesnapshot
+kubectl get volumesnapshotclass
+
+# Create snapshot
+kubectl apply -f postgres-snapshot.yaml
+
+# Restore to new PVC (see CSI section above)</code></pre>
+
+    <h3>Velero (cluster-level backup)</h3>
+    <p><a class="refer-link" href="https://velero.io/" rel="noopener noreferrer">Velero</a> backs up Kubernetes resources and PV snapshots to object storage (S3, GCS). Supports scheduled backups and disaster recovery.</p>
+    <pre><code># Install Velero (AWS example)
+velero install \
+  --provider aws \
+  --bucket my-velero-backups \
+  --backup-location-config region=us-east-1 \
+  --snapshot-location-config region=us-east-1 \
+  --secret-file ./credentials-velero
+
+# Backup a namespace
+velero backup create prod-backup --include-namespaces production
+
+# Restore
+velero restore create --from-backup prod-backup</code></pre>
+  </section>
+
+  <section id="troubleshooting">
+    <h2>7. Troubleshooting</h2>
+    <pre><code># PVC stuck in Pending?
+kubectl describe pvc postgres-data
+# Common causes: no StorageClass, no matching PV, insufficient capacity,
+# WaitForFirstConsumer waiting for Pod, provisioner not running
+
+# Pod stuck in ContainerCreating?
+kubectl describe pod postgres-0
+# Look for: FailedMount, FailedAttachVolume, Multi-Attach error
+
+# Multi-Attach error (RWO volume on two nodes)
+# Only one node can mount RWO volumes  -  ensure old Pod is fully terminated
+
+# Check volume attachment
+kubectl get volumeattachment
+
+# CSI driver logs
+kubectl logs -n kube-system -l app=ebs-csi-controller --tail=50</code></pre>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>8. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>List PVCs</td><td><code>kubectl get pvc -A</code></td></tr>
+        <tr><td>List PVs</td><td><code>kubectl get pv</code></td></tr>
+        <tr><td>Storage classes</td><td><code>kubectl get sc</code></td></tr>
+        <tr><td>PVC details</td><td><code>kubectl describe pvc &lt;name&gt;</code></td></tr>
+        <tr><td>Expand PVC</td><td><code>kubectl patch pvc &lt;name&gt; -p '{"spec":{"resources":{"requests":{"storage":"100Gi"}}}}'</code></td></tr>
+        <tr><td>Snapshots</td><td><code>kubectl get volumesnapshot</code></td></tr>
+        <tr><td>StatefulSet PVCs</td><td><code>kubectl get pvc -l app=postgres</code></td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheet: <a href="../../cheatsheets/kubectl-cheatsheet.html">kubectl Cheat Sheet</a></p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="kubernetes-config-security.html">Config, Secrets &amp; Security →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

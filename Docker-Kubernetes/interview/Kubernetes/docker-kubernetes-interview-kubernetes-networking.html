@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Kubernetes Networking &amp; Services | Interview Prep</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+
+<header>
+  <nav aria-label="Breadcrumb"><p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-interview.html">Interview Prep</a> &rsaquo; Networking &amp; Services</p>
+  </nav>
+  <p class="badge-interview">Interview Prep</p>
+<h1>Interview: Kubernetes Networking &amp; Services</h1>
+  <p>Services, Ingress, DNS, policies, CNI, and service meshes. <a href="../../learn/Kubernetes/kubernetes-networking.html">Read learning notes</a>.</p>
+</header>
+
+<main>
+<section>
+
+<h2>Kubernetes Networking &amp; Services</h2>
+<p>Services, Ingress, DNS, policies, CNI, and service meshes.</p>
+
+<details><summary>What are the core rules of the Kubernetes networking model?</summary>
+<div>
+<ul>
+<li>Every Pod gets its own IP address  -  Pods can reach each other without NAT.</li>
+<li>Agents on a node (kubelet/CNI) can reach all Pods on that node.</li>
+<li>Agents on a node can reach all Pods on all nodes without NAT (flat pod network).</li>
+</ul>
+<p>These assumptions simplify service discovery and health checks. The CNI plugin is responsible for implementing the pod network across nodes.</p>
+</div>
+</details>
+
+<details><summary>What is a Service and why do you need one if Pods have IPs?</summary>
+<div><p>Pod IPs are ephemeral  -  when a Pod restarts, it gets a new IP. A Service provides a stable virtual IP (ClusterIP) and DNS name that load-balances to a dynamic set of Pod endpoints. kube-proxy (or eBPF dataplane) programs rules on each node to forward Service traffic to healthy backend Pods. Without Services, clients would break every time Pods are rescheduled.</p></div>
+</details>
+
+<details><summary>Compare ClusterIP, NodePort, and LoadBalancer Service types.</summary>
+<div>
+<ul>
+<li><strong>ClusterIP</strong> (default)  -  reachable only inside the cluster. Use for internal microservice-to-microservice traffic.</li>
+<li><strong>NodePort</strong>  -  exposes the Service on a static port (30000–32767) on every node's IP. Useful for dev/bare-metal; usually not ideal alone in production.</li>
+<li><strong>LoadBalancer</strong>  -  provisions an external cloud load balancer pointing to NodePort backends. Standard way to expose apps on AWS/GCP/Azure. On bare metal, MetalLB provides similar behavior.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is a Headless Service (<code>clusterIP: None</code>) and when do you use it?</summary>
+<div><p>A Headless Service does not allocate a virtual IP; DNS returns individual Pod A records instead of a single Service IP. Use it when clients need direct Pod-to-Pod discovery: StatefulSet stable identity (<code>pod-0.service.ns.svc.cluster.local</code>), custom client-side load balancing, or service meshes that manage their own routing. Common for databases and Kafka brokers behind StatefulSets.</p></div>
+</details>
+
+<details><summary>How does Ingress differ from a LoadBalancer Service?</summary>
+<div><p>A LoadBalancer Service exposes one Service on one external IP (expensive per Service in cloud). Ingress is an L7 HTTP/HTTPS routing layer: one entry point (often one load balancer) routes by host/path to multiple backend Services (<code>/api</code> → api-svc, <code>/web</code> → web-svc). Ingress controllers (nginx, Traefik, AWS ALB) implement the Ingress spec. Use Ingress for HTTP routing and TLS termination; use LoadBalancer for non-HTTP protocols (gRPC over dedicated LB, TCP databases).</p></div>
+</details>
+
+<details><summary>How does DNS work inside a Kubernetes cluster?</summary>
+<div><p>CoreDNS (default) runs as a cluster add-on. It resolves <code>&lt;service&gt;.&lt;namespace&gt;.svc.cluster.local</code> to the Service ClusterIP (or Pod IPs for Headless Services). Pods use <code>/etc/resolv.conf</code> with search paths so <code>curl my-svc</code> in the same namespace works. Cross-namespace: <code>my-svc.other-ns.svc.cluster.local</code>. DNS is critical for service discovery  -  hardcoding Pod IPs is an anti-pattern.</p></div>
+</details>
+
+<details><summary>What are NetworkPolicies and what can they restrict?</summary>
+<div><p>NetworkPolicies are firewall rules for Pods. By default, all Pod-to-Pod traffic is allowed in most clusters. A NetworkPolicy selects Pods via labels and defines ingress/egress rules (allowed source/destination IPs, namespaces, ports). They require a CNI that enforces policies (Calico, Cilium, Weave). Use them for zero-trust segmentation: only the frontend namespace can reach the API; only the API can reach the database.</p></div>
+</details>
+
+<details><summary>What is a CNI plugin and why does Kubernetes need one?</summary>
+<div><p>Kubernetes defines how networking should behave but does not implement it. The Container Network Interface (CNI) is a standard for pluggable network setup: allocate Pod IPs, configure interfaces on nodes, and set up cross-node routing (VXLAN, BGP, etc.). Popular CNIs: Calico (policy + BGP), Cilium (eBPF, observability), Flannel (simple overlay). The choice affects performance, policy support, and operational complexity.</p></div>
+</details>
+
+<details><summary>How does kube-proxy implement Service load balancing?</summary>
+<div><p>kube-proxy watches Services and EndpointSlices, then programs node-level rules. In iptables mode, it creates chains that DNAT Service IP traffic to backend Pod IPs with probabilistic load spread. IPVS mode uses kernel IPVS for better performance at scale. kube-proxy modes are being supplemented by eBPF (Cilium kube-proxy replacement) for lower latency and richer observability. Traffic hairpinning (Pod calling its own Service) requires special handling on some CNIs.</p></div>
+</details>
+
+<details><summary>What is a service mesh and when is it worth adding one?</summary>
+<div><p>A service mesh adds a dedicated infrastructure layer for service-to-service communication  -  typically sidecar proxies (Envoy in Istio/Linkerd) or eBPF node-level proxies (Cilium). It provides mutual TLS, fine-grained traffic policies, retries/timeouts, circuit breaking, and distributed tracing without changing app code. Worth it at scale with many microservices needing security compliance and observability; overkill for small clusters where Ingress + NetworkPolicies suffice.</p></div>
+</details>
+
+<details><summary>How do you expose a Kubernetes app to the internet securely?</summary>
+<div>
+<ul>
+<li>Terminate TLS at Ingress with cert-manager (Let's Encrypt or internal CA).</li>
+<li>Use LoadBalancer or Ingress with restricted security groups / firewall rules.</li>
+<li>Apply NetworkPolicies so only the ingress controller can reach backend Pods.</li>
+<li>Avoid exposing databases via LoadBalancer  -  keep them ClusterIP with policy-restricted access.</li>
+<li>Consider a service mesh for mTLS between internal services even when external TLS is handled at Ingress.</li>
+</ul>
+</div>
+</details>
+
+<details><summary>What is the difference between east-west and north-south traffic in Kubernetes?</summary>
+<div><p><strong>North-south</strong> traffic enters or leaves the cluster (users → Ingress → Service → Pod). <strong>East-west</strong> traffic flows between services inside the cluster (api-svc → db-svc). Ingress and LoadBalancers handle north-south; Services, DNS, and NetworkPolicies govern east-west. Service meshes primarily add policy, encryption, and observability to east-west traffic. Production hardening requires attention to both paths.</p></div>
+</details>
+
+</section>
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-interview.html">Back to Interview Prep</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+  <script src="../../../assets/site.js"></script>
+  <script src="../../../assets/search.js" defer></script>
+</body>
+</html>

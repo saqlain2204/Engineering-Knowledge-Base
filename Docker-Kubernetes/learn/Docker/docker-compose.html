@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Docker Compose | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Docker Compose: multi-service apps, compose files, networking, volumes, secrets, health checks, overrides, CLI, and production patterns.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Docker Compose</p>
+  </nav>
+  <h1>Docker Compose</h1>
+  <p>Define, run, and manage multi-container applications with a single YAML file  -  from local dev stacks to production-like environments.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#what-is-compose">What is Docker Compose?</a></li>
+    <li><a href="#compose-file">The Compose File</a></li>
+    <li><a href="#services">Services in Depth</a></li>
+    <li><a href="#networking">Networking</a></li>
+    <li><a href="#volumes">Volumes</a></li>
+    <li><a href="#env-secrets">Environment &amp; Secrets</a></li>
+    <li><a href="#health-deps">Health Checks &amp; Dependencies</a></li>
+    <li><a href="#overrides">Override Files</a></li>
+    <li><a href="#compose-cli">Compose CLI</a></li>
+    <li><a href="#production">Production Patterns</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="what-is-compose">
+    <h2>1. What is Docker Compose?</h2>
+    <p><strong>Docker Compose</strong> is a tool for defining and running multi-container Docker applications. You describe your stack in a <code>compose.yaml</code> file  -  services, networks, volumes, environment variables  -  and Compose creates and wires everything together with a single command.</p>
+    <p>Compose is ideal for:</p>
+    <ul>
+      <li><strong>Local development</strong>  -  spin up an API, database, cache, and message broker together.</li>
+      <li><strong>Integration testing</strong>  -  reproducible test environments in CI pipelines.</li>
+      <li><strong>Small deployments</strong>  -  single-host production stacks (with caveats; see Production Patterns).</li>
+      <li><strong>Demos and onboarding</strong>  -  one command to run the entire application.</li>
+    </ul>
+    <pre><code>┌─────────────────────────────────────────────────────────────────┐
+│  docker compose up                                              │
+│       │                                                         │
+│       ├── creates network: myapp_default                        │
+│       ├── creates volume: myapp_postgres_data                   │
+│       ├── starts container: myapp-postgres-1                    │
+│       ├── starts container: myapp-redis-1                       │
+│       └── starts container: myapp-api-1  (depends on above)     │
+│              │                                                  │
+│              └── DNS: api, postgres, redis resolve on network   │
+└─────────────────────────────────────────────────────────────────┘</code></pre>
+    <div class="callout">
+      <strong>Compose v2:</strong> Use <code>docker compose</code> (space, not hyphen). The legacy standalone <code>docker-compose</code> Python tool is deprecated. Compose v2 is a Go-based Docker CLI plugin integrated with Buildx and Docker contexts.
+    </div>
+    <h3>Quick start</h3>
+    <pre><code># Project layout
+myapp/
+├── compose.yaml
+├── api/
+│   └── Dockerfile
+└── .env
+
+# Start everything in the foreground
+docker compose up
+
+# Start detached, rebuild images
+docker compose up -d --build
+
+# Tear down containers, networks, and named volumes
+docker compose down -v</code></pre>
+  </section>
+
+  <section id="compose-file">
+    <h2>2. The Compose File</h2>
+    <p>Modern Compose files follow the <strong>Compose Specification</strong> (compose-spec.io). The top-level <code>version</code> field is <em>no longer required</em>  -  Compose v2 infers the schema automatically.</p>
+
+    <h3>Top-level keys</h3>
+    <table>
+      <thead><tr><th>Key</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>services</code></td><td>Container definitions (required)</td></tr>
+        <tr><td><code>networks</code></td><td>Custom bridge/overlay networks</td></tr>
+        <tr><td><code>volumes</code></td><td>Named or external volume declarations</td></tr>
+        <tr><td><code>secrets</code></td><td>File-based secrets mounted into containers</td></tr>
+        <tr><td><code>configs</code></td><td>Non-sensitive config files (Swarm-oriented, limited in standalone)</td></tr>
+        <tr><td><code>name</code></td><td>Override the default project name (directory name)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Minimal compose.yaml</h3>
+    <pre><code>name: myapp
+
+services:
+  web:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./html:/usr/share/nginx/html:ro
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://app:secret@db:5432/appdb
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: appdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:</code></pre>
+
+    <h3>Build context options</h3>
+    <pre><code>services:
+  api:
+    build:
+      context: .                    # directory sent to docker build
+      dockerfile: docker/api.Dockerfile
+      target: production            # multi-stage build target
+      args:
+        NODE_VERSION: "20"
+      cache_from:
+        - myregistry/api:cache
+      labels:
+        org.opencontainers.image.source: https://github.com/org/repo
+    image: myregistry/api:${TAG:-latest}   # tag the built image</code></pre>
+  </section>
+
+  <section id="services">
+    <h2>3. Services in Depth</h2>
+    <p>Each entry under <code>services</code> maps to one or more containers (replicas with <code>deploy.replicas</code> in Swarm mode; standalone Compose runs one container per service).</p>
+
+    <h3>Image vs build</h3>
+    <table>
+      <thead><tr><th>Approach</th><th>When to use</th></tr></thead>
+      <tbody>
+        <tr><td><code>image: nginx:1.27</code></td><td>Pull a pre-built image from a registry</td></tr>
+        <tr><td><code>build: ./api</code></td><td>Build locally from a Dockerfile</td></tr>
+        <tr><td>Both</td><td>Build locally and tag with <code>image</code> for push/reuse</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Common service options</h3>
+    <pre><code>services:
+  worker:
+    image: myapp/worker:2.1.0
+    restart: unless-stopped       # no | always | on-failure | unless-stopped
+    user: "1000:1000"               # run as non-root
+    working_dir: /app
+    command: ["node", "worker.js"]  # override image CMD
+    entrypoint: ["/entrypoint.sh"]  # override image ENTRYPOINT
+    init: true                      # use tini as PID 1 (reap zombies)
+    stop_grace_period: 30s
+    stop_signal: SIGTERM
+    read_only: true                 # read-only root filesystem
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    deploy:                         # ignored by standalone compose (Swarm only)
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"</code></pre>
+
+    <h3>Profiles</h3>
+    <p>Profiles let you opt-in to optional services (debug tools, local mail catcher, etc.).</p>
+    <pre><code>services:
+  api:
+    image: myapp/api
+    profiles: []          # always started (default profile)
+
+  mailhog:
+    image: mailhog/mailhog
+    profiles: ["debug"]   # only with --profile debug
+
+  adminer:
+    image: adminer
+    profiles: ["tools"]
+
+# Start api only (default)
+docker compose up -d
+
+# Include debug services
+docker compose --profile debug up -d</code></pre>
+  </section>
+
+  <section id="networking">
+    <h2>4. Networking</h2>
+    <p>Compose creates a <strong>default bridge network</strong> per project. Every service joins it automatically and is reachable by <strong>service name</strong> as a DNS hostname.</p>
+    <pre><code># From inside the api container:
+curl http://redis:6379        # resolves to redis service
+psql -h db -U app appdb       # resolves to db service</code></pre>
+
+    <h3>Port publishing</h3>
+    <pre><code>services:
+  web:
+    ports:
+      - "8080:80"              # host:container (bind all interfaces)
+      - "127.0.0.1:3000:3000"  # localhost only
+      - "80"                   # ephemeral host port
+
+  internal-api:
+    expose:
+      - "8080"                 # visible to other services, NOT published to host</code></pre>
+
+    <h3>Custom networks</h3>
+    <pre><code>services:
+  frontend:
+    networks:
+      - frontend_net
+
+  api:
+    networks:
+      - frontend_net
+      - backend_net
+
+  db:
+    networks:
+      - backend_net    # db not reachable from frontend
+
+networks:
+  frontend_net:
+    driver: bridge
+  backend_net:
+    driver: bridge
+    internal: true     # no external routing (isolated subnet)</code></pre>
+
+    <h3>External networks</h3>
+    <pre><code>networks:
+  shared_proxy:
+    external: true     # must exist: docker network create shared_proxy
+
+services:
+  web:
+    networks:
+      - shared_proxy
+      - default</code></pre>
+    <div class="callout">
+      <strong>DNS tip:</strong> Service names resolve within the same network. If <code>frontend</code> and <code>db</code> are on different networks with no shared network, <code>db</code> is not reachable from <code>frontend</code>.
+    </div>
+  </section>
+
+  <section id="volumes">
+    <h2>5. Volumes</h2>
+    <p>Compose supports three mount types: <strong>named volumes</strong>, <strong>bind mounts</strong>, and <strong>tmpfs</strong>.</p>
+
+    <table>
+      <thead><tr><th>Type</th><th>Syntax</th><th>Use case</th></tr></thead>
+      <tbody>
+        <tr><td>Named volume</td><td><code>postgres_data:/var/lib/postgresql/data</code></td><td>Database data, managed by Docker</td></tr>
+        <tr><td>Bind mount</td><td><code>./src:/app/src</code></td><td>Live code reload in dev</td></tr>
+        <tr><td>Anonymous volume</td><td><code>/app/node_modules</code></td><td>Preserve container-only files over bind mount</td></tr>
+        <tr><td>External volume</td><td><code>external: true</code> in top-level volumes</td><td>Share data across Compose projects</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code>services:
+  api:
+    volumes:
+      - ./api/src:/app/src:cached     # macOS performance hint
+      - /app/node_modules             # anonymous: shadow host node_modules
+      - api_logs:/var/log/app
+
+  db:
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  postgres_data:
+    driver: local
+  api_logs:
+  legacy_data:
+    external: true
+    name: prod_postgres_data</code></pre>
+
+    <h3>Dev vs prod volume strategy</h3>
+    <ul>
+      <li><strong>Dev:</strong> bind-mount source code for hot reload; accept platform-specific file permission quirks.</li>
+      <li><strong>Prod:</strong> no source bind mounts; use named volumes only for persistent state; bake code into the image.</li>
+    </ul>
+    <pre><code># Inspect volumes for a project
+docker compose ps
+docker volume ls --filter label=com.docker.compose.project=myapp
+docker volume inspect myapp_postgres_data</code></pre>
+  </section>
+
+  <section id="env-secrets">
+    <h2>6. Environment &amp; Secrets</h2>
+    <h3>Environment variables</h3>
+    <p>Compose supports inline env vars, <code>.env</code> files, and variable interpolation in the compose file itself.</p>
+    <pre><code># .env (loaded automatically from project directory)
+TAG=2.1.0
+DB_PASSWORD=localdev_secret
+API_PORT=3000
+
+# compose.yaml
+services:
+  api:
+    image: myapp/api:${TAG}
+    ports:
+      - "${API_PORT}:3000"
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: ${LOG_LEVEL:-info}    # default if unset
+    env_file:
+      - ./api/.env.local
+      - ./api/.env.shared</code></pre>
+
+    <h3>Interpolation and defaults</h3>
+    <pre><code>image: myregistry/api:${TAG:-latest}
+ports:
+  - "${API_PORT:-3000}:3000"
+
+# Required variable (Compose fails if unset)
+image: myregistry/api:${TAG?TAG is required}</code></pre>
+
+    <h3>Secrets (file-based)</h3>
+    <p>Secrets are mounted as files under <code>/run/secrets/&lt;secret_name&gt;</code>. Never commit secret files  -  add them to <code>.gitignore</code>.</p>
+    <pre><code>services:
+  api:
+    secrets:
+      - db_password
+      - api_tls_cert
+    environment:
+      DB_PASSWORD_FILE: /run/secrets/db_password
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  api_tls_cert:
+    file: ./secrets/api.crt
+
+# Application reads:
+# cat /run/secrets/db_password</code></pre>
+    <div class="callout">
+      <strong>Security:</strong> <code>.env</code> files are convenient for local dev but are not encrypted. In production, inject secrets via your orchestrator, a secrets manager, or Docker Swarm secrets  -  never bake credentials into images or commit them to git.
+    </div>
+  </section>
+
+  <section id="health-deps">
+    <h2>7. Health Checks &amp; Dependencies</h2>
+    <p>Without health checks, <code>depends_on</code> only waits for the container to <em>start</em>, not for the application inside to be ready. Use <code>condition: service_healthy</code> for reliable startup ordering.</p>
+
+    <h3>Health check syntax</h3>
+    <pre><code>services:
+  api:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s   # grace period before failures count
+
+  db:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 5</code></pre>
+
+    <h3>depends_on with conditions</h3>
+    <pre><code>services:
+  api:
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    # api starts only after db healthcheck passes
+
+  worker:
+    depends_on:
+      api:
+        condition: service_healthy</code></pre>
+
+    <table>
+      <thead><tr><th>Condition</th><th>Behaviour</th></tr></thead>
+      <tbody>
+        <tr><td><code>service_started</code></td><td>Container is running (default)</td></tr>
+        <tr><td><code>service_healthy</code></td><td>Healthcheck reports healthy</td></tr>
+        <tr><td><code>service_completed_successfully</code></td><td>One-shot container exited 0 (migrations)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>One-shot migration pattern</h3>
+    <pre><code>services:
+  migrate:
+    image: myapp/api:${TAG}
+    command: ["npm", "run", "db:migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy</code></pre>
+    <pre><code># Check health status
+docker compose ps
+docker inspect --format='{{.State.Health.Status}}' myapp-api-1</code></pre>
+  </section>
+
+  <section id="overrides">
+    <h2>8. Override Files</h2>
+    <p>Compose automatically merges <code>compose.yaml</code> with <code>compose.override.yaml</code> if it exists. Override files let you keep a shared base and layer environment-specific changes without duplicating the entire stack.</p>
+
+    <h3>Merge order</h3>
+    <pre><code># Default: compose.yaml + compose.override.yaml
+docker compose up
+
+# Explicit file list (later files override earlier)
+docker compose -f compose.yaml -f compose.prod.yaml up -d
+
+# Dev-only override
+docker compose -f compose.yaml -f compose.dev.yaml up</code></pre>
+
+    <h3>compose.yaml (shared base)</h3>
+    <pre><code>services:
+  api:
+    build: ./api
+    environment:
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data</code></pre>
+
+    <h3>compose.override.yaml (local dev, gitignored or committed)</h3>
+    <pre><code>services:
+  api:
+    environment:
+      NODE_ENV: development
+      DEBUG: "app:*"
+    volumes:
+      - ./api/src:/app/src
+    ports:
+      - "3000:3000"
+
+  db:
+    ports:
+      - "5432:5432"   # expose DB to host tools (pgAdmin, DBeaver)</code></pre>
+
+    <h3>compose.prod.yaml (production)</h3>
+    <pre><code>services:
+  api:
+    image: myregistry/api:${TAG}
+    build: !reset null          # do not build on prod host
+    restart: unless-stopped
+    ports: !reset []           # no published ports; use reverse proxy
+    volumes: !reset []         # no source bind mounts
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy</code></pre>
+    <div class="callout">
+      <strong>YAML anchors and extensions:</strong> Use <code>!reset</code> to remove keys inherited from the base file, and <code>extends</code> (deprecated in spec) sparingly. Prefer explicit multi-file merges for clarity.
+    </div>
+  </section>
+
+  <section id="compose-cli">
+    <h2>9. Compose CLI</h2>
+    <p>All Compose commands are subcommands of <code>docker compose</code>. The project name defaults to the directory name and prefixes all resources (<code>myapp-api-1</code>, <code>myapp_default</code>).</p>
+
+    <h3>Lifecycle commands</h3>
+    <pre><code>docker compose up -d              # create and start in background
+docker compose up -d --build      # rebuild images before starting
+docker compose up --watch         # sync files and rebuild (Compose v2.22+)
+docker compose stop               # stop without removing
+docker compose start              # start stopped containers
+docker compose restart api        # restart one service
+docker compose down               # stop and remove containers + networks
+docker compose down -v            # also remove named volumes
+docker compose down --rmi local   # remove images built by compose</code></pre>
+
+    <h3>Inspection and debugging</h3>
+    <pre><code>docker compose ps                   # running services
+docker compose ps -a                # include stopped
+docker compose logs -f api          # follow api logs
+docker compose logs --tail=50 db    # last 50 lines
+docker compose exec api sh          # shell into running container
+docker compose run --rm api npm test  # one-off command (new container)
+docker compose top api              # show processes in service
+docker compose config               # render merged compose file
+docker compose config --services    # list service names
+docker compose images               # images used by services
+docker compose port api 3000        # show host port mapping</code></pre>
+
+    <h3>Project and context</h3>
+    <pre><code>docker compose -p myproject up -d   # override project name
+docker compose --env-file .env.staging up -d
+
+# Use a different Docker context (remote host)
+docker context use production
+docker compose up -d</code></pre>
+  </section>
+
+  <section id="production">
+    <h2>10. Production Patterns</h2>
+    <p>Compose on a single host can run production workloads, but understand the limits: no built-in rolling updates, no auto-scaling across nodes, and the host is a single point of failure. For multi-node production, use Kubernetes, Docker Swarm, or a PaaS.</p>
+
+    <h3>Production checklist</h3>
+    <ul>
+      <li>Pin image tags  -  never <code>:latest</code> in production.</li>
+      <li>Build images in CI and push to a registry; pull on the host (do not build on prod).</li>
+      <li>Use <code>restart: unless-stopped</code> on all long-running services.</li>
+      <li>Do not publish database ports to the host.</li>
+      <li>Put TLS termination on a reverse proxy (nginx, Traefik, Caddy).</li>
+      <li>Set resource limits and log rotation.</li>
+      <li>Run containers as non-root; use read-only root filesystem where possible.</li>
+    </ul>
+
+    <h3>Reverse proxy with Traefik</h3>
+    <pre><code>services:
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/certs:ro
+
+  api:
+    image: myregistry/api:2.1.0
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.example.com`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls=true"
+    expose:
+      - "3000"</code></pre>
+
+    <h3>Watchtower (automated image updates)</h3>
+    <pre><code>services:
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 300
+      WATCHTOWER_CLEANUP: "true"
+    # Only update labeled containers
+    command: --label-enable</code></pre>
+
+    <h3>Compose vs Kubernetes</h3>
+    <table>
+      <thead><tr><th>Concern</th><th>Compose</th><th>Kubernetes</th></tr></thead>
+      <tbody>
+        <tr><td>Scale across nodes</td><td>No</td><td>Yes</td></tr>
+        <tr><td>Rolling updates</td><td>Manual / third-party</td><td>Built-in</td></tr>
+        <tr><td>Self-healing</td><td>Restart policy only</td><td>ReplicaSets, probes</td></tr>
+        <tr><td>Secrets management</td><td>File mounts</td><td>Secrets API, external operators</td></tr>
+        <tr><td>Best fit</td><td>Dev, CI, small single-host prod</td><td>Multi-node production</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>11. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Command</th></tr></thead>
+      <tbody>
+        <tr><td>Start stack</td><td><code>docker compose up -d</code></td></tr>
+        <tr><td>Rebuild and start</td><td><code>docker compose up -d --build</code></td></tr>
+        <tr><td>Stop and remove</td><td><code>docker compose down -v</code></td></tr>
+        <tr><td>View logs</td><td><code>docker compose logs -f &lt;service&gt;</code></td></tr>
+        <tr><td>Shell into service</td><td><code>docker compose exec &lt;service&gt; sh</code></td></tr>
+        <tr><td>Run one-off command</td><td><code>docker compose run --rm &lt;service&gt; &lt;cmd&gt;</code></td></tr>
+        <tr><td>Validate compose file</td><td><code>docker compose config</code></td></tr>
+        <tr><td>List services</td><td><code>docker compose config --services</code></td></tr>
+        <tr><td>Service DNS name</td><td><code>&lt;service_name&gt;</code> on default network</td></tr>
+        <tr><td>Multi-file merge</td><td><code>docker compose -f a.yaml -f b.yaml up</code></td></tr>
+      </tbody>
+    </table>
+    <p>Full cheat sheet: <a href="../../cheatsheets/docker-cli-cheatsheet.html">Docker CLI Cheat Sheet</a></p>
+
+    <div class="page-footer-nav">
+      <p>Next topic:</p>
+      <a class="interview-link" href="docker-advanced.html">Advanced Docker →</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

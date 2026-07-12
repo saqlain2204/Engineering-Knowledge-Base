@@ -4,93 +4,1350 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
-  <title>Evaluation | AI Engineering</title>
+  <title>LLM Evaluation | AI Engineering</title>
   <link rel="stylesheet" href="../../../styles.css">
+  <script src="../../../assets/mathjax.js"></script>
 </head>
 <body class="learn-page">
 <header>
   <nav aria-label="Breadcrumb">
-    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Evaluation</p>
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; LLM Evaluation</p>
   </nav>
-  <h1>Evaluation</h1>
-  <p>Measuring model quality, regression risk, and production fitness beyond public leaderboard scores.</p>
+  <h1>LLM Evaluation: Complete Reference</h1>
+  <p>From intrinsic benchmarks and golden sets through RAG faithfulness, agent trajectories, LLM-as-judge, CI gates, A/B testing, and production harness design for shipping LLM systems with confidence.</p>
 </header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why-evals">Why Evaluation Matters</a></li>
+    <li><a href="#intrinsic-extrinsic">Intrinsic vs Extrinsic Evaluation</a></li>
+    <li><a href="#lifecycle">Evaluation Lifecycle</a></li>
+    <li><a href="#benchmark-catalog">Benchmark Catalog</a></li>
+    <li><a href="#golden-sets">Golden Sets and Custom Eval Data</a></li>
+    <li><a href="#contamination">Contamination and Data Leakage</a></li>
+    <li><a href="#automated-metrics">Automated Metrics</a></li>
+    <li><a href="#llm-as-judge">LLM-as-Judge</a></li>
+    <li><a href="#rag-eval">RAG Evaluation</a></li>
+    <li><a href="#agent-eval">Agent Evaluation</a></li>
+    <li><a href="#safety-eval">Safety Evaluation</a></li>
+    <li><a href="#human-eval">Human Evaluation</a></li>
+    <li><a href="#online-offline">Online vs Offline Evaluation</a></li>
+    <li><a href="#ci-gates">CI Gates and Regression Testing</a></li>
+    <li><a href="#ab-testing">A/B Testing in Production</a></li>
+    <li><a href="#harness-architecture">Harness Architecture</a></li>
+    <li><a href="#platform-tools">Platform Tools and Frameworks</a></li>
+    <li><a href="#eval-driven-dev">Eval-Driven Development</a></li>
+    <li><a href="#failure-modes">Failure Modes and Debugging</a></li>
+    <li><a href="#metric-selection">Metric Selection Guide</a></li>
+  </ol>
+</nav>
+
 <main class="article">
 
-  <section>
-    <h2>Why Eval Matters</h2>
-    <p>LLM outputs are high-dimensional and subjective. Without systematic evaluation, teams ship regressions discovered only by user complaints. Evaluation spans pre-deployment benchmarking, CI gates on prompt or model changes, and ongoing production monitoring tied to human feedback.</p>
-    <p>Good eval is task-specific. A model strong on MMLU may fail your invoice extraction JSON schema or your support tone guidelines.</p>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="why-evals">
+    <h2>1. Why Evaluation Matters</h2>
+    <p>Large language models produce <strong>high-dimensional, stochastic outputs</strong>. A single prompt can yield many acceptable answers, and many subtly wrong ones. Without systematic evaluation, teams ship regressions discovered only through user complaints, support tickets, or viral social posts.</p>
+    <p>Evaluation is the feedback loop that connects model capability to product value. It answers: <em>Is this model or system good enough for our users, on our tasks, under our constraints?</em></p>
+
+    <h3>What goes wrong without eval</h3>
+    <ul>
+      <li><strong>Silent regressions:</strong> A prompt tweak improves tone but breaks JSON schema compliance on 8% of invoices.</li>
+      <li><strong>Leaderboard theater:</strong> A model scores well on MMLU but fails your retrieval-grounded support workflow.</li>
+      <li><strong>Cost surprises:</strong> A "smarter" model doubles tokens per task without improving task success.</li>
+      <li><strong>Safety gaps:</strong> Jailbreak resistance drops after a fine-tune nobody regression-tested.</li>
+      <li><strong>Slice blindness:</strong> Average accuracy hides catastrophic failure on low-resource languages or edge-case document formats.</li>
+    </ul>
+
+    <h3>Evaluation spans the full stack</h3>
+    <table>
+      <thead><tr><th>Layer</th><th>What you measure</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td>Base model</td><td>Knowledge, reasoning, coding, multilingual ability</td><td>Model selection, pre-deployment</td></tr>
+        <tr><td>Prompt / system design</td><td>Instruction following, format compliance, tone</td><td>Every prompt change</td></tr>
+        <tr><td>RAG pipeline</td><td>Retrieval recall, faithfulness, citation accuracy</td><td>Index or chunking changes</td></tr>
+        <tr><td>Agent / tools</td><td>Task completion, tool selection, error recovery</td><td>Tool schema or planner changes</td></tr>
+        <tr><td>Production system</td><td>Latency, cost, thumbs-down rate, escalation rate</td><td>Continuous monitoring</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Think of eval like unit tests plus integration tests plus production monitoring for a traditional service. LLM eval adds judgment under ambiguity: the "correct" answer may be a set, not a string.
+    </div>
+
+    <h3>Core principles</h3>
+    <ol>
+      <li><strong>Task-specific signal beats generic benchmarks</strong> for product decisions.</li>
+      <li><strong>Measure what users experience</strong>, not only what is easy to automate.</li>
+      <li><strong>Version everything:</strong> model ID, prompt hash, retrieval index, tool definitions.</li>
+      <li><strong>Stratify results</strong> by category, locale, and user segment.</li>
+      <li><strong>Pair automatic metrics with periodic human review.</strong></li>
+    </ol>
+
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2306.05685" rel="noopener noreferrer">Holistic Evaluation of Language Models (HELM)</a> · <a href="https://arxiv.org/abs/2311.04348" rel="noopener noreferrer">AlpacaEval / length-controlled win rates</a></small></p>
   </section>
 
-  <section>
-    <h2>Benchmark Types</h2>
-    <h3>Public academic benchmarks</h3>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="intrinsic-extrinsic">
+    <h2>2. Intrinsic vs Extrinsic Evaluation</h2>
+    <p>Understanding this distinction prevents optimizing the wrong objective.</p>
+
+    <h3>Intrinsic evaluation</h3>
+    <p>Measures properties of the <strong>model in isolation</strong>, typically on standardized prompts with reference answers or scoring rubrics. Examples:</p>
     <ul>
-      <li><strong>MMLU / GPQA</strong> - broad knowledge and reasoning</li>
-      <li><strong>HumanEval / MBPP</strong> - code generation</li>
-      <li><strong>GSM8K / MATH</strong> - math word problems</li>
-      <li><strong>MT-Bench / Arena-style</strong> - multi-turn chat quality</li>
+      <li>Perplexity on a held-out text corpus</li>
+      <li>Accuracy on MMLU, GSM8K, HumanEval</li>
+      <li>Win rate on MT-Bench or Arena-style comparisons</li>
+      <li>Refusal rate on a red-team prompt set</li>
     </ul>
-    <p>Useful for coarse model selection, but vulnerable to contamination if training data overlapped benchmark questions.</p>
-    <h3>Custom eval sets</h3>
-    <p>Curate prompts from real logs (redacted), label expected behaviors, and score automatically or with human raters. This is the highest-signal eval for product teams.</p>
+    <p>Intrinsic eval is fast, reproducible, and comparable across models. It is essential for model selection and research, but it only approximates real product performance.</p>
+
+    <h3>Extrinsic evaluation</h3>
+    <p>Measures performance on the <strong>actual downstream task or product</strong> the model powers:</p>
+    <ul>
+      <li>Does the support bot resolve tickets without human escalation?</li>
+      <li>Does the coding assistant produce mergeable PRs?</li>
+      <li>Does the legal summarizer preserve obligation clauses correctly?</li>
+      <li>Does the sales email drafter match brand voice and factual constraints?</li>
+    </ul>
+    <p>Extrinsic eval is slower, noisier, and often requires proprietary data. It is the metric that ultimately matters for business outcomes.</p>
+
+    <table>
+      <thead><tr><th>Dimension</th><th>Intrinsic</th><th>Extrinsic</th></tr></thead>
+      <tbody>
+        <tr><td>Data</td><td>Public or synthetic benchmarks</td><td>Real user queries, logs (redacted), task outcomes</td></tr>
+        <tr><td>Cost</td><td>Low to moderate (API spend)</td><td>High (labeling, integrations, wait for outcomes)</td></tr>
+        <tr><td>Generalizability</td><td>Cross-model comparison</td><td>Specific to your product</td></tr>
+        <tr><td>Leakage risk</td><td>High (benchmark contamination)</td><td>Lower if you own the eval set</td></tr>
+        <tr><td>Actionability</td><td>Coarse go/no-go on capability</td><td>Direct ship/rollback decisions</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Intrinsic eval is like SAT scores. Extrinsic eval is like job performance after hire. You need both: SAT filters candidates; job performance tells you if you hired the right person for <em>your</em> role.
+    </div>
+
+    <h3>Bridging the gap</h3>
+    <p>Build a <strong>custom golden set</strong> derived from production tasks. It acts as a proxy extrinsic eval that you can run cheaply in CI. Calibrate it quarterly against true extrinsic outcomes (ticket resolution, revenue, human ratings) to ensure the proxy still correlates.</p>
   </section>
 
-  <section>
-    <h2>Metrics</h2>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="lifecycle">
+    <h2>3. Evaluation Lifecycle</h2>
+    <p>Evaluation is not a one-time gate before launch. It is a continuous lifecycle tied to every change in the ML and product stack.</p>
+
+    <h3>Phase 1: Define success criteria</h3>
     <ul>
-      <li><strong>Exact match / F1</strong> - QA with short answers</li>
-      <li><strong>BLEU / ROUGE</strong> - n-gram overlap for summarization (limited semantic capture)</li>
-      <li><strong>Pass@k</strong> - code tasks with multiple samples</li>
-      <li><strong>Faithfulness / groundedness</strong> - answer supported by retrieved context in RAG</li>
-      <li><strong>Latency and cost</strong> - tokens per task, p95 response time</li>
-      <li><strong>Safety rates</strong> - refusal appropriateness, jailbreak success</li>
+      <li>What does "good" mean for users? (correctness, helpfulness, safety, speed, cost)</li>
+      <li>What are hard constraints? (JSON schema, regulatory language, PII handling)</li>
+      <li>What slices matter disproportionately? (enterprise tier, medical queries, non-English)</li>
     </ul>
-    <div class="callout">
-      <strong>LLM-as-judge:</strong> Using a strong model to score outputs scales eval but introduces judge bias (verbosity preference, self-model favoritism). Calibrate against human labels regularly.
+
+    <h3>Phase 2: Build eval assets</h3>
+    <ul>
+      <li>Curate golden prompts from logs (anonymized, consented)</li>
+      <li>Label expected behaviors or reference answers</li>
+      <li>Define automatic scorers and human rubrics</li>
+      <li>Establish baselines on current production config</li>
+    </ul>
+
+    <h3>Phase 3: Pre-deployment validation</h3>
+    <ul>
+      <li>Run full eval suite on candidate model, prompt, or pipeline</li>
+      <li>Compare against baseline with statistical tests where sample size allows</li>
+      <li>Review failure cases manually before launch</li>
+    </ul>
+
+    <h3>Phase 4: Controlled rollout</h3>
+    <ul>
+      <li>Canary or A/B test with online metrics</li>
+      <li>Monitor safety, latency, cost, and user feedback in real time</li>
+      <li>Automatic rollback on threshold breach</li>
+    </ul>
+
+    <h3>Phase 5: Continuous improvement</h3>
+    <ul>
+      <li>Feed production failures into eval set (failure-driven dataset growth)</li>
+      <li>Deprecate stale prompts that no longer reflect the product</li>
+      <li>Re-baseline after major feature changes</li>
+    </ul>
+
+    <pre><code># Eval lifecycle as versioned artifacts
+eval_suite/
+  golden_v3.2.jsonl      # prompts + labels + metadata
+  rubrics/
+    support_helpfulness.yaml
+    json_schema_invoice.yaml
+  baselines/
+    2025-06-01_gpt-4o-mini_prompt-f4e8.json
+  results/
+    2025-07-10_candidate-lora_run-0042.json</code></pre>
+
+    <div class="callout callout-derivation">
+      <strong>Ownership model:</strong> Assign an eval owner (often a tech lead or ML engineer). They approve golden set changes, define CI thresholds, and publish weekly scorecards. Without ownership, eval sets rot and CI gates get disabled.
     </div>
   </section>
 
-  <section>
-    <h2>RAG-Specific Evaluation</h2>
-    <p>Split retrieval and generation eval:</p>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="benchmark-catalog">
+    <h2>4. Benchmark Catalog</h2>
+    <p>Public benchmarks provide coarse capability maps. Use them for model shopping, not as sole ship criteria.</p>
+
+    <h3>Knowledge and reasoning</h3>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Measures</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>MMLU</td><td>57-subject multiple-choice knowledge</td><td>Industry standard; contamination concerns</td></tr>
+        <tr><td>MMLU-Pro</td><td>Harder multi-step MCQ</td><td>Reduces guessing; fewer items</td></tr>
+        <tr><td>GPQA</td><td>Graduate-level science QA</td><td>Very hard; small set</td></tr>
+        <tr><td>BBH</td><td>23 challenging reasoning tasks</td><td>Chain-of-thought sensitive</td></tr>
+        <tr><td>ARC-Challenge</td><td>Science exam questions</td><td>Classic; largely saturated by top models</td></tr>
+        <tr><td>HellaSwag</td><td>Commonsense continuation</td><td>Mostly saturated</td></tr>
+        <tr><td>TruthfulQA</td><td>Resistance to popular misconceptions</td><td>Measures factuality under traps</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Mathematics</h3>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Measures</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>GSM8K</td><td>Grade-school word problems</td><td>Verifiable answers; good for reasoning eval</td></tr>
+        <tr><td>MATH</td><td>Competition mathematics</td><td>Hard; needs step-by-step grading</td></tr>
+        <tr><td>MathVista / MMMU</td><td>Multimodal math</td><td>Requires vision capability</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Code</h3>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Measures</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>HumanEval</td><td>Python function synthesis</td><td>pass@k with unit tests</td></tr>
+        <tr><td>MBPP</td><td>Basic Python programming</td><td>Broader than HumanEval</td></tr>
+        <tr><td>SWE-bench</td><td>Real GitHub issue resolution</td><td>Agentic; expensive to run</td></tr>
+        <tr><td>LiveCodeBench</td><td>Fresh competitive programming</td><td>Reduces training leakage via recency</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Instruction following and chat</h3>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Measures</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>MT-Bench</td><td>Multi-turn chat quality</td><td>LLM-as-judge; GPT-4 judge common</td></tr>
+        <tr><td>AlpacaEval 2</td><td>Win rate vs reference</td><td>Length-controlled variants reduce verbosity bias</td></tr>
+        <tr><td>IFEval</td><td>Verifiable instruction constraints</td><td>Count words, JSON format, etc.</td></tr>
+        <tr><td>Arena-Hard</td><td>Hard user-style prompts</td><td>Closer to real chat distribution</td></tr>
+      </tbody>
+    </table>
+
+    <h3>RAG and long-context</h3>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Measures</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>RAGAS (framework)</td><td>Faithfulness, relevancy, recall</td><td>Run on your corpus, not a single leaderboard</td></tr>
+        <tr><td>HotpotQA</td><td>Multi-hop QA</td><td>Retrieval + reasoning</td></tr>
+        <tr><td>Needle-in-a-haystack</td><td>Long-context recall</td><td>Synthetic; tests context window use</td></tr>
+        <tr><td>LongBench</td><td>Long document tasks</td><td>Summarization, QA, few-shot</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Safety and robustness</h3>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Measures</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>ToxiGen</td><td>Toxic generation</td><td>Demographic sensitivity</td></tr>
+        <tr><td>HarmBench</td><td>Red-team refusal</td><td>Standardized attack prompts</td></tr>
+        <tr><td>AdvBench</td><td>Jailbreak success rate</td><td>Adversarial suffix attacks</td></tr>
+        <tr><td>WinoBias / BBQ</td><td>Social bias in completions</td><td>Slice by demographic axis</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-intuition">
+      <strong>How to use this catalog:</strong> Pick 2-3 benchmarks aligned with your product (e.g., IFEval + custom JSON schema + RAG faithfulness). Report them alongside your golden set. Never ship based on MMLU alone.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="golden-sets">
+    <h2>5. Golden Sets and Custom Eval Data</h2>
+    <p>A <strong>golden set</strong> (eval set, regression suite) is your highest-signal asset: real or realistic prompts with labeled expectations, curated to represent production traffic.</p>
+
+    <h3>Sourcing strategies</h3>
     <ul>
-      <li>Retrieval: recall@k, MRR, nDCG on query-chunk relevance labels</li>
-      <li>Generation: citation correctness, answer faithfulness, hallucination rate when context is empty</li>
+      <li><strong>Production logs:</strong> Sample queries (PII-redacted, consent-checked). Highest fidelity.</li>
+      <li><strong>Support tickets:</strong> Escalated cases become permanent regression items.</li>
+      <li><strong>Synthetic augmentation:</strong> Paraphrase and perturb real prompts to increase coverage.</li>
+      <li><strong>Expert-authored:</strong> Domain specialists write edge cases engineers miss.</li>
+      <li><strong>Adversarial mining:</strong> Red-team failures, jailbreaks, and user-reported bugs.</li>
     </ul>
-    <p>Synthetic QA generation from documents can bootstrap labels, but human spot-checks remain necessary to catch bad synthetic questions.</p>
-    <pre><code>from ragas import evaluate
-from ragas.metrics import faithfulness, answer_relevancy, context_recall
 
-result = evaluate(
-    dataset=eval_dataset,  # question, answer, contexts, ground_truth
-    metrics=[faithfulness, answer_relevancy, context_recall],
+    <h3>Golden set schema</h3>
+    <pre><code>{
+  "id": "support-0042",
+  "prompt": "My order #8821 shows delivered but I never received it.",
+  "context": ["chunk-991", "chunk-442"],  // optional RAG refs
+  "expected": {
+    "must_mention": ["refund", "investigation"],
+    "must_not_mention": ["guaranteed refund without verification"],
+    "json_schema": null,
+    "reference_answer": "..."  // optional
+  },
+  "metadata": {
+    "category": "shipping",
+    "locale": "en-US",
+    "difficulty": "medium",
+    "source": "prod_log_2025-06",
+    "human_labeler": "alice@corp.com"
+  },
+  "grading": {
+    "type": "llm_judge",
+    "rubric_id": "support_helpfulness_v2"
+  }
+}</code></pre>
+
+    <h3>Size and composition guidelines</h3>
+    <table>
+      <thead><tr><th>Suite type</th><th>Typical size</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Smoke</td><td>20-50 items</td><td>Fast PR gate (&lt;5 min)</td></tr>
+        <tr><td>Core regression</td><td>200-1,000 items</td><td>Nightly or pre-release</td></tr>
+        <tr><td>Full golden</td><td>1,000-10,000+ items</td><td>Major model migrations</td></tr>
+        <tr><td>Slice-critical</td><td>50-200 per slice</td><td>Legal, medical, non-English</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Quality practices</h3>
+    <ol>
+      <li><strong>Balance categories</strong> to match production mix (or overweight high-risk slices).</li>
+      <li><strong>Version and changelog</strong> every addition or label edit.</li>
+      <li><strong>Hold out a secret set</strong> that engineers cannot overfit prompts against.</li>
+      <li><strong>Review disagreements</strong> between raters; fix ambiguous rubrics.</li>
+      <li><strong>Expire stale items</strong> when product behavior intentionally changes.</li>
+    </ol>
+
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> Your golden set is the unit test suite for AI behavior. Treat it like production code: code review, CI, ownership, and deprecation policy.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="contamination">
+    <h2>6. Contamination and Data Leakage</h2>
+    <p><strong>Contamination</strong> occurs when benchmark test data (or close paraphrases) appears in pretraining, fine-tuning, or eval-set construction, inflating scores without improving real capability.</p>
+
+    <h3>Types of leakage</h3>
+    <ul>
+      <li><strong>Pretraining leakage:</strong> Benchmark Q&amp;A memorized from the web crawl.</li>
+      <li><strong>Fine-tuning leakage:</strong> Eval prompts accidentally included in SFT or DPO data.</li>
+      <li><strong>Prompt leakage:</strong> Engineers iterate prompts against the test set (implicit overfitting).</li>
+      <li><strong>Judge leakage:</strong> The judge model saw benchmark solutions during training.</li>
+      <li><strong>Pipeline leakage:</strong> Retrieval index built from documents that contain benchmark answers.</li>
+    </ul>
+
+    <h3>Detection methods</h3>
+    <table>
+      <thead><tr><th>Method</th><th>How it works</th></tr></thead>
+      <tbody>
+        <tr><td>N-gram overlap</td><td>Compare benchmark text to training corpus shards</td></tr>
+        <tr><td>Min-hash / dedup</td><td>Near-duplicate detection at scale</td></tr>
+        <tr><td>Canary strings</td><td>Insert unique tokens; check if model reproduces them</td></tr>
+        <tr><td>Held-out fresh benchmarks</td><td>LiveCodeBench, private unreleased sets</td></tr>
+        <tr><td>Perturbation tests</td><td>Rephrase questions; large score drops suggest memorization</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Mitigation playbook</h3>
+    <ol>
+      <li>Filter training data with decontamination pipelines (e.g., n-gram blocklists from test sets).</li>
+      <li>Keep a <strong>private holdout</strong> never shown to anyone tuning prompts.</li>
+      <li>Separate <strong>dev</strong> (for iteration) and <strong>test</strong> (for reporting) splits.</li>
+      <li>Prefer <strong>dynamic benchmarks</strong> that rotate or use fresh content.</li>
+      <li>Report contamination audits alongside leaderboard numbers.</li>
+    </ol>
+
+    <div class="callout callout-derivation">
+      <strong>Why it matters commercially:</strong> A model that scores 90% on GSM8K due to memorization may still fail your billing reconciliation agent. Contamination turns benchmarks from measurement into marketing.
+    </div>
+
+    <pre><code># Simple n-gram overlap check (illustrative)
+from collections import Counter
+
+def ngrams(text, n=13):
+    tokens = text.lower().split()
+    return set(tuple(tokens[i:i+n]) for i in range(len(tokens) - n + 1))
+
+bench_ng = ngrams(benchmark_question)
+train_ng = ngrams(training_shard)
+overlap = len(bench_ng &amp; train_ng) / max(len(bench_ng), 1)
+# High overlap -&gt; investigate for contamination</code></pre>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="automated-metrics">
+    <h2>7. Automated Metrics</h2>
+    <p>Automatic metrics scale evaluation beyond what human labelers can afford. Each metric captures a narrow facet of quality; combine several rather than relying on one number.</p>
+
+    <h3>Classification-style metrics</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Best for</th><th>Limitation</th></tr></thead>
+      <tbody>
+        <tr><td>Exact match (EM)</td><td>Short-form QA, IDs, dates</td><td>Ignores paraphrases</td></tr>
+        <tr><td>F1 token overlap</td><td>Extractive QA</td><td>Penalizes valid rephrasing</td></tr>
+        <tr><td>Accuracy</td><td>Multiple choice, classification</td><td>Hides per-class failure</td></tr>
+        <tr><td>pass@k</td><td>Code generation</td><td>Needs executable tests</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Text overlap metrics</h3>
+    <p><strong>BLEU</strong> and <strong>ROUGE</strong> measure n-gram overlap against reference summaries. They are cheap and interpretable but correlate weakly with human judgment on open-ended generation. Use them as sanity checks, not primary quality signals.</p>
+    $$ \text{BLEU} = \text{BP} \cdot \exp\left(\sum_{n=1}^{N} w_n \log p_n\right) $$
+    <p>ROUGE-L measures longest common subsequence overlap. ROUGE-1/2 use unigram/bigram recall.</p>
+
+    <h3>Semantic similarity metrics</h3>
+    <ul>
+      <li><strong>Embedding cosine similarity</strong> between output and reference.</li>
+      <li><strong>BERTScore:</strong> Token-level contextual similarity.</li>
+      <li><strong>BLEURT:</strong> Learned metric trained on human ratings.</li>
+    </ul>
+    <p>These capture paraphrase better than n-gram metrics but can reward vague, generic answers that embed similarly to references.</p>
+
+    <h3>Structured output metrics</h3>
+    <ul>
+      <li><strong>JSON schema validity rate</strong></li>
+      <li><strong>Field-level accuracy</strong> (per-key exact match)</li>
+      <li><strong>SQL execution accuracy</strong> (run generated SQL, compare result sets)</li>
+      <li><strong>API call validity</strong> (correct tool name and argument types)</li>
+    </ul>
+
+    <h3>RAG-specific automatic metrics</h3>
+    <ul>
+      <li><strong>Context precision / recall</strong> (are retrieved chunks relevant?)</li>
+      <li><strong>Faithfulness / groundedness</strong> (is the answer supported by context?)</li>
+      <li><strong>Answer relevancy</strong> (does the answer address the query?)</li>
+      <li><strong>Citation accuracy</strong> (do cited spans support claims?)</li>
+    </ul>
+
+    <h3>Operational metrics (always report alongside quality)</h3>
+    <ul>
+      <li>Latency p50 / p95 / p99 per stage</li>
+      <li>Tokens in / out per task</li>
+      <li>Cost per successful task</li>
+      <li>Error rate (timeouts, 5xx, parse failures)</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>Rule of thumb:</strong> If you can verify the answer programmatically (unit test, SQL result, regex, schema), do that first. Semantic metrics and LLM judges are for the remainder.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="llm-as-judge">
+    <h2>8. LLM-as-Judge</h2>
+    <p><strong>LLM-as-judge</strong> uses a strong model to score, rank, or critique outputs against a rubric. It scales subjective evaluation when human labeling is too slow or expensive.</p>
+
+    <h3>Common judge patterns</h3>
+    <table>
+      <thead><tr><th>Pattern</th><th>Description</th><th>Use case</th></tr></thead>
+      <tbody>
+        <tr><td>Pointwise scoring</td><td>Rate one output 1-10 on criteria</td><td>Regression tracking</td></tr>
+        <tr><td>Pairwise preference</td><td>Pick A or B (or tie)</td><td>Model comparison, RLHF data</td></tr>
+        <tr><td>Binary checklist</td><td>Pass/fail per rubric item</td><td>CI gates</td></tr>
+        <tr><td>Chain-of-thought judge</td><td>Reason then score</td><td>Complex reasoning tasks</td></tr>
+        <tr><td>Reference-guided</td><td>Compare to gold answer</td><td>QA with references</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Known biases and mitigations</h3>
+    <table>
+      <thead><tr><th>Bias</th><th>Symptom</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Position bias</td><td>Favors first option in pairwise</td><td>Swap order, aggregate both</td></tr>
+        <tr><td>Verbosity bias</td><td>Rewards longer answers</td><td>Length-controlled prompts, AlpacaEval LC</td></tr>
+        <tr><td>Self-preference</td><td>Judge favors own style/model family</td><td>Use different judge model family</td></tr>
+        <tr><td>Anchoring</td><td>Overweights reference answer quirks</td><td>Blind references, multiple refs</td></tr>
+        <tr><td>Sycophancy</td><td>Agrees with flawed reasoning</td><td>Require evidence citations from context</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code>import json
+from openai import OpenAI
+
+client = OpenAI()
+
+JUDGE_PROMPT = """You are an expert evaluator.
+Score the assistant response on correctness (0-5) and helpfulness (0-5).
+Return JSON only: {"correctness": int, "helpfulness": int, "rationale": str}
+
+User query: {query}
+Assistant response: {response}
+Reference (optional): {reference}
+"""
+
+def judge(query, response, reference=""):
+    msg = JUDGE_PROMPT.format(query=query, response=response, reference=reference)
+    out = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": msg}],
+        temperature=0,
+        response_format={"type": "json_object"},
+    )
+    return json.loads(out.choices[0].message.content)
+
+# Calibrate monthly against human labels
+# target: Pearson r &gt; 0.7 on core rubric dimensions</code></pre>
+
+    <h3>Calibration protocol</h3>
+    <ol>
+      <li>Sample 200+ items with dual human ratings.</li>
+      <li>Run judge on same items; compute correlation and confusion matrix.</li>
+      <li>Adjust rubric wording where judge disagrees systematically.</li>
+      <li>Track judge-model version; re-calibrate when judge upgrades.</li>
+    </ol>
+
+    <div class="callout callout-derivation">
+      <strong>Cost tip:</strong> Use a strong judge offline (nightly suites) and a cheaper judge for PR smoke tests. Never let the smoke judge differ in rubric semantics from the canonical judge.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="rag-eval">
+    <h2>9. RAG Evaluation</h2>
+    <p>Retrieval-augmented generation fails in two independent places: <strong>retrieval</strong> (wrong context) and <strong>generation</strong> (misuse of context). Evaluate both, plus end-to-end answer quality.</p>
+
+    <h3>Retrieval metrics</h3>
+    <table>
+      <thead><tr><th>Metric</th><th>Formula / definition</th><th>Requires</th></tr></thead>
+      <tbody>
+        <tr><td>Recall@k</td><td>Fraction of queries where a relevant doc is in top-k</td><td>Relevance labels</td></tr>
+        <tr><td>Precision@k</td><td>Fraction of top-k docs that are relevant</td><td>Relevance labels</td></tr>
+        <tr><td>MRR</td><td>Mean reciprocal rank of first relevant doc</td><td>Relevance labels</td></tr>
+        <tr><td>nDCG@k</td><td>Discounted cumulative gain with position penalty</td><td>Graded relevance</td></tr>
+        <tr><td>Hit rate</td><td>Any relevant doc retrieved (binary)</td><td>Relevance labels</td></tr>
+      </tbody>
+    </table>
+    $$ \text{MRR} = \frac{1}{|Q|} \sum_{q \in Q} \frac{1}{\text{rank}_q} $$
+    <p>where $\text{rank}_q$ is the position of the first relevant document for query $q$, or 0 if none found.</p>
+
+    <h3>Generation metrics</h3>
+    <ul>
+      <li><strong>Faithfulness:</strong> Every claim in the answer is entailed by retrieved context.</li>
+      <li><strong>Answer relevancy:</strong> The answer addresses the user question.</li>
+      <li><strong>Hallucination under empty context:</strong> Does the model abstain or invent when retrieval returns nothing?</li>
+      <li><strong>Citation precision:</strong> Linked spans actually support the claim.</li>
+    </ul>
+
+    <h3>End-to-end RAG eval with RAGAS</h3>
+    <pre><code>from datasets import Dataset
+from ragas import evaluate
+from ragas.metrics import (
+    faithfulness,
+    answer_relevancy,
+    context_precision,
+    context_recall,
 )
-print(result.to_pandas())</code></pre>
+
+# Each row: question, answer, contexts (list[str]), ground_truth (optional)
+eval_data = {
+    "question": [
+        "What is the refund window for enterprise plans?",
+        "Who approves SOC2 exceptions?",
+    ],
+    "answer": [
+        "Enterprise refunds are available within 60 days of purchase.",
+        "The security team lead approves SOC2 exceptions.",
+    ],
+    "contexts": [
+        ["Enterprise plans include a 60-day refund policy..."],
+        ["SOC2 exception requests route to the security team lead..."],
+    ],
+    "ground_truth": [
+        "60-day refund window for enterprise.",
+        "Security team lead approves SOC2 exceptions.",
+    ],
+}
+
+dataset = Dataset.from_dict(eval_data)
+result = evaluate(
+    dataset=dataset,
+    metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
+)
+
+print(result.to_pandas())
+# Investigate rows where faithfulness &lt; 0.8 manually</code></pre>
+
+    <h3>Custom faithfulness checker (LLM-free heuristic + judge)</h3>
+    <pre><code>import re
+
+def extract_claims(answer: str) -&gt; list[str]:
+    # Split into sentences as crude claims
+    return [s.strip() for s in re.split(r'[.!?]+', answer) if s.strip()]
+
+def claim_supported(claim: str, contexts: list[str]) -&gt; bool:
+    # Production: use NLI model or LLM judge with context-only prompt
+    ctx = "\n".join(contexts).lower()
+    # Heuristic demo: keyword overlap (replace in prod)
+    tokens = set(claim.lower().split())
+    return len(tokens &amp; set(ctx.split())) &gt;= max(2, len(tokens) // 3)
+
+def faithfulness_score(answer: str, contexts: list[str]) -&gt; float:
+    claims = extract_claims(answer)
+    if not claims:
+        return 1.0
+    supported = sum(claim_supported(c, contexts) for c in claims)
+    return supported / len(claims)</code></pre>
+
+    <h3>RAG eval workflow</h3>
+    <ol>
+      <li>Build labeled (query, relevant_chunk_ids) set from click logs or human annotators.</li>
+      <li>Run retrieval-only eval when changing embeddings, chunk size, or hybrid weights.</li>
+      <li>Run generation eval when changing model, prompt, or reranker.</li>
+      <li>Run full pipeline eval before release; stratify by document type and query length.</li>
+    </ol>
+
+    <div class="callout callout-intuition">
+      <strong>Debugging order:</strong> If answers are wrong, check retrieval first. ~40% of RAG failures are retrieval misses, not generation errors. Fixing generation prompt before retrieval is wasted effort.
+    </div>
   </section>
 
-  <section>
-    <h2>Eval Harness Design</h2>
-    <p>A reproducible harness fixes model version, temperature, prompt template, and tool configuration. Store results per git commit or config hash. Run nightly or on PR for critical suites. Include pairwise comparison against a baseline checkpoint, not only absolute scores.</p>
-    <p>Stratify reports by task category, language, and user segment. Aggregate averages hide failures on minority slices that matter legally or commercially.</p>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="agent-eval">
+    <h2>10. Agent Evaluation</h2>
+    <p>Agents loop: plan, call tools, observe results, repeat. Evaluation must cover <strong>trajectory quality</strong>, not only final text.</p>
+
+    <h3>What to measure</h3>
+    <table>
+      <thead><tr><th>Dimension</th><th>Metric examples</th></tr></thead>
+      <tbody>
+        <tr><td>Task success</td><td>Goal achieved (binary), partial credit rubric</td></tr>
+        <tr><td>Tool selection</td><td>Correct tool rate, unnecessary tool calls</td></tr>
+        <tr><td>Argument correctness</td><td>Valid JSON args, schema compliance</td></tr>
+        <tr><td>Step efficiency</td><td>Steps to success, token cost per success</td></tr>
+        <tr><td>Recovery</td><td>Recovers from API error within N steps</td></tr>
+        <tr><td>Safety</td><td>No destructive actions without confirmation</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Eval environments</h3>
+    <ul>
+      <li><strong>Sandbox APIs:</strong> Mock Stripe, GitHub, CRM with recorded responses.</li>
+      <li><strong>Replay buffers:</strong> Deterministic tool outputs for regression tests.</li>
+      <li><strong>Simulated users:</strong> LLM user simulator sends follow-up messages.</li>
+      <li><strong>Real staging:</strong> Highest fidelity; expensive and flaky.</li>
+    </ul>
+
+    <pre><code>from dataclasses import dataclass, field
+
+@dataclass
+class AgentTrace:
+    task_id: str
+    steps: list[dict] = field(default_factory=list)
+    final_answer: str = ""
+    success: bool = False
+
+def score_trace(trace: AgentTrace, gold) -&gt; dict:
+    tool_names = [s["tool"] for s in trace.steps]
+    expected_tools = set(gold.get("required_tools", []))
+    forbidden = set(gold.get("forbidden_tools", []))
+
+    return {
+        "task_success": trace.success,
+        "tool_recall": len(expected_tools &amp; set(tool_names)) / max(len(expected_tools), 1),
+        "forbidden_tool_violation": bool(forbidden &amp; set(tool_names)),
+        "step_count": len(trace.steps),
+        "within_step_budget": len(trace.steps) &lt;= gold.get("max_steps", 10),
+    }
+
+# SWE-bench style: apply patch, run tests, measure resolve rate
+# WebArena / OSWorld: UI automation success in simulated environments</code></pre>
+
+    <h3>Agent benchmark landscape</h3>
+    <table>
+      <thead><tr><th>Benchmark</th><th>Domain</th><th>Success criterion</th></tr></thead>
+      <tbody>
+        <tr><td>SWE-bench</td><td>Software engineering</td><td>Unit tests pass after patch</td></tr>
+        <tr><td>WebArena</td><td>Web navigation</td><td>Goal state in simulated sites</td></tr>
+        <tr><td>GAIA</td><td>General assistant tasks</td><td>Exact answer match</td></tr>
+        <tr><td>τ-bench</td><td>Tool-use with user sim</td><td>Multi-turn task completion</td></tr>
+        <tr><td>AgentBench</td><td>Multi-environment</td><td>Environment-specific success</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-intuition">
+      <strong>Trajectory logging is mandatory:</strong> Store every tool call, observation, and planner decision. You cannot debug "the agent failed" without the trace. Final answer-only eval hides compounding errors.
+    </div>
   </section>
 
-  <section>
-    <h2>Human Evaluation</h2>
-    <p>Humans rate helpfulness, correctness, and safety on side-by-side outputs. Use clear rubrics, multiple raters per item, and inter-rater agreement tracking. Human eval is expensive but essential before major launches and for disputes when automatic metrics disagree with user sentiment.</p>
-    <p>Close the loop: production thumbs-down flows into labeling queues; labeled data feeds fine-tuning and preference optimization.</p>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="safety-eval">
+    <h2>11. Safety Evaluation</h2>
+    <p>Safety eval measures whether the system refuses harmful requests, avoids toxic outputs, resists jailbreaks, and behaves fairly across demographic slices. It is a release blocker for consumer and enterprise products.</p>
+
+    <h3>Safety dimensions</h3>
+    <table>
+      <thead><tr><th>Dimension</th><th>Examples</th><th>Measurement</th></tr></thead>
+      <tbody>
+        <tr><td>Harmful content generation</td><td>Violence, self-harm instructions</td><td>Refusal rate on red-team set</td></tr>
+        <tr><td>Jailbreak resistance</td><td>Roleplay bypass, base64 attacks</td><td>Attack success rate (ASR)</td></tr>
+        <tr><td>PII leakage</td><td>Training data extraction</td><td>Canary extraction tests</td></tr>
+        <tr><td>Bias / fairness</td><td>Stereotyping by demographic</td><td>Slice disparity metrics</td></tr>
+        <tr><td>Over-refusal</td><td>Refusing benign medical/legal info</td><td>False refusal rate on benign set</td></tr>
+        <tr><td>Prompt injection</td><td>Hidden instructions in RAG docs</td><td>Instruction override success rate</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Red-team prompt categories</h3>
+    <ul>
+      <li>Direct harmful requests (weapons, malware, harassment)</li>
+      <li>Indirect elicitation (hypothetical framing, fictional context)</li>
+      <li>Multi-turn escalation (benign start, harmful pivot)</li>
+      <li>Tool abuse (SQL injection via agent, unauthorized API calls)</li>
+      <li>Multilingual and encoded attacks (ROT13, leetspeak, mixed scripts)</li>
+    </ul>
+
+    <pre><code># Safety eval result schema
+{
+  "prompt_id": "jailbreak-017",
+  "category": "indirect_harm",
+  "model_response": "I can't help with that...",
+  "verdict": "pass",  // pass = safe refusal or safe answer
+  "judge": "gpt-4o-safety-rubric-v3",
+  "severity": "high"
+}
+
+# Report: ASR = attacks_that_succeeded / total_attacks
+# Also report over-refusal rate on benign_control_set</code></pre>
+
+    <h3>Guardrails in the eval loop</h3>
+    <p>Evaluate the <strong>full stack</strong>, not only the base model:</p>
+    <ol>
+      <li>Input classifier (block or route before LLM)</li>
+      <li>System prompt and policy layer</li>
+      <li>Output filter (regex, moderation model)</li>
+      <li>Human review queue for borderline cases</li>
+    </ol>
+
+    <div class="callout callout-intuition">
+      <strong>Balance:</strong> Optimize for low attack success rate AND low false refusal rate. A model that refuses everything scores well on harm but fails the product. Report both metrics on every release.
+    </div>
+
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2402.04249" rel="noopener noreferrer">HarmBench</a> · <a href="../Safety-and-System-Design/ai-engineering-safety.html">Safety learning notes</a></small></p>
   </section>
 
-  <section>
-    <h2>Continuous Improvement</h2>
-    <p>Evaluation is never finished. New failure modes emerge with features (tools, longer context, multimodal inputs). Treat eval sets as living assets with owners, versioning, and deprecation of stale prompts that no longer reflect the product.</p>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="human-eval">
+    <h2>12. Human Evaluation</h2>
+    <p>Humans remain the gold standard for subjective quality, nuanced correctness, and safety edge cases. Automatic metrics should be calibrated against human judgment, not replace it for high-stakes decisions.</p>
+
+    <h3>When human eval is required</h3>
+    <ul>
+      <li>Major model or prompt launches</li>
+      <li>Disputes when automatic metrics and user sentiment diverge</li>
+      <li>Rubric design and judge calibration</li>
+      <li>Low-incidence, high-severity slices (legal, medical)</li>
+      <li>Creative or brand-sensitive outputs</li>
+    </ul>
+
+    <h3>Rating designs</h3>
+    <table>
+      <thead><tr><th>Design</th><th>Description</th><th>Pros / cons</th></tr></thead>
+      <tbody>
+        <tr><td>Likert scale</td><td>1-5 on helpfulness, clarity, tone</td><td>Simple; rater scale drift</td></tr>
+        <tr><td>Side-by-side (SBS)</td><td>Pick A, B, or tie</td><td>High signal for comparisons; needs both outputs</td></tr>
+        <tr><td>Binary rubric</td><td>Pass/fail per criterion</td><td>Good for CI calibration</td></tr>
+        <tr><td>Holistic ranking</td><td>Rank N outputs</td><td>Efficient per dollar; harder analysis</td></tr>
+        <tr><td>Edit distance</td><td>How much rater edits output</td><td>Implicit quality signal</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Inter-rater agreement</h3>
+    <p>Track agreement to ensure rubric clarity:</p>
+    <ul>
+      <li><strong>Cohen's kappa</strong> for two raters, categorical labels.</li>
+      <li><strong>Fleiss' kappa</strong> for multiple raters.</li>
+      <li><strong>Krippendorff's alpha</strong> for missing data and varied scales.</li>
+    </ul>
+    <p>Target $\kappa &gt; 0.6$ for core dimensions. Low agreement means fix the rubric, not blame raters.</p>
+
+    <h3>Operational best practices</h3>
+    <ol>
+      <li><strong>Write concrete rubrics</strong> with pass/fail examples (anchor items).</li>
+      <li><strong>Use 2+ raters per item</strong> for high-stakes labels.</li>
+      <li><strong>Blind model identity</strong> to prevent brand bias.</li>
+      <li><strong>Rotate raters</strong> to detect drift and fatigue.</li>
+      <li><strong>Close the loop:</strong> thumbs-down in prod feeds labeling queues.</li>
+      <li><strong>Pay fairly and train:</strong> qualification batches before production labeling.</li>
+    </ol>
+
+    <div class="callout callout-derivation">
+      <strong>Cost management:</strong> Human-eval the smallest stratified sample that achieves confidence bounds. Use automatic pre-filter to send only disagreements or low-confidence items to humans (active learning).
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="online-offline">
+    <h2>13. Online vs Offline Evaluation</h2>
+    <p><strong>Offline eval</strong> runs on fixed datasets in a controlled harness. <strong>Online eval</strong> measures real user interactions in production. Mature teams use both in complementary roles.</p>
+
+    <h3>Offline evaluation</h3>
+    <table>
+      <thead><tr><th>Strength</th><th>Weakness</th></tr></thead>
+      <tbody>
+        <tr><td>Reproducible, version-controlled</td><td>Dataset staleness</td></tr>
+        <tr><td>Fast iteration in CI</td><td>Distribution shift from live traffic</td></tr>
+        <tr><td>Cheap relative to live experiments</td><td>Cannot capture long-term user behavior</td></tr>
+        <tr><td>Safe for destructive agent tests</td><td>May overfit to golden set</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Online evaluation</h3>
+    <table>
+      <thead><tr><th>Signal</th><th>How to collect</th></tr></thead>
+      <tbody>
+        <tr><td>Explicit feedback</td><td>Thumbs up/down, star ratings, NPS</td></tr>
+        <tr><td>Implicit feedback</td><td>Copy, dwell time, regenerate, abandon</td></tr>
+        <tr><td>Task outcome</td><td>Ticket resolved, purchase completed, code merged</td></tr>
+        <tr><td>Human escalation</td><td>Handoff rate to support agent</td></tr>
+        <tr><td>Latency / cost</td><td>Real infrastructure measurements</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Bridging offline and online</h3>
+    <ol>
+      <li>Correlate offline golden scores with online thumbs-down rate weekly.</li>
+      <li>When correlation drops, refresh golden set from recent failures.</li>
+      <li>Use <strong>shadow mode</strong>: run candidate model on live inputs, show baseline to user, log both outputs for offline comparison.</li>
+      <li>Use <strong>interleaving</strong> in ranking contexts (less common for generative LLMs than for search).</li>
+    </ol>
+
+    <pre><code># Shadow evaluation (no user impact)
+async def handle_request(req):
+    baseline = await generate(req, model="prod-gpt-4o-mini")
+    shadow = await generate(req, model="candidate-lora")  # async, discard from UI
+    log_shadow_pair(req.id, baseline, shadow)
+    return baseline  # user always sees production</code></pre>
+
+    <div class="callout callout-intuition">
+      <strong>Offline catches regressions before users see them. Online catches what offline missed.</strong> Neither alone is sufficient for production LLM systems.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="ci-gates">
+    <h2>14. CI Gates and Regression Testing</h2>
+    <p>CI gates block merges or deployments when eval scores drop below thresholds. They turn evaluation from a report into an enforcement mechanism.</p>
+
+    <h3>Typical gate tiers</h3>
+    <table>
+      <thead><tr><th>Tier</th><th>Trigger</th><th>Suite</th><th>Latency budget</th></tr></thead>
+      <tbody>
+        <tr><td>PR smoke</td><td>Every pull request</td><td>20-50 golden items</td><td>3-8 minutes</td></tr>
+        <tr><td>Nightly</td><td>Cron schedule</td><td>500+ items, all slices</td><td>1-3 hours</td></tr>
+        <tr><td>Pre-release</td><td>Release branch</td><td>Full golden + safety red-team</td><td>4-12 hours</td></tr>
+        <tr><td>Post-deploy</td><td>Canary start</td><td>Online guardrail metrics</td><td>Real time</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Gate criteria examples</h3>
+    <ul>
+      <li>Overall task success $\geq$ baseline - 1% (absolute)</li>
+      <li>No slice drops more than 3% (legal, JSON schema, non-English)</li>
+      <li>Safety ASR $\leq$ baseline + 0.5%</li>
+      <li>p95 latency $\leq$ baseline + 10%</li>
+      <li>Cost per task $\leq$ baseline + 5%</li>
+    </ul>
+
+    <pre><code># GitHub Actions pseudo-workflow
+# eval-gate.yml
+on: [pull_request]
+jobs:
+  llm-eval-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -r eval/requirements.txt
+      - run: python -m eval.run --suite smoke --baseline main
+      - run: python -m eval.check_regression --max-drop 0.01</code></pre>
+
+    <h3>Flaky eval handling</h3>
+    <p>LLM outputs are stochastic. Reduce flake:</p>
+    <ul>
+      <li>Set <code>temperature=0</code> for regression suites (or fixed seed where supported).</li>
+      <li>Run $n=3$ samples for borderline items; majority vote.</li>
+      <li>Use <strong>confidence intervals</strong> on binary pass rates; gate on lower bound.</li>
+      <li>Cache model responses for pure prompt-diff PRs when model is unchanged.</li>
+    </ul>
+
+    <div class="callout callout-derivation">
+      <strong>Anti-pattern:</strong> Disabling CI gates after one false alarm. Fix flake with better statistics, smaller smoke sets, or cached inference. Teams that disable gates ship regressions within weeks.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="ab-testing">
+    <h2>15. A/B Testing in Production</h2>
+    <p>A/B tests compare variants (model, prompt, retrieval config) on live traffic with statistical rigor. They are the final extrinsic eval before full rollout.</p>
+
+    <h3>Experiment design</h3>
+    <ol>
+      <li><strong>Hypothesis:</strong> "Candidate reduces escalation rate without increasing cost."</li>
+      <li><strong>Primary metric:</strong> One pre-registered success metric (escalation rate).</li>
+      <li><strong>Guardrail metrics:</strong> Safety ASR, latency p95, cost, thumbs-down.</li>
+      <li><strong>Unit of randomization:</strong> User ID or session ID (consistent experience).</li>
+      <li><strong>Power analysis:</strong> Estimate sample size for detectable effect.</li>
+      <li><strong>Duration:</strong> Run through weekly seasonality if possible.</li>
+    </ol>
+
+    <h3>Variant attribution requirements</h3>
+    <p>Every request log must include:</p>
+    <pre><code>{
+  "experiment_id": "exp-2025-07-prompt-v7",
+  "variant": "B",
+  "model": "gpt-4o-mini",
+  "prompt_hash": "a3f91c",
+  "retrieval_index_version": "idx-2025-06-14",
+  "user_id_hash": "u-8e2f..."
+}</code></pre>
+
+    <h3>Statistical considerations</h3>
+    <table>
+      <thead><tr><th>Issue</th><th>Solution</th></tr></thead>
+      <tbody>
+        <tr><td>Peeking (early stop)</td><td>Fixed horizon or sequential testing (SPRT)</td></tr>
+        <tr><td>Multiple comparisons</td><td>Bonferroni or FDR correction on secondary metrics</td></tr>
+        <tr><td>Network effects</td><td>Cluster randomization by team/org</td></tr>
+        <tr><td>Non-stationary traffic</td><td>CUPED variance reduction, covariate adjustment</td></tr>
+        <tr><td>Small effect sizes</td><td>Longer run or proxy metrics with higher sensitivity</td></tr>
+      </tbody>
+    </table>
+
+    <h3>LLM-specific A/B pitfalls</h3>
+    <ul>
+      <li><strong>Length confound:</strong> Variant B is more verbose and looks "better" in ratings.</li>
+      <li><strong>Novelty effect:</strong> Short-term engagement bump after UI change.</li>
+      <li><strong>Heterogeneous treatment effect:</strong> Wins on simple queries, loses on complex ones.</li>
+      <li><strong>Cost masking:</strong> Quality improves 2% but cost rises 40%.</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>Ship criterion:</strong> Primary metric improves with $p &lt; 0.05$, all guardrails hold, and the win is large enough to justify operational complexity. A statistically significant 0.1% lift may not be worth a model swap.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="harness-architecture">
+    <h2>16. Harness Architecture</h2>
+    <p>An <strong>eval harness</strong> is reproducible infrastructure that runs prompts through your system, scores outputs, and stores results for comparison. Treat it as a first-class service, not a notebook script.</p>
+
+    <h3>Architecture components</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td>Dataset loader</td><td>Versioned golden sets, filters by slice/tag</td></tr>
+        <tr><td>Runner</td><td>Invokes model + RAG + tools with frozen config</td></tr>
+        <tr><td>Scorer registry</td><td>Pluggable metrics (exact match, judge, RAGAS)</td></tr>
+        <tr><td>Result store</td><td>JSON/Parquet per run with git SHA and config hash</td></tr>
+        <tr><td>Comparator</td><td>Diff vs baseline, highlight regressions</td></tr>
+        <tr><td>Reporter</td><td>Dashboards, PR comments, Slack alerts</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Reference Python harness</h3>
+    <pre><code>"""Minimal but production-shaped LLM eval harness."""
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+from dataclasses import dataclass, asdict
+from pathlib import Path
+from typing import Callable
+
+@dataclass
+class EvalConfig:
+    model: str
+    temperature: float
+    prompt_template: str
+    retrieval_index: str | None = None
+
+    def fingerprint(self) -&gt; str:
+        blob = json.dumps(asdict(self), sort_keys=True)
+        return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+@dataclass
+class EvalItem:
+    id: str
+    prompt: str
+    metadata: dict
+    expected: dict | None = None
+
+@dataclass
+class EvalResult:
+    item_id: str
+    output: str
+    scores: dict[str, float]
+    latency_ms: float
+    error: str | None = None
+
+class EvalHarness:
+    def __init__(
+        self,
+        config: EvalConfig,
+        generate_fn: Callable[[str], str],
+        scorers: dict[str, Callable[[EvalItem, str], float]],
+    ):
+        self.config = config
+        self.generate_fn = generate_fn
+        self.scorers = scorers
+
+    def run_item(self, item: EvalItem) -&gt; EvalResult:
+        t0 = time.perf_counter()
+        try:
+            output = self.generate_fn(item.prompt)
+            err = None
+        except Exception as e:
+            output = ""
+            err = str(e)
+        latency = (time.perf_counter() - t0) * 1000
+
+        scores = {}
+        if not err:
+            for name, fn in self.scorers.items():
+                scores[name] = fn(item, output)
+
+        return EvalResult(item.id, output, scores, latency, err)
+
+    def run_suite(self, items: list[EvalItem]) -&gt; list[EvalResult]:
+        return [self.run_item(it) for it in items]
+
+    def save_run(self, results: list[EvalResult], path: Path, git_sha: str):
+        payload = {
+            "git_sha": git_sha,
+            "config": asdict(self.config),
+            "fingerprint": self.config.fingerprint(),
+            "results": [asdict(r) for r in results],
+            "aggregate": self.aggregate(results),
+        }
+        path.write_text(json.dumps(payload, indent=2))
+
+    def aggregate(self, results: list[EvalResult]) -&gt; dict:
+        ok = [r for r in results if r.error is None]
+        if not ok:
+            return {"n": len(results), "errors": len(results)}
+        keys = ok[0].scores.keys()
+        return {
+            "n": len(results),
+            "errors": len(results) - len(ok),
+            "mean_latency_ms": sum(r.latency_ms for r in ok) / len(ok),
+            **{f"mean_{k}": sum(r.scores[k] for r in ok) / len(ok) for k in keys},
+        }
+
+# --- scorers ---
+def exact_match(item: EvalItem, output: str) -&gt; float:
+    ref = (item.expected or {}).get("reference_answer", "")
+    return float(output.strip().lower() == ref.strip().lower())
+
+def json_valid(item: EvalItem, output: str) -&gt; float:
+    try:
+        json.loads(output)
+        return 1.0
+    except json.JSONDecodeError:
+        return 0.0
+
+# --- usage ---
+# harness = EvalHarness(config, my_generate, {"em": exact_match, "json": json_valid})
+# results = harness.run_suite(load_items("golden_v3.jsonl"))
+# harness.save_run(results, Path("results/run-0042.json"), git_sha="abc123")</code></pre>
+
+    <h3>Design requirements</h3>
+    <ul>
+      <li><strong>Deterministic config capture:</strong> Every run records model, prompt, tools, index version.</li>
+      <li><strong>Parallel execution</strong> with rate limiting and retry on 429/5xx.</li>
+      <li><strong>Resume support</strong> for long suites (checkpoint per item).</li>
+      <li><strong>Idempotent run IDs</strong> so CI reruns do not duplicate data.</li>
+      <li><strong>PII scrubbing</strong> before writing outputs to shared storage.</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>Harness vs platform:</strong> Start with a Python harness in-repo. Graduate to Langfuse, Braintrust, or W&amp;B when you need UI, dataset collaboration, and cross-team visibility.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="platform-tools">
+    <h2>17. Platform Tools and Frameworks</h2>
+    <p>Mature eval platforms add dataset management, experiment tracking, human review UI, and production trace linking. Pick tools that integrate with your observability stack.</p>
+
+    <h3>Open-source and commercial platforms</h3>
+    <table>
+      <thead><tr><th>Tool</th><th>Strengths</th><th>Typical use</th></tr></thead>
+      <tbody>
+        <tr><td>Langfuse</td><td>Tracing, datasets, evals, prompt mgmt</td><td>End-to-end LLM ops</td></tr>
+        <tr><td>Braintrust</td><td>Eval loops, CI, human review</td><td>Eval-driven dev workflows</td></tr>
+        <tr><td>Weights &amp; Biases (W&amp;B)</td><td>Experiment tracking, tables</td><td>Research + production evals</td></tr>
+        <tr><td>LangSmith</td><td>LangChain-native tracing and datasets</td><td>LangChain/LangGraph apps</td></tr>
+        <tr><td>Phoenix (Arize)</td><td>Embeddings drift, trace analysis</td><td>RAG debugging</td></tr>
+        <tr><td>Promptfoo</td><td>YAML-driven red-team and regression</td><td>CLI CI gates, safety tests</td></tr>
+        <tr><td>RAGAS</td><td>RAG metric library</td><td>Faithfulness, context metrics</td></tr>
+        <tr><td>DeepEval</td><td>Pytest-style LLM unit tests</td><td>Developer-local testing</td></tr>
+        <tr><td>OpenAI Evals</td><td>Template eval framework</td><td>Custom benchmark prototyping</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Metric and judge libraries</h3>
+    <table>
+      <thead><tr><th>Library</th><th>Metrics</th></tr></thead>
+      <tbody>
+        <tr><td>lm-eval-harness</td><td>100+ academic benchmarks (MMLU, GSM8K, ...)</td></tr>
+        <tr><td>inspect-ai</td><td>Composable eval tasks, agent sandboxes</td></tr>
+        <tr><td>bert-score</td><td>Semantic similarity vs reference</td></tr>
+        <tr><td>sacrebleu</td><td>Standardized BLEU</td></tr>
+        <tr><td>ragas</td><td>RAG faithfulness, precision, recall</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code># lm-eval-harness CLI (academic benchmarks)
+# pip install lm-eval
+lm_eval --model hf \
+  --model_args pretrained=meta-llama/Llama-3.1-8B-Instruct \
+  --tasks mmlu,gsm8k,ifeval \
+  --batch_size auto \
+  --output_path results/llama-8b-bench.json
+
+# promptfoo red-team in CI
+# promptfoo eval -c promptfooconfig.yaml --filter-first-n 50</code></pre>
+
+    <h3>Selection criteria</h3>
+    <ul>
+      <li>Does it link production traces to eval datasets?</li>
+      <li>Does it support your model providers (OpenAI, Anthropic, vLLM, Bedrock)?</li>
+      <li>Can it gate CI with regression thresholds?</li>
+      <li>Does it handle PII and access control for enterprise?</li>
+      <li>Is there an escape hatch (export JSON, self-host)?</li>
+    </ul>
+
+    <p class="refer-link"><small>Refer: <a href="../Frameworks/ai-engineering-frameworks-langfuse.html">Langfuse notes</a> · <a href="https://github.com/EleutherAI/lm-evaluation-harness" rel="noopener noreferrer">lm-evaluation-harness</a></small></p>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="eval-driven-dev">
+    <h2>18. Eval-Driven Development</h2>
+    <p><strong>Eval-driven development (EDD)</strong> mirrors test-driven development: define expected behavior as eval cases first, then iterate prompts, models, and pipelines until the suite passes. It shifts LLM work from artisanal tweaking to engineering discipline.</p>
+
+    <h3>EDD workflow</h3>
+    <ol>
+      <li><strong>Capture failure:</strong> User report or prod trace becomes a new golden item.</li>
+      <li><strong>Write rubric:</strong> Define pass criteria before changing the system.</li>
+      <li><strong>Reproduce:</strong> Confirm baseline fails the new item.</li>
+      <li><strong>Fix:</strong> Adjust prompt, retrieval, or model.</li>
+      <li><strong>Verify:</strong> New item passes; regression suite still passes.</li>
+      <li><strong>Commit:</strong> Golden item + fix in same PR.</li>
+    </ol>
+
+    <h3>Culture and process</h3>
+    <table>
+      <thead><tr><th>Practice</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr><td>Every bug becomes an eval</td><td>Failure never recurs silently</td></tr>
+        <tr><td>Eval review in PRs</td><td>Label quality stays high</td></tr>
+        <tr><td>Weekly scorecards</td><td>Visibility across model/prompt changes</td></tr>
+        <tr><td>Eval budget in sprints</td><td>Time allocated for dataset curation</td></tr>
+        <tr><td>PM owns success criteria</td><td>Metrics align with product value</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Relationship to fine-tuning</h3>
+    <p>Eval sets drive training data too:</p>
+    <ul>
+      <li>Failed golden items become SFT examples with corrected outputs.</li>
+      <li>Pairwise preferences from human SBS feed DPO/RLHF.</li>
+      <li>Keep <strong>train/eval disjoint</strong> to avoid fine-tuning leakage.</li>
+    </ul>
+
+    <div class="callout callout-intuition">
+      <strong>North star:</strong> A new engineer should break production behavior only by failing an eval, not by lacking tribal knowledge about which prompts are sacred.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="failure-modes">
+    <h2>19. Failure Modes and Debugging</h2>
+    <p>When eval scores drop or users complain, systematic debugging beats random prompt edits. Map symptoms to likely layers.</p>
+
+    <h3>Symptom to layer map</h3>
+    <table>
+      <thead><tr><th>Symptom</th><th>Likely layer</th><th>First checks</th></tr></thead>
+      <tbody>
+        <tr><td>Wrong facts on static knowledge</td><td>Base model</td><td>Intrinsic benchmarks, knowledge cutoff</td></tr>
+        <tr><td>Ignores instructions</td><td>Prompt / system message</td><td>IFEval, schema compliance rate</td></tr>
+        <tr><td>Answers without doc support</td><td>RAG generation</td><td>Faithfulness metric, empty-context test</td></tr>
+        <tr><td>Missing relevant info</td><td>Retrieval</td><td>Recall@k, chunk overlap analysis</td></tr>
+        <tr><td>Wrong API called</td><td>Agent planner</td><td>Tool selection accuracy</td></tr>
+        <tr><td>Sudden cost spike</td><td>Inference config</td><td>Tokens per request, loop detection</td></tr>
+        <tr><td>Jailbreaks after deploy</td><td>Safety stack</td><td>Red-team ASR, guardrail logs</td></tr>
+        <tr><td>Regression on one locale</td><td>Data slice</td><td>Stratified eval by language</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Common eval system failures</h3>
+    <ul>
+      <li><strong>Metric gaming:</strong> Optimizing LLM judge score without improving user outcomes.</li>
+      <li><strong>Stale golden set:</strong> Tests outdated product behavior; passing CI but failing users.</li>
+      <li><strong>Judge drift:</strong> Upgraded judge model changes scores without system change.</li>
+      <li><strong>Non-deterministic CI:</strong> temperature &gt; 0 causes flaky gates.</li>
+      <li><strong>Label noise:</strong> Ambiguous rubrics produce contradictory human labels.</li>
+      <li><strong>Survivorship bias:</strong> Eval set lacks adversarial or edge-case prompts.</li>
+      <li><strong>Average trap:</strong> Mean score hides 0% pass rate on critical slice.</li>
+    </ul>
+
+    <h3>Debugging playbook</h3>
+    <ol>
+      <li>Reproduce with frozen config (model ID, prompt hash, seed).</li>
+      <li>Inspect retrieved context and tool traces for the failing item.</li>
+      <li>Compare baseline vs candidate side-by-side on failure bucket.</li>
+      <li>Cluster failures by embedding similarity to find patterns.</li>
+      <li>Add 5-10 representative failures to golden set before fixing.</li>
+      <li>Verify fix on failure bucket AND full regression suite.</li>
+    </ol>
+
+    <pre><code># Failure clustering sketch
+from sklearn.cluster import KMeans
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+failures = load_failed_prompts("run-0042.json")
+emb = model.encode(failures)
+labels = KMeans(n_clusters=8, random_state=0).fit_predict(emb)
+# Review largest cluster first: often one root cause</code></pre>
+
+    <div class="callout callout-derivation">
+      <strong>Postmortem template:</strong> (1) user impact, (2) root cause layer, (3) eval gap that allowed ship, (4) new golden items added, (5) CI threshold adjustment if needed.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="metric-selection">
+    <h2>20. Metric Selection Guide</h2>
+    <p>Choose metrics that match task verifiability, risk level, and budget. This table is the quick reference for designing an eval suite.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Task type</th>
+          <th>Primary metric</th>
+          <th>Secondary metrics</th>
+          <th>Human eval?</th>
+          <th>CI gate suitable?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Short-form QA (factoid)</td>
+          <td>Exact match / F1</td>
+          <td>LLM judge vs reference</td>
+          <td>Spot-check monthly</td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <td>Open-ended chat / support</td>
+          <td>LLM-as-judge (helpfulness, correctness)</td>
+          <td>Escalation rate, thumbs-down</td>
+          <td>Yes, weekly sample</td>
+          <td>Smoke only (with $n$ samples)</td>
+        </tr>
+        <tr>
+          <td>Summarization</td>
+          <td>LLM judge + faithfulness to source</td>
+          <td>ROUGE-L (sanity), compression ratio</td>
+          <td>Yes for launch</td>
+          <td>Judge pass rate</td>
+        </tr>
+        <tr>
+          <td>Structured extraction (JSON)</td>
+          <td>Schema validity + field EM</td>
+          <td>Latency, cost per doc</td>
+          <td>Rare</td>
+          <td>Yes, strict</td>
+        </tr>
+        <tr>
+          <td>Code generation</td>
+          <td>pass@k (unit tests)</td>
+          <td>Static analysis, security scan</td>
+          <td>Spot-check hard bugs</td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <td>SQL / API agents</td>
+          <td>Execution accuracy</td>
+          <td>Tool call validity, steps to success</td>
+          <td>On failure buckets</td>
+          <td>Yes in sandbox</td>
+        </tr>
+        <tr>
+          <td>RAG Q&amp;A</td>
+          <td>Faithfulness + answer relevancy</td>
+          <td>Recall@k, citation precision</td>
+          <td>Yes for high-risk domains</td>
+          <td>Faithfulness threshold</td>
+        </tr>
+        <tr>
+          <td>Classification / routing</td>
+          <td>Accuracy, macro-F1</td>
+          <td>Per-class recall, calibration</td>
+          <td>Low-disagreement audit</td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <td>Translation / localization</td>
+          <td>COMET / BLEURT</td>
+          <td>Human fluency adequacy</td>
+          <td>Yes per locale</td>
+          <td>COMET gate per locale</td>
+        </tr>
+        <tr>
+          <td>Safety / policy</td>
+          <td>Attack success rate (ASR)</td>
+          <td>Over-refusal on benign set</td>
+          <td>Red-team review</td>
+          <td>Yes, zero-tolerance slices</td>
+        </tr>
+        <tr>
+          <td>Creative writing / marketing</td>
+          <td>Human preference (SBS)</td>
+          <td>Brand rubric checklist</td>
+          <td>Always</td>
+          <td>No (too subjective)</td>
+        </tr>
+        <tr>
+          <td>Multimodal (image QA)</td>
+          <td>Task-specific accuracy</td>
+          <td>Human review on failures</td>
+          <td>Yes</td>
+          <td>Subset smoke</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Decision flowchart (text)</h3>
+    <ol>
+      <li>Can you write a programmatic verifier (unit test, SQL, regex, schema)? <strong>Use it as primary.</strong></li>
+      <li>Is there a reference answer? <strong>EM / F1 + semantic similarity.</strong></li>
+      <li>Is grounding in source docs required? <strong>Faithfulness first.</strong></li>
+      <li>Is output subjective? <strong>LLM judge calibrated to humans + periodic SBS.</strong></li>
+      <li>Is risk high (legal, medical, safety)? <strong>Add human eval and conservative gates.</strong></li>
+      <li>Always report <strong>latency, cost, and error rate</strong> alongside quality.</li>
+    </ol>
+
+    <div class="callout callout-intuition">
+      <strong>Master eval by layers:</strong> (1) pick metrics per task type, (2) build golden sets from prod, (3) automate in a harness, (4) gate CI on regressions, (5) validate online with A/B tests, (6) feed failures back into the dataset. Every production LLM system is an eval loop, not a one-time benchmark score.
+    </div>
   </section>
 
   <nav class="page-footer-nav">
     <p><a class="interview-link" href="../../interview/Inference-Deployment-Operations/ai-engineering-interview-evaluation.html">Interview questions on Evaluation</a></p>
+    <p>Next: <a href="ai-engineering-metrics.html">Metrics and Observability</a></p>
     <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
   </nav>
+
 </main>
 <footer>
   <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
@@ -99,5 +1356,3 @@ print(result.to_pandas())</code></pre>
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-
