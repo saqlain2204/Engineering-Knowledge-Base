@@ -6,6 +6,16 @@
   <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
   <title>Transformers | AI Engineering</title>
   <link rel="stylesheet" href="../../../styles.css">
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" id="MathJax-script" async></script>
 </head>
 <body class="learn-page">
 <header>
@@ -13,18 +23,38 @@
     <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Transformers</p>
   </nav>
   <h1>Transformer Architecture</h1>
-  <p>How self-attention, blocks, and modern variants power large language models.</p>
+  <p>A complete, from-first-principles walkthrough of self-attention, transformer blocks, and the modern variants that power every large language model in production today.</p>
 </header>
 <main class="article">
 
   <section>
-    <h2>Core Idea: Attention Over Sequences</h2>
-    <p>Transformers replace recurrent processing with self-attention, which lets every token attend to every other token in parallel. Each position builds a representation by weighted aggregation of all positions, where weights come from learned similarity scores. This removes sequential bottlenecks and scales well on GPUs.</p>
-    <h3>Scaled dot-product attention</h3>
-    <p>Queries (Q), keys (K), and values (V) are linear projections of hidden states. Attention scores are computed as QK<sup>T</sup>, scaled by the square root of head dimension, then softmaxed into weights. The output is the weighted sum of V vectors. Multiple heads run in parallel so the model can capture different relationship types (syntax, coreference, long-range dependencies).</p>
+    <h2>0. Why Transformers Replaced RNNs</h2>
+    <p>Before transformers, sequence models (RNNs, LSTMs) processed tokens one at a time, carrying a hidden state forward. This made them inherently sequential: you couldn't compute the representation for token 100 without first computing tokens 1&ndash;99, which meant no parallelism across the sequence dimension during training, and made it hard to preserve information over long distances (gradients had to flow through every intermediate step, reintroducing the vanishing gradient problem from the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-foundations.html">Foundations</a> page). Transformers replace recurrence entirely with <strong>self-attention</strong>: every position computes its new representation by directly looking at every other position in the sequence, in parallel, in a single matrix operation. This removes the sequential bottleneck (huge GPU-training speedup) and gives every token a direct, one-hop path to every other token, which drastically eases long-range dependency learning.</p>
+  </section>
+
+  <section>
+    <h2>1. Core Idea: Attention Over Sequences</h2>
+    <h3>1.1 Intuition first</h3>
+    <p>Imagine reading the sentence "The trophy didn't fit in the suitcase because <em>it</em> was too big." To understand what "it" refers to, you (a human reader) implicitly look back at the other words and weigh them by relevance: "trophy" and "suitcase" are candidates, and world knowledge plus sentence structure tells you "it" more likely means "trophy." Self-attention formalizes exactly this process mathematically: for every token, compute a relevance score against every other token, turn those scores into weights that sum to 1, and build a new representation as the weighted combination of all tokens' information, weighted by relevance.</p>
+
+    <h3>1.2 Queries, keys, and values</h3>
+    <p>Each token's hidden vector \(x_i \in \mathbb{R}^d\) is linearly projected into three different vectors using learned weight matrices \(W_Q, W_K, W_V\):</p>
+    <p>\[ q_i = x_i W_Q, \qquad k_i = x_i W_K, \qquad v_i = x_i W_V \]</p>
+    <p>Intuitively: the <strong>query</strong> represents "what this token is looking for," the <strong>key</strong> represents "what this token has to offer / how it advertises itself," and the <strong>value</strong> represents "the actual content this token will contribute if attended to." Relevance between token \(i\) (asking) and token \(j\) (being looked at) is computed as the dot product \(q_i \cdot k_j\) &mdash; a similarity score between what \(i\) wants and what \(j\) offers.</p>
+
+    <h3>1.3 Scaled dot-product attention, step by step</h3>
+    <p>Stacking every token's queries, keys, and values into matrices \(Q, K, V \in \mathbb{R}^{n \times d_k}\) (for a sequence of length \(n\)), attention is computed for the whole sequence at once:</p>
+    <p>\[ \text{Attention}(Q,K,V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right) V \]</p>
+    <p>Breaking this into steps:</p>
+    <ol>
+      <li><strong>Similarity scores:</strong> \(QK^\top\) computes the dot product between every query and every key, producing an \(n \times n\) matrix of raw relevance scores.</li>
+      <li><strong>Scaling:</strong> divide by \(\sqrt{d_k}\), where \(d_k\) is the dimensionality of each key vector. Without scaling, dot products grow large in magnitude as \(d_k\) grows (since they're a sum of \(d_k\) terms), which pushes the softmax into regions with extremely small gradients (saturation). Scaling by \(\sqrt{d_k}\) keeps the variance of the scores roughly constant regardless of dimensionality.</li>
+      <li><strong>Softmax:</strong> convert each row of scores into a probability distribution that sums to 1: \(\text{softmax}(s)_j = \dfrac{e^{s_j}}{\sum_{l} e^{s_l}}\). Each token now has a weight for every other token, representing "how much attention to pay."</li>
+      <li><strong>Weighted sum:</strong> multiply these attention weights by \(V\), producing, for every token, a new representation that is a weighted blend of all tokens' value vectors &mdash; dominated by whichever tokens had high relevance.</li>
+    </ol>
     <pre><code>Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) * V</code></pre>
-    
-    <p class="refer-link"><small>Refer: <a href="https://jalammar.github.io/illustrated-transformer/" rel="noopener noreferrer">The Illustrated Transformer</a> � <a href="https://arxiv.org/abs/1706.03762" rel="noopener noreferrer">Attention Is All You Need</a></small></p>
+
+    <p class="refer-link"><small>Refer: <a href="https://jalammar.github.io/illustrated-transformer/" rel="noopener noreferrer">The Illustrated Transformer</a> &middot; <a href="https://arxiv.org/abs/1706.03762" rel="noopener noreferrer">Attention Is All You Need</a></small></p>
     <pre><code>import torch
 import torch.nn.functional as F
 
@@ -35,55 +65,85 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
         scores = scores.masked_fill(mask == 0, float("-inf"))
     weights = F.softmax(scores, dim=-1)
     return torch.matmul(weights, V)</code></pre>
+
+    <h3>1.4 Multi-head attention</h3>
+    <p>Instead of computing attention once with the full hidden dimension \(d\), the model splits \(Q, K, V\) into \(h\) smaller "heads," each of dimension \(d_k = d/h\), runs scaled dot-product attention independently and in parallel within each head, and concatenates the results back together before a final linear projection:</p>
+    <p>\[ \text{MultiHead}(Q,K,V) = \text{Concat}(\text{head}_1, \dots, \text{head}_h)W_O, \qquad \text{head}_i = \text{Attention}(QW_Q^{(i)}, KW_K^{(i)}, VW_V^{(i)}) \]</p>
+    <p>Each head can specialize in a different type of relationship &mdash; one head might learn to track subject-verb agreement, another might track coreference (like the "it" example above), another might track positional adjacency. This gives the model multiple independent "views" of the sequence's relationships at every layer, at roughly the same total compute cost as one large attention operation.</p>
   </section>
 
   <section>
-    <h2>Transformer Block Anatomy</h2>
-    <p>A standard decoder block (used in GPT-style LLMs) contains:</p>
+    <h2>2. Transformer Block Anatomy</h2>
+    <p>A standard decoder block (used in GPT-style LLMs) contains two sublayers, each wrapped in a residual connection and preceded by normalization (pre-norm, see <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-foundations.html">Foundations &sect;3</a>):</p>
     <ul>
-      <li><strong>Pre-norm self-attention</strong> with residual connection</li>
-      <li><strong>Pre-norm feed-forward network (FFN)</strong> with residual connection</li>
+      <li><strong>Pre-norm self-attention</strong> with residual connection: \(x \leftarrow x + \text{MultiHeadAttention}(\text{RMSNorm}(x))\)</li>
+      <li><strong>Pre-norm feed-forward network (FFN)</strong> with residual connection: \(x \leftarrow x + \text{FFN}(\text{RMSNorm}(x))\)</li>
     </ul>
-    <p>The FFN is typically two linear layers with a non-linearity or gated activation in between. It acts as a per-token memory and transformation module, while attention handles cross-token mixing. Encoder-decoder models (original Transformer, T5) add cross-attention between encoder and decoder; most LLMs today are decoder-only.</p>
+    <p>The FFN is typically two linear layers with a non-linearity (or gated activation, like SwiGLU) in between, applied independently and identically to every token position:</p>
+    <p>\[ \text{FFN}(x) = W_2\big(\text{SiLU}(xW_1) \odot (xW_3)\big) \]</p>
+    <p>Conceptually, attention is the only place information mixes <em>across</em> token positions; the FFN operates <em>per-token</em>, acting as a memory/transformation module that processes whatever information attention has just gathered for that position. Stacking many blocks (attention, then FFN, repeated \(L\) times) lets the model build increasingly abstract representations layer by layer. Encoder-decoder models (the original Transformer, T5) add a third sublayer, cross-attention, where decoder queries attend over encoder keys/values; most LLMs today are decoder-only and skip this.</p>
     <div class="callout">
-      <strong>Decoder-only vs encoder-decoder:</strong> Decoder-only models predict the next token autoregressively and dominate open LLMs. Encoder-decoder models remain useful for seq2seq tasks like translation and summarization with separate input and output handling.
+      <strong>Decoder-only vs encoder-decoder:</strong> Decoder-only models predict the next token autoregressively using only left-context self-attention, and dominate open LLMs (GPT, LLaMA, Mistral, Qwen). Encoder-decoder models remain useful for seq2seq tasks like translation and summarization, where the input and output are distinct sequences processed somewhat differently.
     </div>
   </section>
 
   <section>
-    <h2>Positional Information</h2>
-    <p>Attention is permutation-invariant without position signals. Models inject order through:</p>
+    <h2>3. Positional Information</h2>
+    <h3>3.1 Why position must be injected explicitly</h3>
+    <p>Attention as defined above is <strong>permutation-invariant</strong>: if you shuffled the input tokens, the set of pairwise dot products would be the same, just rearranged &mdash; the mechanism has no innate sense of word order. But word order carries meaning ("dog bites man" vs "man bites dog"), so models must inject positional information explicitly.</p>
+    <h3>3.2 Approaches</h3>
     <ul>
-      <li><strong>Absolute positional embeddings</strong> added to token embeddings (early GPT, BERT)</li>
-      <li><strong>RoPE (Rotary Position Embedding)</strong> rotates Q and K vectors by position-dependent angles, encoding relative distance in attention scores. Used in LLaMA, Mistral, and most modern LLMs.</li>
-      <li><strong>ALiBi</strong> adds a linear bias to attention scores based on token distance, extrapolating to longer contexts without retraining position tables.</li>
+      <li><strong>Absolute positional embeddings</strong>: learn (or fix via sinusoids) a separate vector for each position \(1, 2, 3, \dots\) and add it to the token embedding before the first layer (early GPT, BERT). Simple, but generalizes poorly beyond the maximum length seen during training, and treats position as an absolute property rather than encoding useful relative distance information directly inside attention.</li>
+      <li><strong>RoPE (Rotary Position Embedding)</strong>: rotates the query and key vectors by an angle proportional to their position before computing the dot product. For a 2D pair of dimensions at position \(m\), this looks like multiplying by a rotation matrix \(R_{\theta m} = \begin{pmatrix}\cos(m\theta) & -\sin(m\theta)\\ \sin(m\theta) & \cos(m\theta)\end{pmatrix}\), applied across paired dimensions with different frequencies \(\theta\) (analogous to sinusoidal frequencies). The key mathematical trick: the dot product between a rotated query at position \(m\) and a rotated key at position \(n\) depends only on their <em>relative</em> distance \(m-n\), not their absolute positions. This means the model automatically learns relative positional relationships, which composes cleanly with long-context extension techniques and generalizes better to sequence lengths beyond training. RoPE is the default in LLaMA, Mistral, and most modern LLMs.</li>
+      <li><strong>ALiBi (Attention with Linear Biases)</strong>: instead of modifying \(Q\) or \(K\), adds a fixed linear penalty directly to the attention scores based on the distance between positions: \(\text{score}_{ij} = q_i \cdot k_j - m \cdot |i-j|\), where \(m\) is a head-specific slope. Distant tokens are penalized more, which naturally biases attention toward local context while still allowing distant attention if the dot-product similarity is strong enough. This lets models extrapolate to longer contexts than seen during training without retraining position tables, though its extrapolation quality and the raw quality ceiling can differ from RoPE-based approaches in practice.</li>
     </ul>
-    <p>RoPE has become the default because it composes well with long-context extensions and keeps relative position information inside attention mechanics.</p>
+    <p>RoPE has become the default across most modern open LLMs because it composes well with long-context extensions (like position interpolation or NTK-aware scaling) and keeps relative position information embedded directly inside the attention mechanics rather than as a separate additive term.</p>
   </section>
 
   <section>
-    <h2>Efficiency Variants</h2>
-    <h3>Grouped-query and multi-query attention</h3>
-    <p>Standard multi-head attention uses separate K and V projections per head. Multi-query attention (MQA) shares one K/V head across all query heads, cutting KV memory during inference. Grouped-query attention (GQA) shares K/V across groups of heads, balancing quality and speed. GQA is common in production LLMs (LLaMA 2/3, Mistral).</p>
-    <h3>Mixture of Experts (MoE)</h3>
-    <p>Instead of one dense FFN per layer, MoE routes each token to a small subset of expert FFNs via a learned gate. Total parameters grow large, but only a fraction activate per token, improving compute efficiency at scale. Challenges include load balancing across experts and more complex training infrastructure.</p>
-  </section>
-
-  <section>
-    <h2>Causal Masking and Autoregressive Decoding</h2>
-    <p>Decoder-only LLMs apply a causal mask so position i can only attend to positions j &le; i. This enforces left-to-right generation at training time. At inference, the model appends one token at a time, reusing cached key-value tensors from prior steps (KV cache) to avoid recomputing the full sequence each step.</p>
-  </section>
-
-  <section>
-    <h2>Scaling and Design Tradeoffs</h2>
-    <p>Transformer quality improves predictably with more parameters, data, and compute (scaling laws). Engineering choices trade off memory, latency, and quality:</p>
+    <h2>4. Efficiency Variants</h2>
+    <h3>4.1 Grouped-query and multi-query attention</h3>
+    <p>Standard multi-head attention (MHA) uses a completely separate set of K and V projections for every one of the \(h\) heads. At inference time, autoregressive generation caches all past keys and values (the <strong>KV cache</strong>, see Section 5) so they don't need to be recomputed at every new token step &mdash; but storing a separate K/V per head for every layer and every token consumes a large amount of GPU memory, which directly limits batch size and context length.</p>
     <ul>
-      <li>More layers vs wider hidden dimensions</li>
-      <li>Dense FFN vs MoE routing</li>
-      <li>Full MHA vs GQA for inference memory</li>
-      <li>Context length vs quadratic attention cost in naive implementations</li>
+      <li><strong>Multi-query attention (MQA)</strong> shares a <em>single</em> K/V head across all query heads, cutting KV cache memory by roughly a factor of \(h\) (the number of heads), at some cost to model quality since all heads now attend using the same keys/values.</li>
+      <li><strong>Grouped-query attention (GQA)</strong> is a middle ground: heads are split into a small number of groups, and each group shares one K/V head. This recovers most of MQA's memory savings while retaining more of MHA's quality, and is the choice used in production LLMs like LLaMA 2/3 and Mistral.</li>
     </ul>
-    <p>FlashAttention and other IO-aware kernels reduce memory bandwidth bottlenecks, making long contexts and large batches practical without changing the mathematical definition of attention.</p>
+
+    <h3>4.2 Mixture of Experts (MoE)</h3>
+    <p>Instead of a single dense FFN per layer that every token passes through, an MoE layer maintains many separate "expert" FFNs and a small learned <strong>gating network</strong> that routes each token to only a small subset of experts (commonly the top-1 or top-2 by gate score):</p>
+    <p>\[ y = \sum_{e \in \text{TopK}(g(x))} g_e(x) \cdot \text{FFN}_e(x) \]</p>
+    <p>where \(g(x)\) is typically a softmax over a linear projection of \(x\) producing per-expert scores. Total parameter count grows large (many experts), but the compute cost per token stays roughly constant (only a small number of experts activate), meaning an MoE model can have far more total capacity than a dense model at the same inference FLOP cost. Challenges include <strong>load balancing</strong> (without extra loss terms, the gate tends to collapse onto favoring a few experts, wasting the rest of the model's capacity) and substantially more complex training/serving infrastructure (experts often need to be sharded across many devices).</p>
+  </section>
+
+  <section>
+    <h2>5. Causal Masking and Autoregressive Decoding</h2>
+    <h3>5.1 Causal masking</h3>
+    <p>Decoder-only LLMs must respect the fact that during generation, position \(i\) can only ever have seen positions \(1, \dots, i\) &mdash; it hasn't been told the future yet. To enforce this even during parallel training (where the whole sequence is available at once), a <strong>causal mask</strong> sets attention scores for any \(j > i\) to \(-\infty\) before the softmax, so those positions receive exactly zero attention weight:</p>
+    <p>\[ \text{scores}_{ij} = \begin{cases} q_i \cdot k_j / \sqrt{d_k} & j \le i \\ -\infty & j > i \end{cases} \]</p>
+    <p>This forces the model to learn genuinely left-to-right, autoregressive next-token prediction, matching how it will actually be used at inference time.</p>
+
+    <h3>5.2 The KV cache</h3>
+    <p>At inference, tokens are generated one at a time: predict the next token, append it to the sequence, repeat. Naively, this would mean recomputing attention over the entire growing sequence from scratch at every single step &mdash; wasteful, since the keys and values for all previously-generated tokens never change once computed. Instead, systems cache the \(K\) and \(V\) vectors computed for every past token (the <strong>KV cache</strong>) and, at each new step, only compute \(Q, K, V\) for the newest token, attending it against the cached keys/values from all previous positions. This turns each generation step from \(O(n^2)\) (recomputing full attention) into roughly \(O(n)\) work relative to sequence length, at the cost of memory proportional to sequence length \(\times\) number of layers \(\times\) number of KV heads \(\times\) head dimension &mdash; which is exactly why MQA/GQA (Section 4.1) matter so much for serving long contexts efficiently.</p>
+  </section>
+
+  <section>
+    <h2>6. Scaling and Design Tradeoffs</h2>
+    <p>Transformer quality improves predictably with more parameters, data, and compute, following empirical <strong>scaling laws</strong> (see the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-llms.html">LLMs</a> page for the Chinchilla relationship in detail). Within a fixed compute and memory budget, engineers make several architecture tradeoffs:</p>
+    <ul>
+      <li><strong>More layers vs wider hidden dimensions</strong> &mdash; depth tends to help compositional/hierarchical reasoning, width increases per-layer representational capacity; empirically there are compute-optimal ratios that most model families converge toward.</li>
+      <li><strong>Dense FFN vs MoE routing</strong> &mdash; MoE trades training/serving complexity for a better capacity-to-inference-FLOPs ratio.</li>
+      <li><strong>Full MHA vs GQA</strong> &mdash; trades a small amount of quality for large inference memory and latency savings, essential for long-context serving at scale.</li>
+      <li><strong>Context length vs quadratic attention cost</strong> &mdash; naive attention is \(O(n^2)\) in sequence length \(n\) (every token attends to every other token), so doubling context roughly quadruples raw attention compute (though FFN cost only scales linearly), making long-context support an active systems engineering problem, not just an architecture choice.</li>
+    </ul>
+    <p><strong>FlashAttention</strong> and other IO-aware attention kernels reduce memory-bandwidth bottlenecks (they avoid materializing the full \(n \times n\) attention matrix in slow GPU memory, computing softmax in fused, tiled blocks instead) without changing the mathematical definition of attention itself &mdash; they are a systems-level optimization, not an algorithmic approximation, which is why they've become close to universal in production training and inference stacks.</p>
+  </section>
+
+  <section>
+    <h2>7. Putting It Together: One Full Block, End to End</h2>
+    <p>For a single input token stream \(x \in \mathbb{R}^{n \times d}\), one full decoder block computes, in order:</p>
+    <p>\[ h = x + \text{MultiHeadAttention}\big(\text{RMSNorm}(x)\big) \]</p>
+    <p>\[ y = h + \text{FFN}\big(\text{RMSNorm}(h)\big) \]</p>
+    <p>with RoPE applied inside the attention step to \(Q\) and \(K\) before the dot product, a causal mask applied to the scores, and GQA sharing K/V heads across groups of query heads for memory efficiency. Stack this block \(L\) times (32, 80, or more in production LLMs), and finish with a final normalization layer plus a linear projection to vocabulary-sized logits, and you have the complete architecture underlying essentially every modern LLM.</p>
   </section>
 
   <nav class="page-footer-nav">
@@ -98,5 +158,3 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-

@@ -6,6 +6,16 @@
   <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
   <title>Foundations | AI Engineering</title>
   <link rel="stylesheet" href="../../../styles.css">
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" id="MathJax-script" async></script>
 </head>
 <body class="learn-page">
 <header>
@@ -13,17 +23,43 @@
     <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Foundations</p>
   </nav>
   <h1>Neural Network and Deep Learning Foundations</h1>
-  <p>The mathematical and architectural base layer that every modern LLM builds on.</p>
+  <p>The complete mathematical and architectural base layer that every modern LLM builds on &mdash; from a single neuron to the training loop that produces GPT-scale models. Written so a complete beginner can start here and finish able to reason like a research engineer.</p>
 </header>
 <main class="article">
 
   <section>
-    <h2>What Neural Networks Learn</h2>
-    <p>A neural network is a parameterized function that maps inputs to outputs. Training adjusts weights and biases so the model minimizes a loss function on data. For language models, the input is a sequence of token embeddings and the output is a probability distribution over the next token.</p>
-    <p>Depth matters because stacking layers with non-linear activations lets the network approximate complex functions. A single linear layer can only learn linear boundaries; multiple layers with ReLU, GELU, or SiLU activations can represent hierarchical patterns in text, images, and other modalities.</p>
-    <p class="refer-link"><small>Refer: <a href="https://medium.com/@ankittripathi9597/understanding-gradient-flow-in-deep-neural-networks-4edd92104991" rel="noopener noreferrer">Understanding Gradient Flow in Deep Neural Networks</a> � <a href="https://www.deeplearningbook.org/" rel="noopener noreferrer">Deep Learning (Goodfellow et al.)</a></small></p>
-    <h3>Forward and backward passes</h3>
-    <p>The forward pass computes predictions layer by layer. The backward pass uses the chain rule to propagate gradients from the loss back to every parameter. Backpropagation is efficient because it reuses intermediate values instead of recomputing gradients independently for each weight.</p>
+    <h2>0. How to Read This Page</h2>
+    <p>This page assumes no prior machine learning background. Every idea is introduced from first principles, then connected forward to how it is actually used inside large language models (LLMs). Where useful, we give the plain-English intuition first, then the precise mathematical statement, then a code snippet that shows the idea running. If you only remember one thing from this page, remember this: <strong>a neural network is just a very large, very flexible function, and training is the process of nudging its internal numbers (parameters) so that the function's outputs get closer to what we want.</strong> Everything else &mdash; layers, attention, optimizers, normalization &mdash; exists to make that nudging process work reliably at enormous scale.</p>
+  </section>
+
+  <section>
+    <h2>1. What a Neuron Is, and What a Network Is</h2>
+    <h3>1.1 The single neuron</h3>
+    <p>The smallest building block of a neural network is a single artificial neuron. It takes a vector of inputs \(x = (x_1, x_2, \dots, x_n)\), multiplies each input by a learned weight \(w_i\), sums the results, adds a learned bias \(b\), and passes the sum through a non-linear activation function \(f\):</p>
+    <p>\[ z = \sum_{i=1}^{n} w_i x_i + b = w \cdot x + b \]</p>
+    <p>\[ a = f(z) \]</p>
+    <p>Here \(z\) is called the <strong>pre-activation</strong> (or logit for the final layer), and \(a\) is the neuron's <strong>activation</strong> (its output). The weights \(w\) and bias \(b\) are the neuron's <strong>parameters</strong> &mdash; the numbers that training will adjust. Nothing about a single neuron is magical: it's a weighted sum passed through a squashing function.</p>
+
+    <h3>1.2 Stacking neurons into layers</h3>
+    <p>A <strong>layer</strong> is a group of neurons that all read the same input vector but each has its own independent weights and bias. If a layer has \(m\) neurons and the input has \(n\) dimensions, the layer's weights form a matrix \(W \in \mathbb{R}^{m \times n}\) and its biases form a vector \(b \in \mathbb{R}^{m}\). The whole layer computes:</p>
+    <p>\[ z = Wx + b, \qquad a = f(z) \]</p>
+    <p>where \(f\) is applied element-wise. This is why deep learning is fundamentally linear algebra: every layer is a matrix multiply plus a non-linearity, and a network is a chain of these operations.</p>
+
+    <h3>1.3 A network is a composition of functions</h3>
+    <p>A neural network with \(L\) layers is the composition:</p>
+    <p>\[ \hat{y} = f_L\big(W_L \, f_{L-1}(\dots f_1(W_1 x + b_1) \dots) + b_L\big) \]</p>
+    <p>Training adjusts every \(W_\ell\) and \(b_\ell\) (collectively called \(\theta\), the parameters) so that \(\hat{y}\) &mdash; the model's prediction &mdash; matches the true target \(y\) as closely as possible, across a whole dataset, according to some numeric measure of "closeness" called a <strong>loss function</strong>.</p>
+    <p>For a language model specifically: the input \(x\) is a sequence of token embeddings (numeric vectors representing words/subwords, see the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-tokenization.html">Tokenization</a> page), and the output \(\hat y\) is a probability distribution over every possible next token in the vocabulary. Training nudges the parameters so that the model assigns high probability to the token that actually came next in real text.</p>
+
+    <p class="refer-link"><small>Refer: <a href="https://medium.com/@ankittripathi9597/understanding-gradient-flow-in-deep-neural-networks-4edd92104991" rel="noopener noreferrer">Understanding Gradient Flow in Deep Neural Networks</a> &middot; <a href="https://www.deeplearningbook.org/" rel="noopener noreferrer">Deep Learning (Goodfellow et al.)</a> &middot; <a href="http://neuralnetworksanddeeplearning.com/" rel="noopener noreferrer">Neural Networks and Deep Learning (Nielsen)</a></small></p>
+
+    <h3>1.4 Why depth matters (the universal approximation intuition)</h3>
+    <p>A network with no activation function &mdash; just stacked linear layers &mdash; collapses mathematically into a single linear layer, because the product of matrices is still a matrix:</p>
+    <p>\[ W_2(W_1 x) = (W_2 W_1)x = W' x \]</p>
+    <p>No matter how many linear layers you stack, you can only ever draw straight decision boundaries. Real-world data &mdash; language, images, audio &mdash; has highly non-linear structure: word meaning depends on context in non-additive ways, pixel patterns form curved edges, and so on. Inserting a non-linear activation function \(f\) between layers breaks this collapse and gives the network the ability to approximate arbitrarily complex functions, given enough width or depth (this is formalized by the <strong>Universal Approximation Theorem</strong>). Depth (many layers) tends to build features hierarchically: early layers learn simple local patterns, later layers combine them into increasingly abstract concepts. In language models this shows up as early transformer layers tracking local syntax and later layers tracking long-range meaning, coreference, and task-level abstractions.</p>
+
+    <h3>1.5 Forward pass</h3>
+    <p>The <strong>forward pass</strong> is simply evaluating the network: given an input, compute layer 1's output, feed it into layer 2, and so on until you reach the final prediction. Every intermediate activation is stored in memory (this matters for the backward pass below).</p>
     <pre><code>import torch
 import torch.nn.functional as F
 
@@ -34,16 +70,41 @@ loss = F.cross_entropy(
     labels.view(-1),
     ignore_index=-100,
 )</code></pre>
+
+    <h3>1.6 Backward pass and backpropagation</h3>
+    <p>Training needs to know: "if I nudge this particular weight by a tiny amount, how much does the loss change?" That sensitivity is the <strong>gradient</strong> of the loss with respect to that weight, written \(\frac{\partial \mathcal{L}}{\partial w}\). Computing this for every parameter individually and from scratch would be astronomically expensive for a billion-parameter model. <strong>Backpropagation</strong> solves this efficiently using the <strong>chain rule</strong> of calculus, propagating gradients backward from the loss through each layer, re-using intermediate results computed during the forward pass.</p>
+    <p>For a two-layer network \(a_1 = f_1(W_1 x + b_1)\), \(\hat y = f_2(W_2 a_1 + b_2)\), and loss \(\mathcal{L}(\hat y, y)\), the chain rule gives:</p>
+    <p>\[ \frac{\partial \mathcal{L}}{\partial W_2} = \frac{\partial \mathcal{L}}{\partial \hat y} \cdot \frac{\partial \hat y}{\partial z_2} \cdot \frac{\partial z_2}{\partial W_2}, \qquad \frac{\partial \mathcal{L}}{\partial W_1} = \frac{\partial \mathcal{L}}{\partial \hat y} \cdot \frac{\partial \hat y}{\partial z_2} \cdot \frac{\partial z_2}{\partial a_1} \cdot \frac{\partial a_1}{\partial z_1} \cdot \frac{\partial z_1}{\partial W_1} \]</p>
+    <p>Notice that the term \(\frac{\partial \mathcal{L}}{\partial \hat y} \cdot \frac{\partial \hat y}{\partial z_2}\) is shared between both gradient calculations. Backpropagation computes this once at the output and reuses it as it walks backward layer by layer, which is why it is efficient: for a network with \(L\) layers, both the forward and backward pass cost roughly the same amount of computation, \(O(L)\), instead of costing exponentially more for deeper networks.</p>
+    <p>Once every gradient is known, an <strong>optimizer</strong> (Section 2) uses them to update the parameters, nudging each weight a small step in the direction that reduces the loss.</p>
   </section>
 
   <section>
-    <h2>Loss Functions and Optimization</h2>
-    <p>Language models are trained with cross-entropy loss: the model predicts a distribution over the vocabulary, and loss measures how far that distribution is from the true next token. Minimizing cross-entropy is equivalent to maximum likelihood estimation on the training corpus.</p>
-    <h3>Optimizers</h3>
+    <h2>2. Loss Functions and Optimization</h2>
+    <h3>2.1 Cross-entropy loss</h3>
+    <p>Language models are trained with <strong>cross-entropy loss</strong>. At each position in a sequence, the model outputs a probability distribution \(\hat p\) over the whole vocabulary (via a softmax, see Section 4). If the true next token has index \(y\), the loss for that single prediction is:</p>
+    <p>\[ \mathcal{L} = -\log \hat p_y = -\log \frac{e^{z_y}}{\sum_{j=1}^{V} e^{z_j}} \]</p>
+    <p>where \(z\) is the vector of logits (pre-softmax scores) and \(V\) is the vocabulary size. Intuitively: if the model assigns high probability to the correct token, \(-\log \hat p_y\) is small (close to 0); if it assigns low probability, the loss is large (approaching infinity as \(\hat p_y \to 0\)). Minimizing average cross-entropy over a huge text corpus is mathematically equivalent to <strong>maximum likelihood estimation</strong> &mdash; finding the parameters that make the observed training text as probable as possible under the model.</p>
+    <p>For a full sequence of length \(T\), the total loss is the average (or sum) of per-token losses:</p>
+    <p>\[ \mathcal{L}_{\text{seq}} = -\frac{1}{T}\sum_{t=1}^{T} \log P(x_t \mid x_{<t}) \]</p>
+    <p>This is exactly next-token prediction: at every position, predict a distribution over what token comes next given everything before it, and penalize the model by how surprised it is by the true answer.</p>
+
+    <h3>2.2 Gradient descent, the core training algorithm</h3>
+    <p>Once gradients are known, the most basic update rule, <strong>gradient descent</strong>, moves every parameter a small step in the direction that decreases the loss fastest:</p>
+    <p>\[ \theta_{t+1} = \theta_t - \eta \, \nabla_\theta \mathcal{L}(\theta_t) \]</p>
+    <p>Here \(\eta\) is the <strong>learning rate</strong> &mdash; how big a step to take &mdash; and \(\nabla_\theta \mathcal{L}\) is the gradient vector (all the partial derivatives from backpropagation). Too large a learning rate causes the loss to oscillate or diverge; too small wastes compute crawling toward a solution. In practice we never compute the gradient over the entire dataset at once (that would be far too slow); instead we use <strong>mini-batch stochastic gradient descent</strong>, estimating the gradient from a small random batch of examples at each step. This introduces noise but is far cheaper and, in practice, generalizes better.</p>
+
+    <h3>2.3 Optimizers: SGD, Adam, AdamW</h3>
     <ul>
-      <li><strong>SGD</strong> uses a single learning rate for all parameters. It works well with careful tuning but can be slow and unstable on large transformer stacks.</li>
-      <li><strong>Adam</strong> maintains per-parameter adaptive learning rates using running estimates of gradient mean and variance. It converges faster on noisy, high-dimensional problems.</li>
-      <li><strong>AdamW</strong> decouples weight decay from the gradient update. Adam applies L2 regularization inside the adaptive step, which interacts poorly with per-parameter scaling. AdamW applies decay directly to weights and is the default for LLM pretraining and fine-tuning.</li>
+      <li><strong>SGD (Stochastic Gradient Descent)</strong> uses a single learning rate for all parameters and applies the raw update above (often with <em>momentum</em>, which accumulates a running average of past gradients to smooth out noisy steps: \(v_t = \beta v_{t-1} + \nabla_\theta \mathcal{L}\), then \(\theta_{t+1} = \theta_t - \eta v_t\)). It works well with careful tuning but can be slow and unstable on large transformer stacks because different parameters can need very different effective step sizes.</li>
+      <li><strong>Adam</strong> gives every parameter its own adaptive learning rate by tracking a running estimate of the gradient's mean (first moment, \(m_t\)) and its uncentered variance (second moment, \(v_t\)):
+        <p>\[ m_t = \beta_1 m_{t-1} + (1-\beta_1)g_t, \qquad v_t = \beta_2 v_{t-1} + (1-\beta_2)g_t^2 \]</p>
+        <p>with bias-corrected estimates \(\hat m_t = m_t/(1-\beta_1^t)\), \(\hat v_t = v_t/(1-\beta_2^t)\), and the update:</p>
+        <p>\[ \theta_{t+1} = \theta_t - \eta \, \frac{\hat m_t}{\sqrt{\hat v_t} + \epsilon} \]</p>
+        Parameters with historically large, noisy gradients get automatically smaller effective steps; parameters with small, consistent gradients get relatively larger steps. This makes Adam converge faster on the noisy, high-dimensional, non-convex loss surfaces typical of deep learning.</li>
+      <li><strong>AdamW</strong> decouples weight decay (a regularization term that shrinks weights toward zero to reduce overfitting) from the gradient-based update. Plain Adam folds an L2 penalty into the gradient itself, which then gets rescaled by the adaptive \(\sqrt{\hat v_t}\) term &mdash; an unintended interaction that weakens regularization for parameters with large gradient variance. AdamW instead applies decay directly to the weights, separately from the adaptive step:
+        <p>\[ \theta_{t+1} = \theta_t - \eta \left( \frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon} + \lambda \theta_t \right) \]</p>
+        This decoupling gives more predictable, effective regularization, which is why AdamW is the default optimizer for LLM pretraining and fine-tuning.</li>
     </ul>
     <pre><code>optimizer = torch.optim.AdamW(
     model.parameters(),
@@ -51,42 +112,80 @@ loss = F.cross_entropy(
     betas=(0.9, 0.95),
     weight_decay=0.1,
 )</code></pre>
+
+    <h3>2.4 Learning rate schedules and stabilizers</h3>
+    <p>Training billion-parameter models on trillions of tokens is numerically fragile. Standard stabilizers include:</p>
+    <ul>
+      <li><strong>Warmup</strong> &mdash; start the learning rate near zero and linearly ramp it up over the first few hundred/thousand steps, so early large, noisy gradients (before the model has learned anything sensible) don't destabilize training.</li>
+      <li><strong>Cosine decay</strong> &mdash; after warmup, decay the learning rate smoothly following a cosine curve down toward a small minimum value, so training takes large steps early (fast progress) and small steps late (fine convergence): \(\eta_t = \eta_{\min} + \frac{1}{2}(\eta_{\max}-\eta_{\min})\left(1+\cos\left(\frac{t}{T}\pi\right)\right)\).</li>
+      <li><strong>Gradient clipping</strong> &mdash; rescale the gradient vector if its norm exceeds a threshold \(c\): \(g \leftarrow g \cdot \min\left(1, \frac{c}{\|g\|}\right)\), preventing rare huge gradients from blowing up the parameters in one step.</li>
+    </ul>
     <div class="callout">
-      <strong>Practical note:</strong> Learning rate warmup, cosine decay, and gradient clipping are standard stabilizers when training billion-parameter models. Without them, early training spikes or late-stage divergence are common.
+      <strong>Practical note:</strong> Without warmup, cosine decay, and gradient clipping, early training spikes or late-stage divergence are common when training billion-parameter models. These three tricks are near-universal in modern LLM pretraining recipes.
     </div>
   </section>
 
   <section>
-    <h2>Normalization and Stability</h2>
-    <p>Deep networks suffer from vanishing or exploding gradients when repeated multiplication of small or large values shrinks or blows up signal during backprop. Modern architectures address this with residual connections, careful initialization, and normalization layers.</p>
-    <h3>Batch, layer, and RMS normalization</h3>
+    <h2>3. Normalization and Stability</h2>
+    <h3>3.1 Why deep networks are numerically unstable</h3>
+    <p>During backpropagation, gradients are computed by repeatedly multiplying terms together across many layers (the chain rule again). If those terms are consistently slightly less than 1, the product shrinks toward zero exponentially with depth &mdash; the <strong>vanishing gradient</strong> problem, where early layers stop learning because almost no gradient signal reaches them. If the terms are consistently greater than 1, the product grows exponentially &mdash; the <strong>exploding gradient</strong> problem, where parameter updates become huge and destabilize training. Both problems get worse as networks get deeper, which is exactly the regime modern LLMs operate in (tens to well over a hundred layers).</p>
+
+    <h3>3.2 Residual (skip) connections</h3>
+    <p>A residual connection adds a sublayer's input directly to its output instead of replacing it:</p>
+    <p>\[ y = x + \text{Sublayer}(x) \]</p>
+    <p>During backpropagation, the derivative of this sum with respect to \(x\) includes an identity term (\(\partial y/\partial x = I + \partial\,\text{Sublayer}/\partial x\)), which guarantees gradients have a direct, unimpeded path all the way back through the network regardless of depth. This single idea (from the ResNet paper, later adopted by the Transformer) is what makes training networks with dozens or hundreds of layers practical at all.</p>
+
+    <h3>3.3 Batch, layer, and RMS normalization</h3>
+    <p>Normalization layers rescale activations to keep their distribution stable as they flow through the network, which further stabilizes gradients and speeds up convergence.</p>
     <ul>
-      <li><strong>BatchNorm</strong> normalizes across the batch dimension per feature. It depends on batch statistics and behaves poorly with variable-length sequences or small batches.</li>
-      <li><strong>LayerNorm</strong> normalizes across the feature dimension for each sample independently. It is batch-size agnostic and was standard in early transformers.</li>
-      <li><strong>RMSNorm</strong> rescales activations by their root-mean-square without mean-centering. It is cheaper than LayerNorm and is used in LLaMA, Mistral, and many recent LLMs with similar stability.</li>
+      <li><strong>BatchNorm</strong> normalizes each feature across the examples in a mini-batch: \(\hat x = \frac{x - \mu_{\text{batch}}}{\sqrt{\sigma^2_{\text{batch}} + \epsilon}}\), then applies a learned scale \(\gamma\) and shift \(\beta\). It depends on batch statistics, so it behaves poorly with variable-length sequences, very small batches, or at inference time when batch composition differs from training &mdash; a poor fit for autoregressive language modeling.</li>
+      <li><strong>LayerNorm</strong> normalizes across the feature dimension for each token independently, not across the batch: for a hidden vector \(x \in \mathbb{R}^d\), \(\mu = \frac{1}{d}\sum_i x_i\), \(\sigma^2 = \frac{1}{d}\sum_i (x_i-\mu)^2\), then \(\hat x = \gamma \cdot \frac{x-\mu}{\sqrt{\sigma^2+\epsilon}} + \beta\). Being batch-size agnostic made it the standard choice in early transformers (original Transformer, GPT-2, BERT).</li>
+      <li><strong>RMSNorm</strong> simplifies LayerNorm by dropping the mean-centering step and only rescaling by the root-mean-square of the activations: \(\hat x = \gamma \cdot \dfrac{x}{\sqrt{\frac{1}{d}\sum_i x_i^2 + \epsilon}}\). Removing the mean subtraction cuts the computation (no mean statistic to track) while empirically giving similar training stability. This efficiency gain is why RMSNorm is used in LLaMA, Mistral, and most recent open LLMs.</li>
     </ul>
-    <p>Residual (skip) connections add the input of a sublayer to its output, giving gradients a direct path backward and enabling very deep stacks without degradation.</p>
+    <p>Where normalization sits relative to the sublayer also matters: <strong>pre-norm</strong> (normalize the input before the sublayer, e.g. \(x + \text{Sublayer}(\text{Norm}(x))\)) keeps the residual stream itself unnormalized and gives more stable gradients at large depth, which is why virtually all modern LLMs are pre-norm rather than the original Transformer's post-norm design.</p>
   </section>
 
   <section>
-    <h2>Activation Functions</h2>
-    <p>Non-linear activations prevent stacked linear layers from collapsing into one linear map. Common choices in LLMs include:</p>
+    <h2>4. Activation Functions</h2>
+    <p>Non-linear activations are what prevent stacked linear layers from collapsing into a single linear map (Section 1.4). Different activations trade off simplicity, smoothness, and expressiveness.</p>
     <ul>
-      <li><strong>ReLU</strong> - simple, fast, but can produce dead neurons when inputs are always negative.</li>
-      <li><strong>GELU</strong> - smooth, probabilistic gating used in BERT and GPT-2 era models.</li>
-      <li><strong>SwiGLU / SiLU</strong> - gated variants common in modern decoder-only LLMs for better expressiveness in feed-forward blocks.</li>
+      <li><strong>Sigmoid</strong>: \(\sigma(z) = \dfrac{1}{1+e^{-z}}\), squashes any input into \((0,1)\). Historically important (used for gates and probabilities) but saturates for large \(|z|\), producing near-zero gradients (a vanishing-gradient source), so it's rarely used in deep hidden stacks today.</li>
+      <li><strong>Tanh</strong>: \(\tanh(z) = \dfrac{e^z - e^{-z}}{e^z+e^{-z}}\), squashes into \((-1,1)\), zero-centered (an improvement over sigmoid) but still saturates.</li>
+      <li><strong>ReLU</strong> (Rectified Linear Unit): \(f(z) = \max(0, z)\). Simple, extremely fast to compute, and its gradient is either 0 or 1 (no vanishing-gradient saturation for positive inputs). Its weakness is "dying ReLU": if a neuron's weights drift so its pre-activation is always negative, its gradient is permanently 0 and it stops learning.</li>
+      <li><strong>GELU</strong> (Gaussian Error Linear Unit): \(f(z) = z \cdot \Phi(z)\), where \(\Phi\) is the standard normal cumulative distribution function. It smoothly gates inputs based on their magnitude (a probabilistic version of ReLU: instead of a hard cutoff at zero, small negative inputs are attenuated rather than zeroed entirely). Used in BERT and GPT-2 era models; a common tanh-based approximation is \(\text{GELU}(z) \approx 0.5z\left(1+\tanh\left[\sqrt{2/\pi}(z+0.044715z^3)\right]\right)\).</li>
+      <li><strong>SiLU / Swish</strong>: \(f(z) = z \cdot \sigma(z)\), similar smooth self-gating behavior to GELU with a simpler formula.</li>
+      <li><strong>SwiGLU</strong>, used in feed-forward blocks of most modern decoder-only LLMs (LLaMA, PaLM, Mistral), is a <em>gated</em> variant: it splits a linear projection into two halves \(a\) and \(b\), and computes \(\text{SwiGLU}(x) = \text{SiLU}(xW_1) \odot (xW_2)\), where \(\odot\) is element-wise multiplication. The gate half (\(\text{SiLU}(xW_1)\)) lets the network learn to selectively pass or suppress information in the value half (\(xW_2\)), which empirically improves expressiveness in the feed-forward block over a plain single-input activation, at the cost of roughly 50% more parameters in that layer for the same hidden width (usually compensated by shrinking the hidden dimension).</li>
     </ul>
   </section>
 
   <section>
-    <h2>Generalization and the Bias-Variance Tradeoff</h2>
-    <p>Underfitting (high bias) means the model is too simple to capture patterns in data. Overfitting (high variance) means it memorizes training examples and fails on new inputs. In LLM training, underfitting shows up as poor benchmark scores when the model or data scale is too small. Overfitting during fine-tuning appears when the model memorizes a small instruction set and loses broader capabilities.</p>
-    <p>Mitigations include more data, larger models (within compute budget), regularization (dropout, weight decay), early stopping, and parameter-efficient fine-tuning methods that limit how much of the base model can change.</p>
+    <h2>5. Generalization and the Bias-Variance Tradeoff</h2>
+    <h3>5.1 Formal picture</h3>
+    <p>A model's expected error on unseen data can be decomposed (informally) into three sources:</p>
+    <p>\[ \text{Expected Error} = \text{Bias}^2 + \text{Variance} + \text{Irreducible Noise} \]</p>
+    <p><strong>Bias</strong> is error from a model being too simple to represent the true underlying pattern &mdash; systematic, consistent error regardless of which training data you happened to see. <strong>Variance</strong> is error from a model being so flexible that it fits noise/idiosyncrasies specific to the training set, so its predictions swing wildly depending on exactly which data it was trained on. <strong>Underfitting</strong> (high bias) means the model is too simple to capture patterns in the data; in LLM training this shows up as poor benchmark scores when model or data scale is too small relative to the task's complexity. <strong>Overfitting</strong> (high variance) means the model memorizes training examples rather than learning generalizable patterns; during LLM fine-tuning this appears when the model memorizes a small instruction dataset and its broader, pretrained capabilities degrade (a phenomenon often called "catastrophic forgetting").</p>
+
+    <h3>5.2 Regularization techniques</h3>
+    <ul>
+      <li><strong>L2 weight decay</strong> adds a penalty term \(\lambda \|\theta\|_2^2\) to the loss, encouraging smaller weights, which tends to produce smoother, less extreme functions (see AdamW above).</li>
+      <li><strong>Dropout</strong> randomly zeroes out a fraction \(p\) of activations during training (\(\tilde a_i = a_i \cdot m_i / (1-p)\), where \(m_i \sim \text{Bernoulli}(1-p)\)), forcing the network to not rely on any single neuron and behave like an implicit ensemble of many sub-networks. At inference, dropout is turned off and the scaling factor \(1/(1-p)\) ensures expected activation magnitude matches training.</li>
+      <li><strong>Early stopping</strong> monitors validation loss during training and halts once it starts increasing while training loss keeps decreasing &mdash; a direct signal that the model has started memorizing rather than generalizing.</li>
+      <li><strong>Parameter-efficient fine-tuning</strong> (e.g. LoRA) restricts how many parameters can move during fine-tuning by learning small low-rank update matrices instead of updating the full weight matrix, which limits how far the model's behavior can drift from its broad pretrained capabilities.</li>
+    </ul>
+    <p>Mitigations more generally include gathering more/better data, scaling the model appropriately for the compute and data budget (see Scaling Laws on the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-llms.html">LLMs</a> page), and choosing regularization strength to match how much data is available.</p>
   </section>
 
   <section>
-    <h2>From Foundations to Transformers</h2>
-    <p>Everything above applies directly to transformer LLMs: cross-entropy next-token prediction, AdamW with warmup and decay, RMSNorm inside blocks, residual connections around attention and MLP sublayers, and gated activations in feed-forward networks. Understanding these primitives makes it easier to reason about training instability, fine-tuning behavior, and why architectural choices in modern LLMs look the way they do.</p>
+    <h2>6. Worked Example: One Full Training Step by Hand</h2>
+    <p>To make all of the above concrete, consider a tiny network: one input, one hidden neuron with ReLU, one output neuron, and squared-error loss on a single example \((x, y) = (2, 10)\). Suppose current parameters are \(w_1=1, b_1=0, w_2=2, b_2=0\).</p>
+    <p>Forward pass: \(z_1 = w_1 x + b_1 = 2\); \(a_1 = \text{ReLU}(z_1)=2\); \(\hat y = w_2 a_1 + b_2 = 4\); loss \(\mathcal{L} = \frac{1}{2}(\hat y-y)^2 = \frac{1}{2}(4-10)^2=18\).</p>
+    <p>Backward pass: \(\frac{\partial \mathcal{L}}{\partial \hat y} = \hat y - y = -6\). Then \(\frac{\partial \mathcal{L}}{\partial w_2} = \frac{\partial \mathcal{L}}{\partial \hat y}\cdot a_1 = -6\cdot 2=-12\), and \(\frac{\partial \mathcal{L}}{\partial a_1} = \frac{\partial \mathcal{L}}{\partial \hat y}\cdot w_2 = -6\cdot 2 = -12\). Since \(z_1>0\), ReLU's derivative is 1, so \(\frac{\partial \mathcal{L}}{\partial w_1} = \frac{\partial \mathcal{L}}{\partial a_1}\cdot x = -12\cdot 2=-24\).</p>
+    <p>Gradient descent update with \(\eta=0.01\): \(w_2 \leftarrow 2-0.01\cdot(-12)=2.12\); \(w_1 \leftarrow 1-0.01\cdot(-24)=1.24\). Both weights increase, which will push \(\hat y\) closer to 10 on the next forward pass. This is exactly what happens, scaled up by many orders of magnitude, across billions of parameters and trillions of tokens when training an LLM &mdash; the mechanics never change, only the scale.</p>
+  </section>
+
+  <section>
+    <h2>7. From Foundations to Transformers</h2>
+    <p>Everything above applies directly to transformer LLMs: cross-entropy next-token prediction (Section 2.1), AdamW with warmup and cosine decay (Section 2.3&ndash;2.4), RMSNorm inside blocks (Section 3.3), residual connections around attention and MLP sublayers (Section 3.2), and gated SwiGLU activations in feed-forward networks (Section 4). Understanding these primitives makes it far easier to reason about training instability, fine-tuning behavior, and why architectural choices in modern LLMs look the way they do. The next page, <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-transformers.html">Transformer Architecture</a>, builds the attention mechanism on top of exactly this foundation.</p>
   </section>
 
   <nav class="page-footer-nav">
@@ -101,5 +200,3 @@ loss = F.cross_entropy(
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-
