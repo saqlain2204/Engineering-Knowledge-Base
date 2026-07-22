@@ -4,78 +4,368 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
-  <title>LLMs | AI Engineering</title>
+  <title>LLMs Deep Dive | AI Engineering</title>
   <link rel="stylesheet" href="../../../styles.css">
 </head>
 <body class="learn-page">
 <header>
   <nav aria-label="Breadcrumb">
-    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; LLMs</p>
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="llms.html">LLMs</a> &rsaquo; Deep Dive</p>
   </nav>
-  <h1>Large Language Models</h1>
-  <p>What defines an LLM, how scaling and training shape capability, and how to choose between open weights and APIs.</p>
+  <h1>Large Language Models: A Deep Dive</h1>
+  <p>A researcher-level walkthrough of transformers, attention, scaling laws, training pipelines, and inference &mdash; with the math made explicit, and a plain-English recap at the end.</p>
 </header>
 <main class="article">
 
   <section>
-    <h2>What Makes a Model "Large"</h2>
-    <p>Large language models are transformer-based neural networks trained on massive text corpora to predict the next token. "Large" refers to both parameter count (billions to hundreds of billions) and training compute (FLOPs, GPU-hours). Scale unlocks emergent behaviors: in-context learning, chain-of-thought reasoning, tool use, and broad task generalization without task-specific training.</p>
-    <p>Capability is not only about parameters. Data quality, training duration, architecture choices (context length, MoE vs dense), and post-training alignment all shift the effective intelligence of a model at a given size.</p>
-    
-    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2203.15556" rel="noopener noreferrer">Chinchilla scaling laws</a></small></p>
-  </section>
-
-  <section>
-    <h2>Scaling Laws</h2>
-    <p>Empirical scaling laws show that loss decreases predictably as you increase model size, dataset size, and compute budget. The Chinchilla paper argued many models were under-trained: for a fixed compute budget, smaller models trained on more tokens often outperform larger models trained on fewer tokens.</p>
-    <pre><code># Chinchilla rule of thumb: train on ~20 tokens per parameter
-# Training FLOPs � 6 � N � D  (N = params, D = training tokens)
-
-params = 7_000_000_000
-tokens = 20 * params          # ~140B tokens for a 7B model
-</code></pre>
-    <p>Practical implications for engineering teams:</p>
+    <h2>Contents</h2>
     <ul>
-      <li>Bigger is not always better per dollar at inference time</li>
-      <li>Training token count should scale with parameter count</li>
-      <li>Evaluation on target tasks matters more than parameter bragging rights</li>
+      <li><a href="#sec1">1. What a Language Model Actually Computes</a></li>
+      <li><a href="#sec2">2. Tokenization: Turning Text Into Numbers</a></li>
+      <li><a href="#sec3">3. Embeddings and the Representation Space</a></li>
+      <li><a href="#sec4">4. The Core Problem Attention Solves</a></li>
+      <li><a href="#sec5">5. Scaled Dot-Product Attention &mdash; Full Derivation</a></li>
+      <li><a href="#sec6">6. Multi-Head Attention</a></li>
+      <li><a href="#sec7">7. Positional Information: Sinusoidal, Learned, RoPE, ALiBi</a></li>
+      <li><a href="#sec8">8. The Position-Wise Feed-Forward Network</a></li>
+      <li><a href="#sec9">9. Residual Connections and Layer Normalization</a></li>
+      <li><a href="#sec10">10. The Full "Attention Is All You Need" Architecture</a></li>
+      <li><a href="#sec11">11. From Encoder-Decoder to Decoder-Only</a></li>
+      <li><a href="#sec12">12. The Training Objective: Cross-Entropy and Teacher Forcing</a></li>
+      <li><a href="#sec13">13. Optimization Mechanics: Adam, Warmup, and Stability</a></li>
+      <li><a href="#sec14">14. Scaling Laws: Kaplan and Chinchilla</a></li>
+      <li><a href="#sec15">15. The Modern Training Pipeline: Pretraining &rarr; SFT &rarr; RLHF/DPO</a></li>
+      <li><a href="#sec16">16. Emergent Abilities and In-Context Learning</a></li>
+      <li><a href="#sec17">17. Inference: KV Caching, Sampling, and Decoding Strategies</a></li>
+      <li><a href="#sec18">18. The Quadratic Bottleneck and Long-Context Solutions</a></li>
+      <li><a href="#sec19">19. Mixture-of-Experts and Modern Architectural Variants</a></li>
+      <li><a href="#sec20">20. Multimodality</a></li>
+      <li><a href="#sec21">21. The Whole Story, End to End</a></li>
+      <li><a href="#sec22">22. Plain English Recap</a></li>
     </ul>
   </section>
 
-  <section>
-    <h2>Model Lifecycle</h2>
-    <p>A production-grade LLM typically moves through these stages:</p>
+  <section id="sec1">
+    <h2>1. What a Language Model Actually Computes</h2>
+    <p>At its core, a large language model (LLM) is a parametric estimate of a conditional probability distribution:</p>
+    <pre><code>P(x_t | x_1, x_2, ..., x_{t-1}; &theta;)</code></pre>
+    <p>Given a sequence of tokens <code>x_1 ... x_{t-1}</code>, the model outputs a probability distribution over the next token <code>x_t</code>, parameterized by weights <code>&theta;</code> (often tens to hundreds of billions of numbers). Everything else &mdash; chat behavior, code generation, reasoning, tool use &mdash; is a <em>consequence</em> of this single objective applied at massive scale, not a separately engineered capability.</p>
+    <p>The joint probability of an entire sequence factorizes autoregressively via the chain rule of probability:</p>
+    <pre><code>P(x_1, ..., x_T) = &Pi;_{t=1}^{T} P(x_t | x_1, ..., x_{t-1})</code></pre>
+    <p>This factorization is why LLMs generate text one token at a time, left to right &mdash; it is baked into the mathematical decomposition of the objective, not an arbitrary implementation choice.</p>
+    <p>The architecture that computes <code>P(x_t | x_&lt;t; &theta;)</code> at scale, efficiently and trainably, is the <strong>Transformer</strong>, introduced in Vaswani et al., 2017 ("Attention Is All You Need"). Almost every LLM in production today &mdash; GPT, Claude, Gemini, LLaMA, Mistral &mdash; is a descendant of this architecture, typically the decoder-only variant.</p>
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1706.03762" rel="noopener noreferrer">Attention Is All You Need (Vaswani et al., 2017)</a></small></p>
+  </section>
+
+  <section id="sec2">
+    <h2>2. Tokenization: Turning Text Into Numbers</h2>
+    <p>Neural networks operate on continuous vectors, not characters. The first step is converting raw text into a sequence of integer IDs from a fixed vocabulary. Modern LLMs use <strong>subword tokenization</strong> &mdash; most commonly <strong>Byte-Pair Encoding (BPE)</strong> or <strong>SentencePiece/Unigram</strong> models.</p>
+    <p><strong>Why not whole words?</strong> Vocabulary would explode (millions of word forms across languages, typos, rare terms), and out-of-vocabulary words would be unrepresentable.</p>
+    <p><strong>Why not individual characters?</strong> Sequences would become extremely long, straining compute (attention cost is quadratic in sequence length &mdash; see Section 18), and it would be harder for the model to learn semantic units.</p>
+    <p><strong>BPE algorithm sketch:</strong></p>
     <ul>
-      <li><strong>Pretraining</strong> on broad internet, books, and code corpora</li>
-      <li><strong>Supervised fine-tuning (SFT)</strong> on instruction-response pairs</li>
-      <li><strong>Post-training alignment</strong> via RLHF, DPO, or similar preference optimization</li>
-      <li><strong>Evaluation</strong> on benchmarks and custom task suites</li>
-      <li><strong>Deployment</strong> behind APIs or on owned infrastructure</li>
-      <li><strong>Monitoring and iteration</strong> as usage patterns and failure modes surface</li>
+      <li>Start with a vocabulary of individual bytes/characters.</li>
+      <li>Count all adjacent symbol pairs in a large training corpus.</li>
+      <li>Merge the most frequent pair into a new symbol; add it to the vocabulary.</li>
+      <li>Repeat until the vocabulary reaches a target size (typically 32K&ndash;200K tokens).</li>
     </ul>
+    <p>The result: common words become single tokens ("the", "is"), while rare words are split into meaningful fragments ("tokenization" &rarr; "token" + "ization"). This gives a good trade-off between sequence length and vocabulary size, and guarantees any input string is representable (fallback to raw bytes).</p>
+    <p>Each token ID is just an index &mdash; the <em>meaning</em> is not yet encoded anywhere. That's the job of the embedding layer.</p>
+  </section>
+
+  <section id="sec3">
+    <h2>3. Embeddings and the Representation Space</h2>
+    <p>Each token ID <code>i</code> is mapped to a dense vector via an embedding matrix <code>E &isin; R^{V &times; d}</code>, where <code>V</code> is vocabulary size and <code>d</code> is the model's hidden dimension (e.g., 4096, 8192, 12288 depending on scale).</p>
+    <pre><code>e_i = E[i, :]   &isin; R^d</code></pre>
+    <p>This embedding is a learned lookup table &mdash; nothing more than a matrix multiplication with a one-hot vector, in effect. Initially these vectors are random; training shapes the space so that tokens used in similar contexts end up geometrically close (the distributional hypothesis: "a word is characterized by the company it keeps," Firth, 1957).</p>
+    <p>Critically, the raw embedding carries <strong>no information about position</strong>. <code>e_i</code> for the token "bank" is identical whether it's the first word in the sequence or the fiftieth. Position must be injected separately (Section 7), because the core attention operation itself is permutation-invariant &mdash; it treats its input as a <em>set</em>, not a <em>sequence</em>, unless told otherwise.</p>
+  </section>
+
+  <section id="sec4">
+    <h2>4. The Core Problem Attention Solves</h2>
+    <p>Before transformers, sequence models were dominated by <strong>RNNs/LSTMs</strong>, which process tokens one at a time, carrying a hidden state forward. Two structural problems:</p>
+    <ul>
+      <li><strong>Sequential computation</strong> &mdash; you cannot process token 50 until token 49 has been processed, so training cannot be parallelized across the sequence dimension. This is brutal for GPU utilization at scale.</li>
+      <li><strong>Long-range dependency decay</strong> &mdash; information about token 1 has to survive being compressed and overwritten through 49 intermediate hidden-state updates to influence token 50. Gradients vanish or explode across long distances.</li>
+    </ul>
+    <p><strong>Attention</strong> was originally introduced (Bahdanau et al., 2014) as a patch on top of RNNs, letting a decoder "look back" at all encoder hidden states weighted by relevance rather than relying solely on a single compressed context vector. Vaswani et al.'s insight, formalized in the 2017 paper, was radical in its simplicity: <em>throw away the recurrence entirely and build the whole model out of attention</em>. Hence the title.</p>
     <div class="callout">
-      <strong>Base vs instruct vs chat:</strong> Base models predict continuation without instruction following. Instruct/chat variants are fine-tuned for conversational use and should be the default in product features unless you explicitly need raw completion behavior.
+      <strong>Core idea:</strong> for every token, directly compute a weighted combination of <em>every other token's representation</em>, where the weights are learned functions of content similarity &mdash; not fixed by distance, not degraded by sequential propagation. This is what enables full parallelization during training and near-arbitrary long-range dependency modeling in a single layer.
     </div>
   </section>
 
-  <section>
-    <h2>Open Weights vs API Models</h2>
-    <h3>API-hosted models</h3>
-    <p>Providers like OpenAI, Anthropic, and Google host models behind HTTP APIs. You get fast iteration, no GPU ops burden, and regular capability upgrades. Tradeoffs include data residency policies, per-token cost at scale, rate limits, and less control over weights or fine-tuning depth.</p>
-    <h3>Open-weight models</h3>
-    <p>Models such as LLaMA, Mistral, and Qwen ship downloadable weights. You control deployment, fine-tuning, and data flow. Tradeoffs include infrastructure cost, safety tuning responsibility, and keeping up with upstream releases.</p>
-    <p>Many products use a hybrid: API models for complex queries, open models for high-volume or privacy-sensitive paths.</p>
+  <section id="sec5">
+    <h2>5. Scaled Dot-Product Attention &mdash; Full Derivation</h2>
+    <p>This is the mathematical heart of the transformer. Every token's representation is projected into three different vectors using three separate learned weight matrices:</p>
+    <pre><code>Q = X W_Q     (Query)
+K = X W_K     (Key)
+V = X W_V     (Value)</code></pre>
+    <p>Where <code>X &isin; R^{n &times; d}</code> is the matrix of input embeddings for a sequence of length <code>n</code>, and <code>W_Q, W_K, W_V &isin; R^{d &times; d_k}</code> are learned projection matrices.</p>
+    <p><strong>Intuition first.</strong> Think of it as a soft, differentiable database lookup:</p>
+    <ul>
+      <li>The <strong>Query</strong> represents "what information am I looking for, from this token's point of view?"</li>
+      <li>The <strong>Key</strong> represents "what information do I contain, that other tokens might want?"</li>
+      <li>The <strong>Value</strong> represents "what information do I actually contribute, if selected?"</li>
+    </ul>
+    <p>For every pair of tokens <code>(i, j)</code>, we measure how relevant token <code>j</code> is to token <code>i</code> by taking the dot product of <code>i</code>'s query and <code>j</code>'s key: <code>q_i &middot; k_j</code>. A large dot product means the vectors are well-aligned in the learned space &mdash; high relevance.</p>
+    <p><strong>Step 1 &mdash; Similarity scores.</strong> Compute all pairwise dot products at once via matrix multiplication:</p>
+    <pre><code>S = Q K^T     &isin; R^{n &times; n}</code></pre>
+    <p><code>S[i, j]</code> is the raw (unnormalized) relevance of token <code>j</code> to token <code>i</code>.</p>
+    <p><strong>Step 2 &mdash; Scaling.</strong> Divide by <code>&radic;d_k</code>:</p>
+    <pre><code>S_scaled = S / &radic;d_k</code></pre>
+    <p><em>Why this specific scaling?</em> If <code>q</code> and <code>k</code> are vectors whose components are independent random variables with mean 0 and variance 1, their dot product <code>q &middot; k = &Sigma;_{l=1}^{d_k} q_l k_l</code> has variance <code>d_k</code> (variance of a sum of <code>d_k</code> independent products, each with variance 1). As <code>d_k</code> grows, the dot products grow large in magnitude. Large logits pushed into a softmax produce an extremely peaked, near one-hot distribution, which drives the gradient of the softmax toward zero almost everywhere (saturated softmax &rarr; vanishing gradients). Dividing by <code>&radic;d_k</code> renormalizes the variance of the dot product back to approximately 1, regardless of dimensionality, keeping the softmax in a well-conditioned regime throughout training. This single line is why deep transformers with high-dimensional heads remain trainable at all.</p>
+    <p><strong>Step 3 &mdash; Softmax normalization.</strong> Convert scores into a valid probability distribution over "which tokens to attend to," row-wise:</p>
+    <pre><code>A[i, j] = softmax_j(S_scaled[i, :])
+        = exp(S_scaled[i,j]) / &Sigma;_k exp(S_scaled[i,k])</code></pre>
+    <p>Each row of <code>A</code> now sums to 1 &mdash; token <code>i</code> distributes 100% of its "attention budget" across all tokens in the sequence, proportional to relevance.</p>
+    <p><strong>Step 4 &mdash; Weighted aggregation of values.</strong> Use these attention weights to combine the Value vectors:</p>
+    <pre><code>Attention(Q, K, V) = A &middot; V = softmax(QK^T / &radic;d_k) &middot; V</code></pre>
+    <p>The output for token <code>i</code> is a convex combination of <em>every</em> token's Value vector, weighted by learned relevance. This entire operation &mdash; from <code>X</code> to output &mdash; is fully differentiable and computed with two matrix multiplications and one softmax, meaning it is embarrassingly parallel across the sequence dimension (unlike an RNN) and maps extremely efficiently onto GPU matrix-multiply hardware.</p>
+    <div class="callout">
+      <strong>Computational cost.</strong> <code>QK^T</code> is an <code>n &times; n</code> matrix, so both compute and memory scale as <code>O(n&sup2; d)</code>. This quadratic term in sequence length <code>n</code> is the central scaling bottleneck of transformers, discussed at length in Section 18.
+    </div>
   </section>
 
-  <section>
-    <h2>Context Windows and Modalities</h2>
-    <p>Context window is the maximum tokens a model can attend to in one forward pass. Long-context models (32K, 128K, 1M+) enable document QA, large codebases, and multi-turn agents without aggressive summarization. Long context increases KV cache memory and latency linearly (or worse without optimized attention).</p>
-    <p>Multimodal LLMs extend the same autoregressive core to images, audio, or video by encoding non-text inputs into token-like embeddings fused with text tokens. The engineering surface expands to preprocessing pipelines, modality-specific encoders, and combined safety filters.</p>
+  <section id="sec6">
+    <h2>6. Multi-Head Attention</h2>
+    <p>A single attention operation forces all relational information (syntax, coreference, semantic similarity, positional proximity, etc.) through <em>one</em> shared subspace. Multi-head attention instead runs several smaller attention operations in parallel, each in its own learned subspace, then combines them.</p>
+    <pre><code>head_i = Attention(X W_Q^i, X W_K^i, X W_V^i),   i = 1 ... h
+MultiHead(X) = Concat(head_1, ..., head_h) W_O</code></pre>
+    <p>If the model dimension is <code>d</code> and there are <code>h</code> heads, each head typically operates in dimension <code>d_k = d / h</code>, so the total compute is comparable to a single full-dimension attention operation, but the representational capacity is richer: empirically, different heads specialize &mdash; some attend to adjacent tokens (local syntax), others to the previous occurrence of the same word (coreference-like behavior), others to sentence-initial tokens (a global "attention sink"), and so on. This specialization was demonstrated via attention-pattern visualization in the original paper and extensively in later interpretability work.</p>
+    <p><code>W_O &isin; R^{(h&middot;d_k) &times; d}</code> is a final learned linear projection that mixes information across heads back into the shared residual stream (see Section 9).</p>
   </section>
 
-  <section>
-    <h2>Choosing a Model for Your Product</h2>
-    <p>Match model to workload: latency-sensitive chat may need a smaller instruct model; offline batch summarization can use a larger model; code tasks benefit from code-heavy training data; regulated industries may require on-prem open weights. Evaluate on your own data early. Public leaderboard scores are a starting point, not a substitute for domain-specific eval sets.</p>
+  <section id="sec7">
+    <h2>7. Positional Information: Sinusoidal, Learned, RoPE, ALiBi</h2>
+    <p>Because attention is permutation-invariant (shuffle the input tokens and, absent positional signal, you get the same set of pairwise interactions), the model has no innate sense of order. Position must be injected explicitly. There have been several major approaches:</p>
+    <p><strong>Sinusoidal positional encoding (original paper).</strong> Add a fixed (non-learned), deterministic vector to each token embedding based on its position <code>pos</code>:</p>
+    <pre><code>PE(pos, 2i)   = sin(pos / 10000^(2i/d))
+PE(pos, 2i+1) = cos(pos / 10000^(2i/d))</code></pre>
+    <p>This uses a different sinusoid frequency per dimension pair. The authors chose this because for any fixed offset <code>k</code>, <code>PE(pos+k)</code> can be expressed as a <em>linear function</em> of <code>PE(pos)</code> (a rotation), which they hypothesized would let the model easily learn to attend by relative position. It also generalizes to sequence lengths not seen during training, at least in principle.</p>
+    <p><strong>Learned absolute positional embeddings.</strong> Simply learn an embedding table indexed by position, exactly like the token embedding table. Simpler, but does not generalize beyond the trained maximum length.</p>
+    <p><strong>Rotary Positional Embedding (RoPE)</strong> &mdash; used in most modern LLMs (LLaMA, GPT-NeoX-style models, and others). Instead of <em>adding</em> a positional vector, RoPE <em>rotates</em> the Query and Key vectors in 2D subspaces by an angle proportional to their absolute position, such that the dot product <code>q_i &middot; k_j</code> after rotation depends only on the <em>relative</em> position <code>(i - j)</code>, not on absolute positions:</p>
+    <pre><code>q'_m = R(m&theta;) q_m
+k'_n = R(n&theta;) k_n
+q'_m &middot; k'_n  =  f(q_m, k_n, m - n)</code></pre>
+    <p>where <code>R(&middot;)</code> is a block-diagonal rotation matrix. This relative-position property tends to generalize better to longer sequences than absolute schemes and is a major reason RoPE became the default choice.</p>
+    <p><strong>ALiBi (Attention with Linear Biases).</strong> Skips positional embeddings on the input entirely and instead directly biases the attention scores by a linear penalty proportional to distance:</p>
+    <pre><code>score(i,j) = q_i &middot; k_j / &radic;d_k &minus; m &middot; |i &minus; j|</code></pre>
+    <p>where <code>m</code> is a fixed, head-specific slope. This is cheap, requires no extra parameters, and extrapolates gracefully to sequences longer than seen during training, since it just makes distant tokens progressively less attractive rather than encoding position abstractly.</p>
+  </section>
+
+  <section id="sec8">
+    <h2>8. The Position-Wise Feed-Forward Network</h2>
+    <p>Every transformer block also contains a feed-forward network (FFN), applied <strong>independently and identically to every token position</strong> (hence "position-wise"):</p>
+    <pre><code>FFN(x) = W_2 &middot; activation(W_1 x + b_1) + b_2</code></pre>
+    <p><code>W_1 &isin; R^{d &times; d_ff}</code> expands the dimension (typically <code>d_ff = 4d</code>), an activation function is applied elementwise, and <code>W_2 &isin; R^{d_ff &times; d}</code> projects back down. The original paper used ReLU; modern LLMs typically use <strong>GeLU</strong> or <strong>SwiGLU</strong> variants, which are smoother and empirically improve optimization and downstream quality:</p>
+    <pre><code>SwiGLU(x) = (Swish(x W_a)) &otimes; (x W_b)
+Swish(z) = z &middot; sigmoid(z)</code></pre>
+    <p>Conceptually: <strong>attention moves information between token positions; the FFN processes information within a token position.</strong> They are complementary operations, and interleaving them repeatedly across many layers is what allows the network to build increasingly abstract representations &mdash; early layers tend to capture local syntax and surface patterns, deeper layers capture longer-range semantics, discourse structure, and task-relevant abstractions.</p>
+    <p>The FFN typically accounts for roughly two-thirds of a transformer's parameters, since <code>d_ff</code> is usually 4x <code>d</code> and there are two such matrices per layer.</p>
+  </section>
+
+  <section id="sec9">
+    <h2>9. Residual Connections and Layer Normalization</h2>
+    <p>Stacking dozens of attention + FFN blocks (modern LLMs commonly have 30&ndash;120+ layers) creates a very deep network, which is notoriously hard to train due to vanishing/exploding gradients. Two techniques make this tractable:</p>
+    <p><strong>Residual (skip) connections.</strong> Instead of a layer computing <code>y = F(x)</code>, it computes <code>y = x + F(x)</code>. During backpropagation, the gradient has a direct additive path back to earlier layers (<code>&part;y/&part;x</code> includes an identity term), so gradients don't have to survive being multiplied through dozens of nonlinear transformations to reach early layers. This is the single most important trick that makes 100+ layer networks trainable at all (originally from ResNets, He et al., 2015).</p>
+    <p><strong>Layer Normalization.</strong> Normalizes activations across the feature dimension for each token independently:</p>
+    <pre><code>LN(x) = &gamma; &middot; (x &minus; &mu;) / &radic;(&sigma;&sup2; + &epsilon;) + &beta;</code></pre>
+    <p>where <code>&mu;</code>, <code>&sigma;&sup2;</code> are the mean and variance computed across the <code>d</code> feature dimensions of a single token's vector, and <code>&gamma;, &beta;</code> are learned scale/shift parameters. This stabilizes the distribution of activations flowing into each sublayer, which in turn stabilizes gradients.</p>
+    <p><strong>Post-LN vs Pre-LN.</strong> The original paper applied LayerNorm <em>after</em> the residual addition ("Post-LN"):</p>
+    <pre><code>x_{l+1} = LN(x_l + Sublayer(x_l))</code></pre>
+    <p>Most modern large-scale LLMs instead use <strong>Pre-LN</strong>, normalizing <em>before</em> the sublayer:</p>
+    <pre><code>x_{l+1} = x_l + Sublayer(LN(x_l))</code></pre>
+    <p>Pre-LN keeps the residual stream itself un-normalized and additive end-to-end, which empirically gives much more stable training at large depth and removes the need for careful learning-rate warmup tuning that Post-LN required. Many current models (LLaMA-family and others) further replace LayerNorm with <strong>RMSNorm</strong>, which normalizes only by root-mean-square magnitude (dropping the mean-centering step), which is cheaper and empirically just as effective:</p>
+    <pre><code>RMSNorm(x) = &gamma; &middot; x / &radic;(mean(x&sup2;) + &epsilon;)</code></pre>
+  </section>
+
+  <section id="sec10">
+    <h2>10. The Full "Attention Is All You Need" Architecture</h2>
+    <p>The original transformer is an <strong>encoder-decoder</strong> model, designed for sequence-to-sequence tasks like machine translation. It's worth dissecting fully, since almost every architectural component used in modern LLMs traces back to it.</p>
+    <pre><code>INPUT SEQUENCE                         OUTPUT SEQUENCE (shifted right)
+     &#9474;                                          &#9474;
+Token Embed + PosEnc                    Token Embed + PosEnc
+     &#9474;                                          &#9474;
+&#9484;&#9472;&#9472;&#9472;&#9472;&#9632;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9490;                      &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9632;&#9472;&#9472;&#9472;&#9472;&#9490;
+&#9474;   ENCODER     &#9474;                      &#9474;      DECODER      &#9474;
+&#9474;  (&times; N layers) &#9474;                      &#9474;    (&times; N layers)   &#9474;
+&#9474;               &#9474;                      &#9474;                    &#9474;
+&#9474; Multi-Head    &#9474;                      &#9474; Masked Multi-Head  &#9474;
+&#9474; Self-Attention&#9474;                      &#9474; Self-Attention     &#9474;
+&#9474;      &#9474;        &#9474;                      &#9474;       &#9474;            &#9474;
+&#9474;  Add &amp; Norm   &#9474;                      &#9474;   Add &amp; Norm       &#9474;
+&#9474;      &#9474;        &#9474;                      &#9474;       &#9474;            &#9474;
+&#9474;      &#9474;        &#9474;        K,V from      &#9474; Cross-Attention    &#9474;
+&#9474;      &#9474;        &#9474;&#9668;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;encoder&#9472;&#9472;&#9472;&#9472;&#9474; (Q from decoder,   &#9474;
+&#9474;      &#9474;        &#9474;        output        &#9474;  K,V from encoder) &#9474;
+&#9474;      &#9474;        &#9474;                      &#9474;       &#9474;            &#9474;
+&#9474;      &#9474;        &#9474;                      &#9474;   Add &amp; Norm       &#9474;
+&#9474;      &#9474;        &#9474;                      &#9474;       &#9474;            &#9474;
+&#9474;  Feed-Forward &#9474;                      &#9474;  Feed-Forward       &#9474;
+&#9474;      &#9474;        &#9474;                      &#9474;       &#9474;            &#9474;
+&#9474;  Add &amp; Norm   &#9474;                      &#9474;   Add &amp; Norm        &#9474;
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9576;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;                      &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9576;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+     &#9474;                                            &#9474;
+     &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9576; encoder output (context) &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9576;
+                                                    &#9474;
+                                          Linear &#8594; Softmax
+                                                    &#9474;
+                                          Output probabilities
+                                          over next token</code></pre>
+    <p><strong>Encoder stack.</strong> Each of the <code>N</code> identical layers has two sublayers: (1) multi-head <em>self</em>-attention, where queries, keys, and values all come from the same input sequence &mdash; every input token can attend to every other input token, in both directions (no masking), and (2) the position-wise FFN. Each sublayer is wrapped in a residual connection + LayerNorm. The encoder's job is to build a rich, bidirectional contextual representation of the <em>entire</em> input sequence.</p>
+    <p><strong>Decoder stack.</strong> Each layer has <em>three</em> sublayers: (1) <strong>masked</strong> multi-head self-attention over the output sequence generated so far, (2) multi-head <strong>cross-attention</strong>, where the queries come from the decoder but the keys and values come from the <em>encoder's</em> output &mdash; this is how the decoder "reads" the source sequence while generating the target, and (3) the position-wise FFN.</p>
+    <div class="callout">
+      <strong>Masking in the decoder.</strong> The self-attention in the decoder must not be allowed to look at future tokens (that would be cheating &mdash; trivially copying the answer during training). This is enforced with a <strong>causal mask</strong>: before the softmax, all positions <code>j &gt; i</code> are set to <code>&minus;&infin;</code> in the score matrix <code>S</code>, so <code>exp(&minus;&infin;) = 0</code> and those tokens receive exactly zero attention weight. This is one of the most important structural choices in the whole architecture, and it's the piece that carries forward almost unchanged into modern decoder-only LLMs.
+    </div>
+    <p><strong>Final projection.</strong> The decoder's final hidden states are projected through a linear layer back to vocabulary size <code>V</code>, then softmaxed to produce <code>P(x_t | x_&lt;t)</code>. In many implementations this final projection matrix is <strong>tied</strong> (weight-shared) with the input embedding matrix <code>E</code>, which reduces parameter count and has been shown to improve quality.</p>
+  </section>
+
+  <section id="sec11">
+    <h2>11. From Encoder-Decoder to Decoder-Only: How GPT-Style LLMs Diverge</h2>
+    <p>Machine translation needs an encoder (to fully understand a <em>fixed</em> source sentence bidirectionally) and a decoder (to generate a target sentence conditioned on it). But most of what we now call "LLMs" &mdash; GPT, Claude, LLaMA, Gemini &mdash; are <strong>decoder-only</strong>. Why?</p>
+    <p>The generative task these models are trained on is open-ended text continuation, where there's no clean separation between "source" and "target": the entire prompt <em>and</em> the entire response are just one long token sequence to be modeled autoregressively. There's no need for a separate bidirectional encoder module &mdash; the causal (masked) self-attention decoder alone, applied to the <em>whole</em> sequence (prompt + generation), is sufficient, and it's architecturally simpler:</p>
+    <pre><code>[prompt tokens] [response tokens]
+        &#9492;&#9472;&#9472; all attend causally, left to right, over the whole thing &#9472;&#9472;&#9576;</code></pre>
+    <p>A decoder-only transformer layer is therefore just: <strong>masked multi-head self-attention &rarr; Add &amp; Norm &rarr; FFN &rarr; Add &amp; Norm</strong>, repeated N times, with no cross-attention sublayer and no separate encoder. This simplification, combined with removing the encoder-decoder split, is essentially what "GPT" (Radford et al., 2018) did to the original transformer &mdash; reusing the decoder stack from Vaswani et al. almost verbatim, minus cross-attention, and training it purely as a next-token predictor over huge unlabeled text corpora. Every "chat" LLM you interact with today is architecturally this decoder-only stack, scaled up by orders of magnitude in parameters and training data, with additional alignment stages layered on top (Section 15).</p>
+    <p>Other architectural families exist for completeness: <strong>encoder-only</strong> models (like BERT) drop the causal mask and are trained with <em>masked</em> language modeling (predict randomly hidden tokens using full bidirectional context) &mdash; excellent for embeddings and classification, but not naturally suited to open-ended generation since they don't factorize autoregressively.</p>
+  </section>
+
+  <section id="sec12">
+    <h2>12. The Training Objective: Cross-Entropy and Teacher Forcing</h2>
+    <p>Given the autoregressive factorization from Section 1, training minimizes the negative log-likelihood of the training corpus:</p>
+    <pre><code>L(&theta;) = &minus; (1/T) &Sigma;_{t=1}^{T} log P(x_t | x_1, ..., x_{t-1}; &theta;)</code></pre>
+    <p>This is exactly the <strong>cross-entropy loss</strong> between the model's predicted distribution and the one-hot "true" next token, averaged over every position in every sequence in the training batch. Minimizing this is equivalent to maximizing the likelihood of the training data under the model, and it's also directly related to <strong>perplexity</strong>, a common evaluation metric:</p>
+    <pre><code>Perplexity = exp(L)</code></pre>
+    <p>Lower perplexity means the model is, on average, less "surprised" by the actual next token &mdash; a perplexity of 1 would mean perfect prediction; a perplexity of <code>V</code> (vocab size) is equivalent to random guessing.</p>
+    <p><strong>Teacher forcing.</strong> During training, the model is <em>always</em> fed the ground-truth previous tokens as input when predicting position <code>t</code>, never its own (possibly wrong) previous predictions. Combined with the causal mask, this means the entire loss for an <code>n</code>-token sequence can be computed in a <strong>single forward pass</strong> &mdash; every position's prediction and loss term is computed in parallel, not sequentially, because the mask already guarantees position <code>t</code> cannot see positions <code>&gt; t</code>. This is a crucial efficiency win: training a decoder-only transformer is fully parallel across both the batch dimension <em>and</em> the sequence dimension, which is precisely what makes training on trillions of tokens on GPU/TPU clusters computationally feasible. (This is in contrast to <em>inference</em>, where generation genuinely must proceed token by token, since future tokens don't exist yet &mdash; Section 17.)</p>
+  </section>
+
+  <section id="sec13">
+    <h2>13. Optimization Mechanics: Adam, Warmup, and Stability</h2>
+    <p>LLMs are trained with variants of <strong>Adam</strong> (Kingma &amp; Ba, 2014), specifically <strong>AdamW</strong> (Adam with decoupled weight decay), which maintains per-parameter adaptive learning rates using running estimates of the first and second moments of the gradient:</p>
+    <pre><code>m_t = &beta;1 m_{t-1} + (1 &minus; &beta;1) g_t          (momentum)
+v_t = &beta;2 v_{t-1} + (1 &minus; &beta;2) g_t&sup2;         (adaptive scale)
+&theta;_t = &theta;_{t-1} &minus; &eta; &middot; m&#770;_t / (&radic;v&#770;_t + &epsilon;) &minus; &eta;&middot;&lambda;&middot;&theta;_{t-1}   (weight decay term)</code></pre>
+    <p>Two stability techniques are essentially universal in LLM pretraining:</p>
+    <p><strong>Learning-rate warmup then decay.</strong> The learning rate is linearly ramped up from ~0 over the first several hundred to few thousand steps, then decayed (cosine or linear schedule) over the rest of training. Early in training, gradients from randomly initialized weights can be large and noisy; warmup prevents an initial large update from destabilizing the whole optimization trajectory, especially important in Post-LN architectures and still commonly used even with the more stable Pre-LN.</p>
+    <p><strong>Gradient clipping.</strong> Gradient norms are clipped to a maximum value (e.g., 1.0) before the optimizer step, to prevent rare large-magnitude gradient spikes &mdash; common in very deep, very large models &mdash; from causing loss divergence.</p>
+    <p>At the scale of frontier models, training runs span weeks to months across thousands of accelerators, and require additional systems-level techniques (mixed-precision arithmetic, activation checkpointing, model/data/pipeline parallelism, ZeRO-style optimizer state sharding) that are as much distributed-systems engineering as they are machine learning.</p>
+  </section>
+
+  <section id="sec14">
+    <h2>14. Scaling Laws: Kaplan and Chinchilla</h2>
+    <p>A defining empirical discovery of the last several years is that transformer loss follows remarkably smooth <strong>power-law</strong> relationships with scale, allowing researchers to <em>predict</em> the performance of a not-yet-trained model.</p>
+    <p><strong>Kaplan et al. (2020)</strong> found that loss <code>L</code> decreases as a power law in each of parameters <code>N</code>, dataset size <code>D</code>, and compute <code>C</code>, when the other two are not bottlenecking:</p>
+    <pre><code>L(N) &asymp; (N_c / N)^{&alpha;_N}
+L(D) &asymp; (D_c / D)^{&alpha;_D}</code></pre>
+    <p>Their fitted exponents suggested that, for a fixed compute budget, it was more efficient to grow model size aggressively and train on relatively fewer tokens &mdash; this guided the design of very large models like GPT-3 (175B parameters, trained on roughly 300B tokens).</p>
+    <p><strong>Chinchilla (Hoffmann et al., 2022)</strong> re-ran this analysis more carefully and reached a different conclusion: most large models of that era were significantly <strong>under-trained</strong> relative to their parameter count. For a fixed compute budget <code>C &asymp; 6ND</code> (a standard approximation for transformer training FLOPs, where the factor of 6 accounts for the forward and backward pass matrix multiplications), the compute-optimal allocation is roughly:</p>
+    <pre><code>N_opt &prop; C^{0.5}
+D_opt &prop; C^{0.5}</code></pre>
+    <p>i.e., <strong>parameters and training tokens should scale roughly equally</strong>, not skewed toward parameters. Their rule of thumb &mdash; train on roughly 20 tokens per parameter &mdash; reshaped how the field allocates compute. A 70B-parameter Chinchilla-optimal model trained on ~1.4 trillion tokens outperformed the much larger, less-tokens-per-parameter Gopher (280B) and GPT-3 (175B) on a broad evaluation suite, despite requiring far less inference compute.</p>
+    <div class="callout">
+      <strong>A crucial nuance for practitioners:</strong> "compute-optimal" only minimizes <em>training</em> loss for a given training compute budget. It says nothing about inference cost, which is paid every single time the model is queried, potentially billions of times over its deployment life. This has pushed the field further: many current models are trained well beyond the naive Chinchilla-optimal token count ("overtrained" relative to N), deliberately trading extra (one-time) training compute for a smaller, cheaper-to-serve model that's just as capable &mdash; because amortized inference cost, not training cost, dominates total lifecycle cost for widely-deployed models.
+    </div>
+  </section>
+
+  <section id="sec15">
+    <h2>15. The Modern Training Pipeline: Pretraining &rarr; SFT &rarr; RLHF/DPO</h2>
+    <p>A raw pretrained model &mdash; trained purely on next-token prediction over broad internet-scale text &mdash; is a <strong>base model</strong>. It is extremely good at continuing text in the <em>statistical</em> pattern of its training distribution, but it has no notion of "being a helpful assistant." Ask it a question, and it may just as easily continue with a <em>list of similar questions</em> (because that pattern is common in its training data) rather than answering. Turning a base model into an assistant requires additional post-training stages:</p>
+    <p><strong>1. Supervised Fine-Tuning (SFT).</strong> The base model is further trained on a smaller, curated dataset of (prompt, ideal response) pairs, using the exact same next-token cross-entropy loss as pretraining, but now the "ground truth" is a human- or model-written high-quality answer rather than arbitrary internet text. This teaches the model the <em>format and register</em> of instruction-following/dialogue.</p>
+    <p><strong>2. Preference-based alignment: RLHF or DPO.</strong> SFT alone doesn't teach nuanced <em>quality</em> judgments (helpfulness, harmlessness, honesty, style preferences) &mdash; it only imitates fixed examples. Preference optimization instead trains on comparisons: given a prompt and two candidate responses, humans (or a trained reward model) indicate which is better.</p>
+    <ul>
+      <li><strong>RLHF (Reinforcement Learning from Human Feedback)</strong>, popularized by InstructGPT (Ouyang et al., 2022): first train a separate <strong>reward model</strong> <code>r_&phi;(x, y)</code> on human preference comparisons to predict a scalar "quality" score, typically via the Bradley-Terry pairwise comparison model:
+        <pre><code>P(y_w &#8827; y_l | x) = &sigma;(r_&phi;(x, y_w) &minus; r_&phi;(x, y_l))</code></pre>
+        Then fine-tune the language model itself with reinforcement learning (typically <strong>PPO</strong>) to maximize this reward, usually with a KL-divergence penalty against the SFT model to prevent the policy from drifting so far that it degenerates or "reward hacks":
+        <pre><code>objective = E[r_&phi;(x, y)] &minus; &beta; &middot; KL(&pi;_&theta;(y|x) &Vert; &pi;_SFT(y|x))</code></pre>
+      </li>
+      <li><strong>DPO (Direct Preference Optimization)</strong>, a more recent and increasingly popular alternative: it shows that the RLHF objective above has a closed-form optimal policy, which allows deriving a loss function that directly optimizes the language model on preference pairs <em>without</em> needing a separate reward model or RL loop at all:
+        <pre><code>L_DPO(&theta;) = &minus; log &sigma;( &beta; log[&pi;_&theta;(y_w|x)/&pi;_ref(y_w|x)] &minus; &beta; log[&pi;_&theta;(y_l|x)/&pi;_ref(y_l|x)] )</code></pre>
+        This is simpler to implement and tune, more stable (no RL instability), and has become widely used, though large-scale frontier labs often still use RL-based approaches (or hybrids) for their added flexibility, especially for training against automated/verifiable reward signals (e.g., in code or math, where correctness can be checked programmatically rather than judged by human preference alone).
+      </li>
+    </ul>
+    <p><strong>3. Additional stages in practice</strong> commonly include: safety-specific fine-tuning/red-teaming rounds, tool-use/agentic training, rejection sampling against a reward model to generate higher-quality SFT data, and iterative rounds of feedback collection as the model itself is used to generate candidate responses for further human/AI review (a loop sometimes called "RLAIF" when the feedback signal comes from another model rather than a human).</p>
+  </section>
+
+  <section id="sec16">
+    <h2>16. Emergent Abilities and In-Context Learning</h2>
+    <p>One of the most striking empirical phenomena in LLM research is <strong>in-context learning (ICL)</strong>: a sufficiently large pretrained model can perform a new task purely from a handful of examples given <em>in the prompt</em>, with zero gradient updates to its weights.</p>
+    <pre><code>Prompt:
+"cheerful &rarr; happy
+ furious &rarr; angry
+ gigantic &rarr; "
+Model completes: "huge"</code></pre>
+    <p>No parameter update happened here &mdash; the model's forward pass alone, conditioned on the pattern present in the prompt, is enough to induce task-appropriate behavior. This wasn't explicitly engineered; it emerged from scale and training data diversity. Mechanistically, one influential hypothesis (Olsson et al., 2022, on "induction heads") is that certain attention head circuits learn during pretraining to implement a general pattern-completion algorithm &mdash; roughly, "find where this exact prefix occurred earlier in context, and copy what followed it" &mdash; and this generic copying/completion circuit, learned purely to minimize next-token loss on ordinary text, turns out to generalize into a surprisingly powerful few-shot learning mechanism.</p>
+    <p><strong>Emergent abilities</strong> more broadly refers to capabilities (multi-step arithmetic, certain reasoning benchmarks) that appear to be near-zero for smaller models and then increase sharply once a model crosses a certain scale threshold &mdash; the capability appears to "emerge" rather than improve smoothly. This is an active and somewhat contested research area: some argue these are genuine phase transitions in capability; others (Schaefer et al., 2023) argue much of the apparent discontinuity is an artifact of using discontinuous evaluation metrics (like exact-match accuracy) on tasks where the underlying model quality is actually improving smoothly and continuously &mdash; a smooth increase in per-token probability of the correct answer can look like a sudden jump if you only measure whether the <em>exact</em> final answer is fully correct.</p>
+  </section>
+
+  <section id="sec17">
+    <h2>17. Inference: KV Caching, Sampling, and Decoding Strategies</h2>
+    <p>Training computes losses for a whole sequence in parallel (Section 12), but <strong>inference is inherently sequential</strong>: to generate token <code>t+1</code>, you need to know token <code>t</code>, which the model just generated. This creates a major engineering challenge distinct from training.</p>
+    <p><strong>KV Caching.</strong> Naively, generating each new token would require re-running the full forward pass over the <em>entire</em> sequence so far, recomputing Key and Value projections for every previous token &mdash; wasteful, since those don't change once computed (causal masking guarantees position <code>i</code>'s Key/Value never depend on future tokens). Instead, implementations <strong>cache</strong> the Key and Value vectors for all previous tokens, and at each new step only compute Q, K, V for the <em>single new token</em>, then attend over the cached K/V plus the new one. This turns each generation step's attention cost from <code>O(n&sup2;)</code> (recomputing everything) down to <code>O(n)</code> (just the new token attending over cached history), at the cost of memory to store the growing KV cache &mdash; which itself becomes a major memory bottleneck at long context lengths and large batch sizes, motivating techniques like Multi-Query Attention (MQA) and Grouped-Query Attention (GQA), where multiple query heads share a single set of Key/Value projections, shrinking the cache substantially with minimal quality loss.</p>
+    <p><strong>Decoding strategies</strong> &mdash; how to turn the model's output probability distribution into an actual chosen next token:</p>
+    <ul>
+      <li><strong>Greedy decoding</strong>: always pick <code>argmax P(x_t | x_&lt;t)</code>. Deterministic, but often produces bland, repetitive text, and is not globally optimal (a locally best token can lead down a low-probability path overall).</li>
+      <li><strong>Beam search</strong>: track the <code>k</code> highest-probability partial sequences at each step. Common in translation/summarization; less common for open-ended chat, where it tends to produce generic, repetitive output.</li>
+      <li><strong>Temperature sampling</strong>: rescale logits before softmax by a temperature <code>&tau;</code>: <code>P(x) &prop; exp(logit_x / &tau;)</code>. <code>&tau; &lt; 1</code> sharpens the distribution (more deterministic, conservative); <code>&tau; &gt; 1</code> flattens it (more random, diverse); <code>&tau; &rarr; 0</code> recovers greedy decoding.</li>
+      <li><strong>Top-k sampling</strong>: restrict sampling to only the <code>k</code> highest-probability tokens, renormalize, then sample &mdash; prevents sampling from the long, low-quality tail of the distribution.</li>
+      <li><strong>Top-p (nucleus) sampling</strong>: restrict sampling to the smallest set of tokens whose cumulative probability exceeds threshold <code>p</code> (e.g., 0.9) &mdash; adapts the candidate pool size to how peaked or flat the distribution is at each step, unlike top-k's fixed cutoff.</li>
+    </ul>
+    <p>Production chat systems typically combine temperature with top-p and/or top-k, tuned per use case (near-deterministic for code generation, more diverse for creative writing).</p>
+  </section>
+
+  <section id="sec18">
+    <h2>18. The Quadratic Bottleneck and Long-Context Solutions</h2>
+    <p>As established in Section 5, standard self-attention costs <code>O(n&sup2; &middot; d)</code> in compute and <code>O(n&sup2;)</code> in memory for the attention score matrix, where <code>n</code> is sequence length. Doubling context length quadruples the attention cost. This has driven substantial systems and algorithmic research:</p>
+    <p><strong>FlashAttention</strong> (Dao et al., 2022) doesn't reduce the asymptotic <code>O(n&sup2;)</code> compute, but dramatically reduces the memory <em>movement</em> cost &mdash; it restructures the computation to avoid ever materializing the full <code>n &times; n</code> attention matrix in slow GPU high-bandwidth memory, instead computing attention in fused, tiled blocks that stay in fast on-chip SRAM, exploiting the fact that GPU kernels are frequently memory-bandwidth-bound rather than compute-bound. This alone gave several-fold real-world speedups and is near-universally used in production training and inference stacks today.</p>
+    <p><strong>Sparse / local attention</strong> patterns restrict which token pairs are allowed to attend to each other at all (e.g., sliding-window local attention plus periodic global tokens, as in Longformer), trading some modeling flexibility for genuinely sub-quadratic asymptotic cost.</p>
+    <p><strong>Linear attention / state-space models</strong> (e.g., Mamba, and other SSM-based architectures) reformulate the sequence-mixing operation entirely to avoid the pairwise <code>n &times; n</code> structure, achieving <code>O(n)</code> complexity, at the cost of a still-ongoing research question about whether they can match transformer quality at the largest scales, particularly for tasks requiring precise long-range retrieval.</p>
+    <p><strong>Extending trained context length post-hoc</strong>: techniques like position-interpolation or NTK-aware scaling of RoPE's frequency base allow a model trained at one context length (say 4K tokens) to be adapted, often with modest additional fine-tuning, to operate at a much longer context length (say 128K), by rescaling the positional rotation frequencies rather than retraining from scratch.</p>
+  </section>
+
+  <section id="sec19">
+    <h2>19. Mixture-of-Experts and Modern Architectural Variants</h2>
+    <p>Instead of every token passing through the same dense FFN, a <strong>Mixture-of-Experts (MoE)</strong> layer maintains multiple parallel FFN "experts," and a small learned <strong>router</strong> network selects (typically) the top 1 or 2 experts per token:</p>
+    <pre><code>router_logits = x W_r
+top_k experts selected via softmax(router_logits)
+output = &Sigma;_{i &isin; top_k} gate_i &middot; Expert_i(x)</code></pre>
+    <p>This decouples <strong>total parameter count</strong> from <strong>compute-per-token</strong>: a model can have, say, 8x the total parameters of a dense model, but since each token only activates 1-2 of the 8 experts, the FLOPs per token remain similar to a much smaller dense model. This gives more model capacity (useful for memorization/breadth of knowledge) without a proportional inference cost increase &mdash; though it introduces its own engineering challenges (load balancing across experts, routing collapse where the router degenerates to always picking the same expert, and increased memory footprint since all experts must be loaded even if not all are active per token).</p>
+    <p>Other widely-adopted architectural refinements beyond what's covered above include: <strong>Grouped-Query Attention</strong> (Section 17, memory-efficient KV caching), <strong>SwiGLU activations</strong> (Section 8), <strong>RMSNorm</strong> (Section 9), and various normalization-placement tweaks (e.g., normalizing Query/Key vectors themselves before the dot product, "QK-Norm," to further improve training stability at very large scale).</p>
+  </section>
+
+  <section id="sec20">
+    <h2>20. Multimodality</h2>
+    <p>Extending an LLM beyond text follows the same underlying architecture, with the key change happening <em>before</em> the transformer stack: a modality-specific <strong>encoder</strong> converts non-text input (images, audio, video) into a sequence of continuous embedding vectors that live in (or are projected into) the same representational space as text token embeddings, and these are simply concatenated into the input sequence alongside text tokens.</p>
+    <p>For images, a common approach: split the image into fixed-size patches (e.g., 16&times;16 pixels), linearly project each flattened patch into a <code>d</code>-dimensional vector (this is the <strong>Vision Transformer / ViT</strong> patch-embedding approach, Dosovitskiy et al., 2020), optionally pass them through a dedicated vision encoder/adapter, and feed the resulting sequence of "image tokens" into the same transformer stack that processes text &mdash; the model then attends across text and image tokens uniformly, since after this initial encoding step they're just vectors in a shared embedding space to the rest of the network. Audio follows an analogous pattern (spectrogram patches or learned audio-token codecs). This is why multimodal capability, once the encoder/projection interface is built, requires no fundamental change to the transformer core itself &mdash; the attention and FFN mechanics described in Sections 5&ndash;9 are entirely modality-agnostic.</p>
+  </section>
+
+  <section id="sec21">
+    <h2>21. The Whole Story, End to End</h2>
+    <p>Pull the threads together, from raw text to a generated reply:</p>
+    <p>A string of text is first <strong>tokenized</strong> into subword units and mapped to integer IDs. Each ID is looked up in an <strong>embedding table</strong>, producing a dense vector per token &mdash; but these vectors alone carry no sense of order, so a <strong>positional signal</strong> (sinusoidal, learned, or rotary) is woven in.</p>
+    <p>This sequence of vectors flows into a stack of dozens of identical transformer blocks. In each block, <strong>multi-head self-attention</strong> lets every token look at every earlier token (causally masked, so no peeking at the future), computing relevance via scaled dot products between Queries and Keys, and pulling in a weighted blend of Values &mdash; this is how "bank" figures out from context whether it means a riverbank or a financial institution, and how a pronoun ties back to its antecedent three sentences earlier. A <strong>residual connection</strong> carries the original signal forward unchanged alongside this new contextual information, and <strong>normalization</strong> keeps the numbers well-behaved. Then a <strong>feed-forward network</strong> processes each token's now-contextualized vector independently, transforming it through a learned nonlinear function &mdash; again wrapped in a residual connection and normalization. Stack this attention-then-FFN pattern thirty, sixty, a hundred-plus times, and the representations grow from raw token identity into something capturing grammar, facts, reasoning chains, and task intent.</p>
+    <p>At the very end, the final layer's output vector for the last token is projected back into vocabulary-sized logits and turned into a probability distribution via softmax &mdash; the model's best guess at what token comes next. During training, this whole pipeline runs in parallel across an entire sequence at once, and the difference between predicted and actual next tokens (cross-entropy loss) drives billions of tiny weight adjustments via backpropagation and Adam, repeated across trillions of tokens of text, guided by scaling laws that tell researchers roughly how many parameters and tokens to use for a given compute budget.</p>
+    <p>That process alone yields a <strong>base model</strong> &mdash; an extremely capable but undirected text-continuation engine. Additional stages &mdash; supervised fine-tuning on curated instruction examples, then preference optimization (RLHF or DPO) using human judgments of response quality &mdash; reshape this raw continuation engine into something that reliably behaves like a helpful, aligned assistant rather than just an autocomplete engine.</p>
+    <p>Finally, at the moment you actually chat with the model, <strong>inference</strong> kicks in: tokens are generated one at a time, each new token's Key/Value cached to avoid redundant recomputation, with a sampling strategy (temperature, top-p) deciding how deterministic versus creative each choice should be &mdash; and the whole cycle repeats, one token at a time, until the model produces a stop token or reaches a length limit, at which point what started as a raw string of text has become, forty-plus transformer layers and one training pipeline later, a reply.</p>
+  </section>
+
+  <section id="sec22">
+    <h2>22. Plain English Recap</h2>
+    <ul>
+      <li>A language model is just a very sophisticated <strong>next-word guesser</strong>, trained on enormous amounts of text.</li>
+      <li>Text is chopped into <strong>word pieces</strong> (tokens), and each piece becomes a list of numbers (a vector) that represents its meaning.</li>
+      <li>The model doesn't automatically know word <em>order</em> &mdash; it has to be told, using a positional "stamp" added to each word's vector.</li>
+      <li><strong>Attention</strong> is the trick that lets every word look at every other word in the sentence and decide how much to "pay attention" to it &mdash; like each word asking "which other words help me understand my meaning here?" and blending in the answers.</li>
+      <li><strong>Multi-head</strong> attention just means doing this look-around several times in parallel, each time focusing on a different kind of relationship (grammar, meaning, position).</li>
+      <li>After attention mixes information <em>between</em> words, a second step (the feed-forward network) processes <em>each</em> word on its own, digesting what it just learned.</li>
+      <li>These two steps &mdash; attention, then processing &mdash; are stacked dozens of times. "Shortcut" connections and number-stabilizing tricks (normalization) keep training from falling apart when you stack that many layers.</li>
+      <li>The model is trained by literally hiding the next word and asking it to guess, over and over, across a giant pile of internet text &mdash; that's the entire training signal.</li>
+      <li><strong>Scaling laws</strong> are the discovery that if you know how much computing power you have, there's a predictable "best" way to split it between making the model bigger versus giving it more text to learn from.</li>
+      <li>A model trained just on raw text prediction is smart but undirected. It's then further trained on good example conversations (<strong>supervised fine-tuning</strong>), and then taught to prefer better answers over worse ones by learning from human comparisons (<strong>RLHF/DPO</strong>) &mdash; this is what turns a raw autocomplete engine into something that behaves like a helpful assistant.</li>
+      <li>When you actually chat with it, the model produces your reply <strong>one word at a time</strong>, each time re-reading everything so far, until it decides it's done.</li>
+      <li>The same basic building blocks &mdash; attention plus per-word processing &mdash; handle images, audio, and long documents too, just by feeding in different kinds of "tokens" alongside the text ones.</li>
+    </ul>
+    <p class="refer-link"><small>Further reading: Vaswani et al., "Attention Is All You Need" (2017); Kaplan et al., "Scaling Laws for Neural Language Models" (2020); Hoffmann et al., "Training Compute-Optimal Large Language Models" (Chinchilla, 2022); Ouyang et al., "Training language models to follow instructions with human feedback" (InstructGPT/RLHF, 2022); Rafailov et al., "Direct Preference Optimization" (2023); Dao et al., "FlashAttention" (2022); Su et al., "RoFormer" (RoPE, 2021).</small></p>
   </section>
 
   <nav class="page-footer-nav">
@@ -90,5 +380,3 @@ tokens = 20 * params          # ~140B tokens for a 7B model
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-

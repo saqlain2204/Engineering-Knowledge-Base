@@ -49,7 +49,7 @@
     <p>A neural network with \(L\) layers is the composition:</p>
     <p>\[ \hat{y} = f_L\big(W_L \, f_{L-1}(\dots f_1(W_1 x + b_1) \dots) + b_L\big) \]</p>
     <p>Training adjusts every \(W_\ell\) and \(b_\ell\) (collectively called \(\theta\), the parameters) so that \(\hat{y}\) &mdash; the model's prediction &mdash; matches the true target \(y\) as closely as possible, across a whole dataset, according to some numeric measure of "closeness" called a <strong>loss function</strong>.</p>
-    <p>For a language model specifically: the input \(x\) is a sequence of token embeddings (numeric vectors representing words/subwords, see the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-tokenization.html">Tokenization</a> page), and the output \(\hat y\) is a probability distribution over every possible next token in the vocabulary. Training nudges the parameters so that the model assigns high probability to the token that actually came next in real text.</p>
+    <p>For a language model specifically: the input \(x\) is a sequence of token embeddings (numeric vectors representing words/subwords, see the <a href="../../learn/Foundations-and-Architecture/ai-engineering-tokenization.html">Tokenization</a> page), and the output \(\hat y\) is a probability distribution over every possible next token in the vocabulary. Training nudges the parameters so that the model assigns high probability to the token that actually came next in real text.</p>
 
     <p class="refer-link"><small>Refer: <a href="https://medium.com/@ankittripathi9597/understanding-gradient-flow-in-deep-neural-networks-4edd92104991" rel="noopener noreferrer">Understanding Gradient Flow in Deep Neural Networks</a> &middot; <a href="https://www.deeplearningbook.org/" rel="noopener noreferrer">Deep Learning (Goodfellow et al.)</a> &middot; <a href="http://neuralnetworksanddeeplearning.com/" rel="noopener noreferrer">Neural Networks and Deep Learning (Nielsen)</a></small></p>
 
@@ -172,7 +172,7 @@ loss = F.cross_entropy(
       <li><strong>Early stopping</strong> monitors validation loss during training and halts once it starts increasing while training loss keeps decreasing &mdash; a direct signal that the model has started memorizing rather than generalizing.</li>
       <li><strong>Parameter-efficient fine-tuning</strong> (e.g. LoRA) restricts how many parameters can move during fine-tuning by learning small low-rank update matrices instead of updating the full weight matrix, which limits how far the model's behavior can drift from its broad pretrained capabilities.</li>
     </ul>
-    <p>Mitigations more generally include gathering more/better data, scaling the model appropriately for the compute and data budget (see Scaling Laws on the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-llms.html">LLMs</a> page), and choosing regularization strength to match how much data is available.</p>
+    <p>Mitigations more generally include gathering more/better data, scaling the model appropriately for the compute and data budget (see Scaling Laws on the <a href="../../learn/Foundations-and-Architecture/ai-engineering-llms.html">LLMs</a> page), and choosing regularization strength to match how much data is available.</p>
   </section>
 
   <section>
@@ -185,7 +185,7 @@ loss = F.cross_entropy(
 
   <section>
     <h2>7. From Foundations to Transformers</h2>
-    <p>Everything above applies directly to transformer LLMs: cross-entropy next-token prediction (Section 2.1), AdamW with warmup and cosine decay (Section 2.3&ndash;2.4), RMSNorm inside blocks (Section 3.3), residual connections around attention and MLP sublayers (Section 3.2), and gated SwiGLU activations in feed-forward networks (Section 4). Understanding these primitives makes it far easier to reason about training instability, fine-tuning behavior, and why architectural choices in modern LLMs look the way they do. The next page, <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-transformers.html">Transformer Architecture</a>, builds the attention mechanism on top of exactly this foundation.</p>
+    <p>Everything above applies directly to transformer LLMs: cross-entropy next-token prediction (Section 2.1), AdamW with warmup and cosine decay (Section 2.3&ndash;2.4), RMSNorm inside blocks (Section 3.3), residual connections around attention and MLP sublayers (Section 3.2), and gated SwiGLU activations in feed-forward networks (Section 4). Understanding these primitives makes it far easier to reason about training instability, fine-tuning behavior, and why architectural choices in modern LLMs look the way they do. The next page, <a href="../../learn/Foundations-and-Architecture/ai-engineering-transformers.html">Transformer Architecture</a>, builds the attention mechanism on top of exactly this foundation.</p>
   </section>
 
   <nav class="page-footer-nav">

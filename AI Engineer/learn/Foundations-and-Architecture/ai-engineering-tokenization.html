@@ -21,14 +21,30 @@
     <h2>Why Tokenization Exists</h2>
     <p>Neural networks operate on fixed vocabularies of discrete symbols. Raw Unicode text must be split into tokens, mapped to integer IDs, and converted to embeddings. Tokenization defines the interface between human-readable text and model computation. A poor tokenizer inflates sequence length, increases inference cost, and can degrade performance on code, math, or non-English text.</p>
     <p>The fundamental tension is vocabulary size vs sequence length. Word-level tokenizers have huge vocabularies and out-of-vocabulary problems. Character-level tokenizers have tiny vocabularies but very long sequences. Subword methods balance both.</p>
+    <p>Formally, a tokenizer defines a function <code>T: &Sigma;* &rarr; V*</code> that maps an input string over an alphabet &Sigma; (raw bytes or Unicode codepoints) to a sequence of tokens drawn from a finite vocabulary <code>V</code>, together with an inverse (or near-inverse) detokenization function <code>T&#8315;&sup1;: V* &rarr; &Sigma;*</code>. For the tokenizer to be useful in a language modeling pipeline, three properties matter jointly, and they trade off against one another:</p>
+    <ul>
+      <li><strong>Losslessness / round-trip fidelity</strong> &mdash; whether <code>T&#8315;&sup1;(T(x)) = x</code> exactly, including whitespace, casing, and control characters. Byte-level schemes guarantee this; word-level schemes with an UNK token do not.</li>
+      <li><strong>Compression ratio (fertility)</strong> &mdash; the average number of tokens produced per unit of text (often measured in bytes per token, or tokens per word). Higher compression means shorter sequences for the same information content, which reduces attention compute (quadratic in sequence length for naive attention) and reduces the number of billed tokens in API-metered systems.</li>
+      <li><strong>Statistical regularity</strong> &mdash; whether the resulting token distribution is learnable, i.e., whether frequent, semantically coherent units (morphemes, common words, code identifiers) get their own token IDs rather than being fragmented unpredictably.</li>
+    </ul>
+    <p>These three properties cannot all be maximized simultaneously, which is why every modern LLM ships with a tokenizer that is co-designed (via training corpus composition and target vocabulary size) with the downstream model rather than treated as a fixed, model-agnostic preprocessing step.</p>
   </section>
 
   <section>
     <h2>Subword Algorithms</h2>
+
     <h3>Byte Pair Encoding (BPE)</h3>
     <p>BPE starts with byte or character units and iteratively merges the most frequent pairs until the vocabulary reaches a target size. GPT-2, GPT-3, and many open models use BPE. It handles rare words by composing frequent subword pieces.</p>
-    <h3>WordPiece and Unigram</h3>
-    <p>WordPiece (BERT) selects merges that maximize likelihood under a language model. Unigram (SentencePiece) starts large and prunes tokens to optimize a probabilistic objective. Both are common in multilingual and production pipelines.</p>
+    <p>The training algorithm, originally a data-compression technique adapted for NLP by Sennrich et al. (2016), proceeds as follows:</p>
+    <ol>
+      <li>Initialize the vocabulary with all individual symbols present in the training corpus (bytes, in byte-level BPE; Unicode characters, in character-level BPE).</li>
+      <li>Represent every word (or the whole corpus, in byte-level variants) as a sequence of these base symbols, typically with an end-of-word marker so merges do not silently cross word boundaries.</li>
+      <li>Count the frequency of every adjacent symbol pair across the corpus.</li>
+      <li>Merge the single most frequent pair into a new symbol, add it to the vocabulary, and record the merge rule.</li>
+      <li>Repeat steps 3&ndash;4 until the vocabulary reaches the target size (e.g., 32k, 50k, 100k, 128k, 200k tokens) or no pair occurs above a minimum frequency threshold.</li>
+    </ol>
+    <p>Encoding a new string then applies the learned merge rules greedily, in the order they were learned, to the character sequence until no further merges apply. This makes BPE tokenization deterministic and reproducible given the merge list, and it means the merge order itself encodes a kind of frequency prior: earlier merges correspond to more common subword patterns.</p>
+    <p>A worked micro-example illustrates the mechanics. Suppose the toy corpus is <code>{"low": 5, "lower": 2, "newest": 6, "widest": 3}</code> (counts are word frequencies). BPE begins with characters plus an end-of-word symbol (here shown as <code>_</code>): <code>l o w _</code>, <code>l o w e r _</code>, <code>n e w e s t _</code>, <code>w i d e s t _</code>. The most frequent adjacent pair across all words is <code>(e, s)</code>, appearing in both "newest" and "widest" (9 total occurrences), so it merges to <code>es</code>. The next most frequent pair is then <code>(es, t)</code>, merging to <code>est</code>, and so on. After enough merges, "newest" and "widest" share the subword <code>est</code> as a single token, which is exactly the desired behavior: a semantically meaningful suffix becomes reusable across many inflected words the model has never seen as whole units.</p>
     <pre><code>from transformers import AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")
@@ -37,8 +53,40 @@ tokens = tokenizer.encode(text)
 print(tokens)                          # [128000, 27420, ...]
 print(tokenizer.decode(tokens))        # round-trip text
 print(len(tokens))                     # billable / context length</code></pre>
+
+    <h3>WordPiece</h3>
+    <p>WordPiece, introduced for Google's speech and translation systems and later used in BERT, differs from BPE in the merge criterion. Instead of merging the most frequent adjacent pair, WordPiece merges the pair that maximizes the likelihood of the training corpus under a unigram language model built from the resulting vocabulary. Concretely, for candidate pair <code>(a, b)</code> forming a merged token <code>ab</code>, WordPiece scores the merge as approximately:</p>
+    <pre><code>score(a, b) = count(ab) / (count(a) * count(b))</code></pre>
+    <p>This normalizes raw frequency by the frequency of the constituent pieces, so it favors merges where the combined unit is disproportionately common relative to its parts appearing independently &mdash; effectively a pointwise mutual information criterion. This tends to produce vocabularies that are slightly more linguistically motivated than raw-frequency BPE, at the cost of a more expensive training procedure since the likelihood must be recomputed (or approximated) at each merge step. At inference time, WordPiece typically applies a longest-match-first greedy segmentation within each whitespace-delimited word, marking non-initial pieces with a continuation marker (BERT uses the <code>##</code> prefix, e.g., <code>tokenization</code> &rarr; <code>token ##ization</code>).</p>
+
+    <h3>Unigram Language Model Tokenization</h3>
+    <p>The Unigram algorithm (Kudo, 2018), commonly packaged inside SentencePiece, works in the opposite direction from BPE and WordPiece: it starts from a large seed vocabulary (often generated via suffix-array-based substring enumeration or an initial BPE pass) and iteratively prunes it down to the target size. Each candidate subword <code>u</code> in the vocabulary has an associated probability <code>p(u)</code>, estimated via the EM algorithm under the assumption that a sentence's probability is the product of the probabilities of the tokens that segment it: <code>P(x) = &prod;<sub>i</sub> p(u<sub>i</sub>)</code> for a segmentation <code>x = u&#8321;u&#8322;...u<sub>n</sub></code>. Training alternates between:</p>
+    <ul>
+      <li><strong>E-step:</strong> for each training sentence, find the most probable segmentation (or a distribution over segmentations) given current subword probabilities, typically via the Viterbi algorithm over a lattice of all possible substrings that are in the current vocabulary.</li>
+      <li><strong>M-step:</strong> re-estimate each <code>p(u)</code> from expected counts under those segmentations.</li>
+    </ul>
+    <p>After several EM rounds, the algorithm computes, for each subword, how much the overall corpus log-likelihood would drop if that subword were removed from the vocabulary (with its occurrences falling back to alternative, generally longer, segmentations). The subwords contributing the least to likelihood are pruned, typically 10&ndash;20% of the vocabulary per round, and the process repeats until the target vocabulary size is reached.</p>
+    <p>A key practical advantage of Unigram over BPE is that it naturally supports <strong>probabilistic / sampled tokenization</strong>: instead of always taking the single best (Viterbi) segmentation, the model can sample from the posterior over segmentations during training (a form of tokenization-level data augmentation sometimes called subword regularization). This exposes the downstream model to multiple valid segmentations of the same surface string, which has been shown to improve robustness on morphologically rich languages and low-resource settings, at the cost of encode-time non-determinism unless a fixed decoding strategy (e.g., always Viterbi at inference) is enforced for production serving.</p>
+
     <h3>SentencePiece</h3>
-    <p>SentencePiece treats text as a raw byte stream and can train without language-specific pre-tokenization. This makes it strong for multilingual models and consistent handling of whitespace and punctuation across scripts.</p>
+    <p>SentencePiece is not itself a segmentation algorithm but a language-agnostic training and inference framework that implements both BPE and Unigram as backends, with one crucial design decision: it treats the input as a raw, un-tokenized character (or byte) stream and never assumes whitespace-delimited words. Whitespace is escaped as a visible meta-symbol (typically <code>&#9601;</code>, U+2581, "lower one eighth block") and treated as an ordinary character to be merged like any other. This has two important consequences. First, detokenization is fully reversible and lossless without heuristic word-joining rules, because every space is explicitly represented in the token stream. Second, SentencePiece requires no language-specific pre-tokenizer (e.g., no dependency on knowing that Chinese, Japanese, and Thai do not use whitespace to separate words), which is why it is the dominant choice for genuinely multilingual models such as XLM-R, T5, and many mixture-of-languages LLM tokenizers.</p>
+  </section>
+
+  <section>
+    <h2>Byte-Level BPE, tiktoken, and Regex Pre-Tokenization</h2>
+    <p>GPT-2's tokenizer (and its descendants used across the GPT-3/3.5/4 family via OpenAI's <code>tiktoken</code> library) introduced <strong>byte-level BPE</strong>: instead of operating over Unicode characters, the base alphabet is the 256 possible byte values. Every string, in any script or encoding, can be losslessly represented as a sequence of UTF-8 bytes, so byte-level BPE achieves full input coverage with zero UNK tokens and a guaranteed-bounded base vocabulary (256 symbols before any merges), at the cost of sometimes representing a single Unicode character (especially outside the Latin script) as multiple byte-tokens.</p>
+    <p>Before BPE merges are applied, most byte-level tokenizers first split the raw text using a hand-crafted regular expression, so that merges never cross certain natural boundaries (contractions, punctuation runs, digit runs, whitespace runs). GPT-2's pre-tokenization regex, for instance, separately isolates apostrophe-contractions (<code>'s</code>, <code>'t</code>, <code>'re</code>...), letter runs, number runs, and whitespace/punctuation runs. GPT-4's <code>cl100k_base</code> encoding refined this further, notably changing how consecutive whitespace and digit sequences are grouped, which materially affects tokenization efficiency on code (indentation-heavy) and numbers.</p>
+    <pre><code>import tiktoken
+
+enc = tiktoken.get_encoding("cl100k_base")   # GPT-3.5 / GPT-4 family
+ids = enc.encode("The transformer has 12 layers and 768 hidden dims.")
+print(ids)
+print(enc.decode(ids))
+print(enc.decode_single_token_bytes(ids[0]))  # inspect raw bytes of one token
+
+# Counting tokens before sending a request, to avoid truncation/billing surprises
+def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
+    return len(tiktoken.get_encoding(encoding_name).encode(text))</code></pre>
   </section>
 
   <section>
@@ -50,6 +98,7 @@ print(len(tokens))                     # billable / context length</code></pre>
       <li><strong>UNK</strong> represents unknown symbols in older vocabularies</li>
       <li><strong>Role and control tokens</strong> delimit system, user, and assistant turns in chat models</li>
     </ul>
+    <p>These are not learned via the merge/pruning process; they are reserved vocabulary slots injected before or after subword training so that their IDs remain stable across tokenizer versions. In modern chat-tuned models, dozens of such control tokens exist &mdash; for example, turn-boundary markers, tool-call delimiters, "end of turn" markers distinct from the raw EOS, and reserved-but-unused slots left for future fine-tuning without reshaping the embedding matrix.</p>
     <p>Chat templates are string patterns (often Jinja-based) that wrap messages with the correct special tokens before tokenization. Using the wrong template causes silent quality degradation even when the base model is correct.</p>
     <pre><code>messages = [
     {"role": "system", "content": "You are a helpful assistant."},
@@ -58,6 +107,7 @@ print(len(tokens))                     # billable / context length</code></pre>
 prompt = tokenizer.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
 )</code></pre>
+    <p>The failure mode is subtle and dangerous precisely because it is silent: if a chat template omits, duplicates, or misorders a control token relative to what the model saw during instruction tuning, the model does not error out &mdash; it simply receives an out-of-distribution input and produces lower-quality, sometimes incoherent or unsafe, completions, with no exception raised anywhere in the stack. This is why serving frameworks (vLLM, TGI, SGLang) bundle the exact chat template alongside each model checkpoint rather than letting it be inferred, and why "bring your own prompt formatting" integrations are a common source of hard-to-diagnose regression bugs when a model is swapped for a newer checkpoint with a changed template.</p>
     <div class="callout">
       <strong>Engineering rule:</strong> Always pair a model with its native tokenizer and chat template. Swapping tokenizers between checkpoints breaks vocabulary alignment and special token semantics.
     </div>
@@ -72,6 +122,15 @@ prompt = tokenizer.apply_chat_template(
       <li><strong>PII and security</strong> - filters must run on raw text or detokenized output, not assume token boundaries align with words</li>
       <li><strong>Context limits</strong> - the same paragraph can be 200 tokens in one tokenizer and 400 in another</li>
     </ul>
+
+    <h3>Digit and Number Tokenization</h3>
+    <p>Because BPE merges are frequency-driven, digit sequences are tokenized inconsistently unless the vocabulary designer explicitly constrains them. Early GPT-3-era tokenizers merged digits into arbitrary multi-digit chunks (e.g., <code>"1234"</code> might become two tokens, <code>"12"</code> + <code>"34"</code>, while <code>"123"</code> in a different context becomes a single token), which makes positional place-value arithmetic difficult for the model to learn because the same digit can occupy different "slots" within a token depending on surrounding digits. Several model families (notably later Llama and GPT-4-class tokenizers) mitigate this by forcing digits to split into individual-digit tokens or fixed-length digit groups (commonly groups of up to three), trading a slightly worse compression ratio on numeric text for materially better arithmetic generalization, since each digit then occupies a consistent, learnable positional role.</p>
+
+    <h3>Glitch Tokens and Vocabulary Pathologies</h3>
+    <p>A vocabulary trained by frequency statistics over a large, imperfectly filtered web corpus can end up containing tokens for strings that are frequent in the tokenizer training data but vanishingly rare (or entirely absent) in the model's actual fine-tuning / instruction data, such as unusual usernames, repeated forum artifacts, or base64 fragments. Because these tokens' embeddings receive almost no gradient signal during model training, they remain close to their random initialization and can induce highly anomalous, sometimes unsafe-looking completions when they appear in a prompt &mdash; a phenomenon documented publicly as "glitch tokens" (e.g., the widely reported <code>" SolidGoldMagikarp"</code> case for early GPT tokenizers). This illustrates a general engineering point: the tokenizer training corpus and the model training corpus are not guaranteed to match, and mismatches between them create latent vocabulary risk that only surfaces post-deployment.</p>
+
+    <h3>Security and Filtering Implications</h3>
+    <p>Content filters, PII redaction, and prompt-injection defenses that operate by string-matching on raw text can be evaded or falsely triggered if they are naively applied to detokenized fragments rather than the full reconstructed string, because a sensitive substring can straddle a token boundary invisibly (e.g., a filtered word split across two tokens such that neither token alone matches a blocklist pattern, but no filter is actually being bypassed at the raw-text level since detokenization fully reconstructs the string). The correct engineering practice is therefore to run any pattern-based safety or PII filtering on the fully detokenized text, never on a token-by-token basis, and to treat the tokenizer purely as an internal computational detail invisible to policy layers.</p>
   </section>
 
   <section>
@@ -82,11 +141,50 @@ prompt = tokenizer.apply_chat_template(
       <li>Multilingual vocabularies need enough capacity for all scripts without starving high-resource languages.</li>
       <li>Domain-specific corpora (legal, medical, code) benefit from tokenizer retraining or vocabulary extension when base tokenizers fragment domain terms.</li>
     </ul>
+
+    <h3>Quantifying the Tradeoff</h3>
+    <p>The parameter cost of the vocabulary is roughly <code>2 &times; |V| &times; d_model</code> for tied input/output embeddings avoided (input embedding matrix <code>|V| &times; d_model</code>, plus, if untied, an equally sized output projection before the softmax). For a model with <code>d_model = 4096</code> and a 128k vocabulary, the embedding table alone is on the order of half a billion parameters &mdash; comparable to the entire parameter budget of a small dedicated model. This is why most modern LLMs <strong>tie</strong> the input embedding and output projection weight matrices (weight tying), halving this cost, and why vocabulary size is chosen as a deliberate point on a Pareto frontier rather than maximized outright: past a certain size, additional vocabulary capacity yields diminishing compression returns (each new merge covers a rarer pattern) while continuing to add fixed parameter and compute cost to every forward and backward pass, and while making the final softmax over the vocabulary a larger share of total FLOPs, especially for smaller models where the vocabulary matrix can rival the size of the rest of the network.</p>
+    <p>The standard evaluation metrics for comparing tokenizers on this tradeoff are:</p>
+    <ul>
+      <li><strong>Fertility</strong> &mdash; the average number of tokens produced per word (or per whitespace-delimited unit) of a reference corpus; lower fertility means denser, cheaper encoding.</li>
+      <li><strong>Bytes-per-token (compression ratio)</strong> &mdash; a language-agnostic alternative to fertility that avoids assuming whitespace-delimited words exist, useful for comparing tokenizer efficiency across languages like Chinese or Thai.</li>
+      <li><strong>Normalized Sequence Length (NSL)</strong> &mdash; the ratio of a candidate tokenizer's sequence length to a reference tokenizer's sequence length on the same text, used to directly compare inference cost between two tokenizers for the same corpus.</li>
+    </ul>
+
+    <h3>Cross-Lingual Fairness</h3>
+    <p>Because vocabulary training is frequency-driven and most large pretraining corpora are English-dominated, a shared multilingual vocabulary systematically allocates more single-token coverage to English and other high-resource Latin-script languages, and fragments low-resource or non-Latin-script languages (e.g., many African, Southeast Asian, or Indigenous languages) into far more tokens per unit of meaning. This has a direct, measurable economic and latency cost: since API pricing and context windows are metered in tokens, the same sentence content can cost multiple times more, and consume multiple times more of the available context window, depending purely on the user's language &mdash; a widely studied fairness concern in multilingual NLP and a key motivation for dedicated multilingual vocabulary allocation strategies (e.g., reserving a minimum vocabulary budget per script or language family during Unigram/BPE training rather than training on raw frequency alone).</p>
+
+    <h3>Domain Adaptation and Vocabulary Extension</h3>
+    <p>When deploying an existing pretrained model on a specialized domain (legal contracts, clinical notes, source code in an uncommon language, chemical formulae), the base tokenizer often fragments domain-critical terms into many pieces, hurting both compression and, more importantly, the model's ability to treat those terms as atomic semantic units. Two engineering responses are common: (1) <strong>continued/domain-adaptive pretraining</strong> with the existing tokenizer unchanged, accepting the fragmentation but letting the model learn robust representations over the fragmented sequences; or (2) <strong>vocabulary extension</strong>, where new domain-specific tokens are added to the existing vocabulary, their embeddings are initialized (e.g., as the average of the embeddings of their constituent sub-tokens under the old vocabulary), and the model is fine-tuned to make use of them. Vocabulary extension improves fertility and can improve downstream quality, but it requires resizing the embedding and output projection matrices and re-warming those new rows during fine-tuning, since randomly initialized new embeddings start far outside the distribution the rest of the network expects.</p>
   </section>
 
   <section>
     <h2>Practical Pipeline Integration</h2>
     <p>In serving systems, tokenization runs on every request. Batch tokenization, caching of frequent prefixes, and streaming decode (incremental detokenization) all affect latency. For RAG, chunk sizes are often defined in tokens, not characters, because the model context window is token-bounded. Counting tokens accurately before sending requests prevents truncation and surprise billing on API providers.</p>
+
+    <h3>Latency and Throughput Considerations</h3>
+    <p>Tokenization is single-threaded, CPU-bound, and runs on the critical path before any GPU work begins, so in high-throughput serving systems it can become a bottleneck if implemented naively in pure Python; production tokenizers are therefore typically implemented in Rust or C++ with thin Python bindings (e.g., Hugging Face's <code>tokenizers</code> library, OpenAI's <code>tiktoken</code>, Google's SentencePiece C++ core) and process requests in batches to amortize fixed overhead. Two additional optimizations matter at scale:</p>
+    <ul>
+      <li><strong>Prefix caching / prompt caching:</strong> when many requests share a long common prefix (a system prompt, a RAG-retrieved document, a few-shot example set), both the tokenization of that prefix and the model's key-value cache for it can be reused across requests, since the token IDs for a fixed prefix are deterministic and unchanging.</li>
+      <li><strong>Incremental (streaming) detokenization:</strong> because a single Unicode character can be split across multiple byte-level tokens, or a token's decoded bytes can be an incomplete UTF-8 sequence, streaming APIs must buffer partially decoded output and only flush text once a full, valid Unicode codepoint boundary has been reached &mdash; naively decoding and emitting token-by-token can otherwise emit corrupted or replacement-character (&#65533;) output mid-stream for multi-byte scripts.</li>
+    </ul>
+
+    <h3>Chunking for Retrieval-Augmented Generation</h3>
+    <p>Because the context window and generation budget are both token-denominated, RAG pipelines should measure and enforce chunk sizes in tokens (using the target model's actual tokenizer) rather than characters or words, since the token-to-character ratio varies by content type (dense code or non-Latin text can be 2&ndash;4&times; more tokens per character than plain English prose) and by tokenizer. A chunking strategy that assumes "roughly 4 characters per token" as a universal heuristic, a common rule of thumb for English text under English-optimized tokenizers, will systematically over- or under-fill the context window on other languages or on structured content like code and tables, leading either to wasted context budget or unexpected truncation of retrieved passages.</p>
+
+    <h3>Token Counting Before Requests</h3>
+    <p>Because API providers bill per token and enforce hard context limits, production systems should pre-count tokens for every outbound request &mdash; including the system prompt, conversation history, retrieved documents, and reserved space for the expected completion length &mdash; using the exact encoding the target model expects (e.g., the correct <code>tiktoken</code> encoding name, or the model's shipped Hugging Face tokenizer). Relying on an approximate word-count heuristic instead of exact tokenization is a common source of both silent truncation (losing the end of a long prompt) and unexpected billing variance across languages and content types.</p>
+  </section>
+
+  <section>
+    <h2>Further Reading</h2>
+    <ul>
+      <li>Sennrich, Haddow, Birch (2016), <em>Neural Machine Translation of Rare Words with Subword Units</em> &mdash; the original BPE-for-NLP paper.</li>
+      <li>Kudo (2018), <em>Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates</em> &mdash; the Unigram LM algorithm.</li>
+      <li>Kudo &amp; Richardson (2018), <em>SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing</em>.</li>
+      <li>Radford et al. (2019), <em>Language Models are Unsupervised Multitask Learners</em> (GPT-2) &mdash; introduces byte-level BPE.</li>
+      <li>Devlin et al. (2018), <em>BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding</em> &mdash; WordPiece in practice.</li>
+    </ul>
   </section>
 
   <nav class="page-footer-nav">
@@ -101,5 +199,3 @@ prompt = tokenizer.apply_chat_template(
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-

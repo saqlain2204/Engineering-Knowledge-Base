@@ -29,7 +29,7 @@
 
   <section>
     <h2>0. Why Transformers Replaced RNNs</h2>
-    <p>Before transformers, sequence models (RNNs, LSTMs) processed tokens one at a time, carrying a hidden state forward. This made them inherently sequential: you couldn't compute the representation for token 100 without first computing tokens 1&ndash;99, which meant no parallelism across the sequence dimension during training, and made it hard to preserve information over long distances (gradients had to flow through every intermediate step, reintroducing the vanishing gradient problem from the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-foundations.html">Foundations</a> page). Transformers replace recurrence entirely with <strong>self-attention</strong>: every position computes its new representation by directly looking at every other position in the sequence, in parallel, in a single matrix operation. This removes the sequential bottleneck (huge GPU-training speedup) and gives every token a direct, one-hop path to every other token, which drastically eases long-range dependency learning.</p>
+    <p>Before transformers, sequence models (RNNs, LSTMs) processed tokens one at a time, carrying a hidden state forward. This made them inherently sequential: you couldn't compute the representation for token 100 without first computing tokens 1&ndash;99, which meant no parallelism across the sequence dimension during training, and made it hard to preserve information over long distances (gradients had to flow through every intermediate step, reintroducing the vanishing gradient problem from the <a href="../../learn/Foundations-and-Architecture/ai-engineering-foundations.html">Foundations</a> page). Transformers replace recurrence entirely with <strong>self-attention</strong>: every position computes its new representation by directly looking at every other position in the sequence, in parallel, in a single matrix operation. This removes the sequential bottleneck (huge GPU-training speedup) and gives every token a direct, one-hop path to every other token, which drastically eases long-range dependency learning.</p>
   </section>
 
   <section>
@@ -74,7 +74,7 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
 
   <section>
     <h2>2. Transformer Block Anatomy</h2>
-    <p>A standard decoder block (used in GPT-style LLMs) contains two sublayers, each wrapped in a residual connection and preceded by normalization (pre-norm, see <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-foundations.html">Foundations &sect;3</a>):</p>
+    <p>A standard decoder block (used in GPT-style LLMs) contains two sublayers, each wrapped in a residual connection and preceded by normalization (pre-norm, see <a href="../../learn/Foundations-and-Architecture/ai-engineering-foundations.html">Foundations &sect;3</a>):</p>
     <ul>
       <li><strong>Pre-norm self-attention</strong> with residual connection: \(x \leftarrow x + \text{MultiHeadAttention}(\text{RMSNorm}(x))\)</li>
       <li><strong>Pre-norm feed-forward network (FFN)</strong> with residual connection: \(x \leftarrow x + \text{FFN}(\text{RMSNorm}(x))\)</li>
@@ -128,7 +128,7 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
 
   <section>
     <h2>6. Scaling and Design Tradeoffs</h2>
-    <p>Transformer quality improves predictably with more parameters, data, and compute, following empirical <strong>scaling laws</strong> (see the <a href="../../ai-engineering/Foundations-and-Architecture/ai-engineering-llms.html">LLMs</a> page for the Chinchilla relationship in detail). Within a fixed compute and memory budget, engineers make several architecture tradeoffs:</p>
+    <p>Transformer quality improves predictably with more parameters, data, and compute, following empirical <strong>scaling laws</strong> (see the <a href="../../learn/Foundations-and-Architecture/ai-engineering-llms.html">LLMs</a> page for the Chinchilla relationship in detail). Within a fixed compute and memory budget, engineers make several architecture tradeoffs:</p>
     <ul>
       <li><strong>More layers vs wider hidden dimensions</strong> &mdash; depth tends to help compositional/hierarchical reasoning, width increases per-layer representational capacity; empirically there are compute-optimal ratios that most model families converge toward.</li>
       <li><strong>Dense FFN vs MoE routing</strong> &mdash; MoE trades training/serving complexity for a better capacity-to-inference-FLOPs ratio.</li>
