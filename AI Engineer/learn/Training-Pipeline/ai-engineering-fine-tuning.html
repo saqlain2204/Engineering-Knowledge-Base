@@ -18,37 +18,90 @@
 <main class="article">
 
   <section>
-    <h2>Purpose of Fine-Tuning</h2>
-    <p>Pretrained base models predict continuation. Fine-tuning updates weights so the model follows instructions, speaks in a desired tone, excels at a domain, or emits structured outputs. It is cheaper and faster than pretraining because datasets are smaller and runs are shorter, but it can still shift model behavior dramatically.</p>
-    <p>Common goals include customer support tone, legal document analysis, code generation in internal APIs, JSON-only responses, and multilingual support for underrepresented languages in the base model.</p>
-  </section>
-
-  <section>
-    <h2>Supervised Fine-Tuning (SFT)</h2>
-    <p>SFT trains on labeled input-output pairs: prompts (instructions plus context) and target completions. Loss is computed only on the target tokens, not the prompt, so the model learns to produce answers, not memorize prompts.</p>
-    <pre><code># Mask prompt tokens with -100 so loss applies only to the answer
-labels = input_ids.clone()
-labels[:prompt_len] = -100
-
-outputs = model(input_ids=input_ids, labels=labels)
-loss = outputs.loss  # cross-entropy on answer tokens only</code></pre>
-    <p>Dataset design drives results:</p>
+    <h2>What Fine-Tuning Actually Changes</h2>
+    <p>A pretrained base model is the result of next-token prediction over a huge, broad text corpus. Its objective during pretraining is purely distributional: given a sequence of tokens, predict a probability distribution over the next token that matches the statistics of the training corpus. Nothing in that objective rewards the model for being helpful, safe, concise, or good at following an instruction — it only rewards matching the corpus distribution. A base model given "Explain quantum entanglement" is just as likely to continue with a list of textbook chapter titles, a forum reply, or a homework assignment as it is to actually explain the concept, because all of those are plausible continuations of that string somewhere in the training data.</p>
+    <p>Fine-tuning is the process of taking the pretrained weights <code>&theta;<sub>0</sub></code> and further updating them, usually with a much smaller and much more curated dataset, so that the resulting distribution <code>p<sub>&theta;</sub>(y|x)</code> concentrates probability mass on the kind of outputs you actually want for the inputs you actually care about. It is the mechanism by which "a model that predicts plausible text" becomes "a model that answers questions," "a model that writes SQL," "a model that refuses unsafe requests," or "a model that speaks in your company's tone."</p>
+    <p>Three properties distinguish fine-tuning from pretraining in practice:</p>
     <ul>
-      <li>Cover edge cases and refusal scenarios, not only happy paths</li>
-      <li>Match production prompt format and chat template exactly</li>
-      <li>Balance task types so the model does not overfit one pattern</li>
-      <li>Keep epochs low (often 1-3) to avoid catastrophic forgetting of general capability</li>
+      <li><strong>Dataset size.</strong> Pretraining corpora are on the order of trillions of tokens; fine-tuning datasets range from a few hundred examples (style adaptation) to a few million (broad instruction tuning). The optimization landscape and the risk of overfitting are completely different at this scale.</li>
+      <li><strong>Compute cost.</strong> Because the dataset is small and because parameter-efficient methods exist (covered below), fine-tuning a 70B model can take hours on a handful of GPUs, versus the months of large-cluster time pretraining requires.</li>
+      <li><strong>Failure mode.</strong> Pretraining mostly fails by being undertrained (compute-bound). Fine-tuning mostly fails by overfitting to the fine-tuning distribution and losing generalization — this is called catastrophic forgetting, discussed in depth below.</li>
     </ul>
   </section>
 
   <section>
-    <h2>Full Fine-Tuning vs Parameter-Efficient Methods</h2>
+    <h2>The Cross-Entropy Objective, Precisely</h2>
+    <p>Every fine-tuning method discussed here (SFT, LoRA, QLoRA, continued pretraining) shares the same underlying loss: autoregressive cross-entropy, also called the negative log-likelihood of the target sequence under the model.</p>
+    <p>For a sequence of tokens <code>y = (y<sub>1</sub>, y<sub>2</sub>, ..., y<sub>T</sub>)</code>, the model factorizes the joint probability autoregressively:</p>
+    <pre><code>p_&theta;(y) = &prod;_{t=1}^{T} p_&theta;(y_t | y_{&lt;t})</code></pre>
+    <p>Training minimizes the negative log-likelihood, summed (or averaged) over target tokens:</p>
+    <pre><code>L(&theta;) = - (1/T) &sum;_{t=1}^{T} log p_&theta;(y_t | y_{&lt;t})</code></pre>
+    <p>In practice this is implemented as token-level cross-entropy between the model's predicted logits and the one-hot ground truth token, computed by a softmax followed by a negative log:</p>
+    <pre><code>logits = model(input_ids)                     # (batch, seq_len, vocab_size)
+log_probs = log_softmax(logits, dim=-1)
+loss = -log_probs.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
+loss = loss.mean()  # over non-masked positions only</code></pre>
+    <p>The gradient of cross-entropy with respect to the logits has an unusually clean form. If <code>z</code> is the logit vector, <code>p = softmax(z)</code>, and <code>y</code> is the one-hot target, then:</p>
+    <pre><code>&part;L/&part;z = p - y</code></pre>
+    <p>This means the gradient signal at every token is simply "predicted probability minus 1 at the correct token, predicted probability at every other token." Confident, correct predictions produce near-zero gradient; confident, wrong predictions produce large gradient in the direction of the correct token. This is why cross-entropy is well-behaved for optimization — the gradient magnitude is self-scaling to how wrong the model currently is.</p>
+  </section>
+
+  <section>
+    <h2>Supervised Fine-Tuning (SFT)</h2>
+    <p>SFT trains on labeled pairs: a prompt (system instruction, conversation history, retrieved context, tool outputs — whatever conditioning the model needs) and a target completion written or curated by a human, another model, or a hybrid pipeline. The critical implementation detail is <strong>loss masking</strong>: the cross-entropy loss is computed only over the tokens belonging to the target completion, never over the prompt tokens.</p>
+    <p>Why mask the prompt? Two reasons. First, you do not want the model to spend capacity learning to predict the prompt itself — the prompt is given at inference time, not generated, so there is nothing to learn there and training on it wastes gradient signal and can bias the model toward regurgitating prompt-like text. Second, if the same prompt appears with different valid completions across the dataset (a plausible situation with multi-turn dialogue or paraphrased instructions), training on the prompt tokens injects noisy, non-generalizable gradient into the model.</p>
+    <pre><code># Mask prompt tokens with -100 (PyTorch's ignore_index for CrossEntropyLoss)
+input_ids = tokenizer.encode(prompt + completion)
+prompt_len = len(tokenizer.encode(prompt))
+
+labels = input_ids.clone()
+labels[:prompt_len] = -100     # loss ignores these positions
+
+outputs = model(input_ids=input_ids, labels=labels)
+loss = outputs.loss            # cross-entropy on completion tokens only</code></pre>
+    <p>In multi-turn conversational data, the same masking principle extends per-turn: every assistant turn contributes to the loss, every user/system/tool turn is masked out. This is what "training on assistant turns only" means in most SFT pipelines.</p>
+    <h3>Chat templates and why exact formatting is non-negotiable</h3>
+    <p>Modern instruction-tuned models are trained with a strict token-level template that wraps roles (system/user/assistant/tool) in special tokens, for example something structurally like:</p>
+    <pre><code>&lt;|system|&gt;
+You are a helpful assistant.
+&lt;|user|&gt;
+What is the capital of France?
+&lt;|assistant|&gt;
+The capital of France is Paris.
+&lt;|end|&gt;</code></pre>
+    <p>If your fine-tuning data does not exactly reproduce the special tokens, spacing, and role markers the model was originally instruction-tuned with (or, if training a base model from scratch into a chat model, the template you intend to use at serving time), you introduce a train/inference mismatch. The model will have learned statistics conditioned on one template and be queried with another, which degrades quality unpredictably — sometimes catastrophically, sometimes subtly (worse instruction-following, ignored system prompts, broken stop-token behavior so generation never terminates cleanly).</p>
+    <h3>Dataset design principles</h3>
+    <ul>
+      <li><strong>Cover edge cases and refusals, not just the happy path.</strong> If every training example is a well-formed question with a clean answer, the model never learns what to do with ambiguous, malformed, or unanswerable inputs, and will hallucinate an answer rather than say "I don't know" or ask a clarifying question.</li>
+      <li><strong>Match production format exactly.</strong> Any wrapper text, JSON schema, delimiter, or tool-call syntax used at inference time must appear identically in training data.</li>
+      <li><strong>Balance task types.</strong> If 90% of your data is short factual Q&A and 10% is long-form writing, the model's default behavior will drift toward short factual answers even for the long-form-writing 10% of test-time queries, because the gradient signal from the majority class dominates.</li>
+      <li><strong>Keep epochs low, typically 1-3.</strong> Because SFT datasets are small relative to model capacity, more epochs increases the risk of the model memorizing training examples verbatim rather than learning the generalizable pattern behind them. Training loss can keep dropping past the point where validation quality on held-out, non-training-distribution prompts starts degrading — this gap is the signature of overfitting.</li>
+      <li><strong>Deduplicate aggressively.</strong> Near-duplicate examples (common when data is generated synthetically) act like extra epochs on a subset of the data and accelerate overfitting on that subset specifically.</li>
+    </ul>
+    <h3>Where SFT data comes from</h3>
+    <p>Three common sources, usually combined: (1) human-written demonstrations, highest quality but expensive and slow to scale; (2) distillation from a stronger model, where a large "teacher" model generates completions that a smaller "student" model is trained to imitate — cheap and scalable but caps the student's quality at (and typically below) the teacher's, and can propagate the teacher's errors and biases; (3) self-instruct / synthetic pipelines, where a model generates its own instruction-completion pairs from a small seed set, followed by filtering for quality, diversity, and correctness (often using a separate model or rule-based verifier as a judge).</p>
+  </section>
+
+  <section>
+    <h2>Full Fine-Tuning vs Parameter-Efficient Fine-Tuning (PEFT)</h2>
     <h3>Full fine-tuning</h3>
-    <p>All weights update. Maximum flexibility, highest memory and storage cost, greatest risk of forgetting general knowledge on small datasets.</p>
-    <h3>LoRA (Low-Rank Adaptation)</h3>
-    <p>Inserts trainable low-rank matrices into attention and sometimes MLP layers while freezing the base weights. A 70B model may train only tens of millions of adapter parameters. Multiple LoRA adapters can swap at serving time for multi-tenant products.</p>
-    <pre><code># W' = W + A�B   (A: d�r, B: r�d, rank r � d)
-# Only A and B are trained; base weight W stays frozen</code></pre>
+    <p>Every parameter in the model is unfrozen and updated by gradient descent. This gives maximum representational flexibility — there is no constraint on which parameters can move or by how much — but it has three costs that dominate practical decision-making:</p>
+    <ul>
+      <li><strong>Optimizer memory.</strong> Adam-family optimizers store two additional state tensors per parameter (first and second moment estimates), so full fine-tuning in mixed precision requires roughly 12-16 bytes per parameter across weights, gradients, and optimizer state (roughly: 2 bytes weight in bf16, 2 bytes gradient in bf16, 4+4 bytes for fp32 Adam moment estimates, plus often a full fp32 master copy of the weights for numerical stability &mdash; commonly totaling ~16-18 bytes/parameter). For a 70B-parameter model that is well over a terabyte of memory, requiring multi-GPU sharding (ZeRO/FSDP) even before you load any activations.</li>
+      <li><strong>Storage cost.</strong> Every fine-tuned checkpoint is a full copy of the model. Ten task-specific full fine-tunes of a 70B model is ten times the storage of the base model.</li>
+      <li><strong>Catastrophic forgetting risk.</strong> With every parameter free to move, a small, narrow dataset can pull the whole network toward the fine-tuning distribution and away from general competence, especially at higher learning rates or more epochs.</li>
+    </ul>
+    <h3>LoRA (Low-Rank Adaptation) — full derivation</h3>
+    <p>LoRA is motivated by the empirical observation that the weight update needed to adapt a large pretrained model to a new task tends to have low "intrinsic rank" — that is, the update matrix, while formally full-rank-sized, can be well-approximated by a much lower-rank matrix without significant loss of adaptation quality.</p>
+    <p>Take any weight matrix in the network that is normally updated during fine-tuning, say a projection matrix <code>W &isin; R^{d&times;k}</code> in an attention block (e.g. the query or value projection). Full fine-tuning would learn an additive update <code>&Delta;W &isin; R^{d&times;k}</code> so that the effective weight becomes <code>W + &Delta;W</code>. LoRA instead freezes <code>W</code> entirely and constrains the update to a low-rank product:</p>
+    <pre><code>&Delta;W = B A,        where B &isin; R^{d&times;r},  A &isin; R^{r&times;k},  r &laquo; min(d, k)</code></pre>
+    <p>The forward pass becomes:</p>
+    <pre><code>h = W x + &Delta;W x = W x + B A x = W x + B(Ax)</code></pre>
+    <p>Only <code>A</code> and <code>B</code> receive gradients; <code>W</code> is frozen and contributes no gradient computation or optimizer state at all. Because <code>r</code> is typically 4-64 while <code>d</code> and <code>k</code> are often in the thousands, the number of trainable parameters per adapted matrix is <code>r(d+k)</code> instead of <code>d&times;k</code> — often a reduction of two to three orders of magnitude.</p>
+    <p><strong>Initialization matters.</strong> <code>A</code> is initialized with small random values (e.g. Gaussian scaled by <code>1/r</code> or Kaiming initialization), while <code>B</code> is initialized to exactly zero. This guarantees <code>&Delta;W = BA = 0</code> at the very start of training, so the adapted model is numerically identical to the base model at step zero, and training begins from a known-good point rather than an arbitrarily perturbed one.</p>
+    <p><strong>The alpha/rank scaling factor.</strong> LoRA introduces a scaling constant, usually written <code>&alpha;</code>, so the effective update is:</p>
+    <pre><code>&Delta;W = (&alpha;/r) B A</code></pre>
+    <p>This decouples the "step size" of the adaptation from the rank you choose. Without this scaling, increasing <code>r</code> would implicitly change the effective learning rate applied to <code>&Delta;W</code>, confounding the two hyperparameters. A common convention is <code>&alpha; = 2r</code>, but this is tuned per task like any other hyperparameter.</p>
     <pre><code>from peft import LoraConfig, get_peft_model
 
 config = LoraConfig(
@@ -56,40 +109,112 @@ config = LoraConfig(
     lora_alpha=32,
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
     lora_dropout=0.05,
+    bias="none",
     task_type="CAUSAL_LM",
 )
 model = get_peft_model(base_model, config)
-model.print_trainable_parameters()  # ~0.1% of weights trainable</code></pre>
-    <h3>QLoRA</h3>
-    <p>Quantizes the frozen base model to 4-bit (NF4) and trains LoRA adapters in BF16/FP16. Enables large-model fine-tuning on limited GPU memory with modest quality tradeoffs.</p>
-    <h3>Adapters and prompt tuning</h3>
-    <p>Smaller bottleneck layers or learned soft prompts at the input provide even lighter touch adaptation when full LoRA is unnecessary.</p>
+model.print_trainable_parameters()  # commonly ~0.05-0.5% of total weights</code></pre>
+    <p><strong>Which matrices to target matters a lot.</strong> Applying LoRA only to the query and value projections (the original paper's default) is cheap but limits capacity. Applying it to all attention projections (<code>q_proj</code>, <code>k_proj</code>, <code>v_proj</code>, <code>o_proj</code>) plus the MLP/feed-forward projections (<code>gate_proj</code>, <code>up_proj</code>, <code>down_proj</code> in a SwiGLU-style block) captures substantially more adaptation capacity, since a large fraction of a transformer's parameters — and a large fraction of where task-specific computation actually happens — live in the MLP blocks, not just attention.</p>
+    <p><strong>Merging at inference.</strong> Because <code>&Delta;W</code> and <code>W</code> have the same shape, they can be summed once after training — <code>W' = W + (&alpha;/r)BA</code> — producing a single dense weight matrix with zero additional inference latency and no extra parameters at serving time. Alternatively, the adapter can be kept separate and swapped in dynamically, trading a small amount of extra matmul compute for the ability to serve many task-specific adapters on top of one shared base model in memory.</p>
+    <h3>QLoRA — fine-tuning under severe memory constraints</h3>
+    <p>QLoRA combines LoRA with aggressive quantization of the frozen base model, enabling fine-tuning of very large models on a single consumer or prosumer GPU. Three techniques stack together:</p>
+    <ul>
+      <li><strong>4-bit NormalFloat (NF4) quantization.</strong> The frozen base weights are stored in a 4-bit data type specifically designed for normally-distributed weights (pretrained neural network weights are empirically close to zero-centered Gaussian). NF4 places quantization bins at the quantiles of a standard normal distribution rather than uniformly, so it represents Gaussian-distributed weights with lower error than a naive uniform 4-bit scheme at the same bit width.</li>
+      <li><strong>Double quantization.</strong> Quantization itself requires storing a scaling constant per block of weights (e.g. one 32-bit scale per 64 weights). Double quantization quantizes those scaling constants themselves (typically to 8-bit), further shrinking memory overhead — roughly an additional ~0.4 bits per parameter on average, which is meaningful at the scale of tens of billions of parameters.</li>
+      <li><strong>Paged optimizers.</strong> Optimizer state is moved between GPU and CPU memory using NVIDIA's unified memory paging, similar in spirit to how an operating system pages virtual memory to disk, so that transient memory spikes (e.g. from a long sequence in a batch) don't cause an out-of-memory crash.</li>
+    </ul>
+    <p>Critically, only the LoRA adapters (<code>A</code> and <code>B</code>) are trained in higher precision (bf16/fp16); the frozen base weights stay in 4-bit for the entire forward and backward pass, with on-the-fly dequantization to a computation-friendly precision only at the moment they're multiplied. Gradients never flow into the quantized base weights at all — they are frozen by construction of the LoRA formulation, so quantization error in the frozen weights degrades starting behavior slightly, but never introduces the exploding/vanishing gradient issues that naive low-bit training would otherwise risk.</p>
+    <p>The net effect: a model that would require roughly 140GB+ of memory just for full-precision weights (a ~70B model in fp16, i.e. ~2 bytes/parameter) can be loaded for QLoRA fine-tuning in roughly a quarter of that (4-bit weights, i.e. ~0.5 bytes/parameter plus small overhead), with only a small, well-documented quality gap versus full-precision LoRA, and effectively no gap versus full fine-tuning on most benchmarks reported in the original QLoRA work.</p>
+    <h3>Other PEFT families</h3>
+    <ul>
+      <li><strong>Prompt tuning.</strong> Freezes the entire model and learns a small set of continuous "soft" embedding vectors prepended to the input sequence. These vectors are not real tokens (they don't decode to any word) — they are trainable floats sitting in embedding space, optimized purely through the gradient of the downstream loss. Extremely parameter-efficient (often just tens of thousands of parameters) but with limited capacity — works well mainly at very large base model scale.</li>
+      <li><strong>Prefix tuning.</strong> Similar in spirit to prompt tuning but injects trainable vectors into the key/value cache at every transformer layer, not just the input embedding layer, giving substantially more expressive power than prompt tuning at a modest parameter cost increase.</li>
+      <li><strong>Adapters (bottleneck adapters).</strong> Small feed-forward bottleneck modules (down-project to a low dimension, nonlinearity, up-project back) inserted in series inside each transformer block, with the rest of the network frozen. Unlike LoRA, adapters are not merge-free — they add a small amount of inference latency because they are literal extra layers in the forward path, not a reparameterization of an existing linear layer.</li>
+      <li><strong>IA3 (Infused Adapter by Inhibiting and Amplifying Inner Activations).</strong> Learns per-channel rescaling vectors that elementwise-multiply the key, value, and feed-forward activations, rather than learning additive low-rank matrices. Even fewer parameters than LoRA at comparable rank settings, at some cost in adaptation capacity for harder tasks.</li>
+    </ul>
     <div class="callout">
-      <strong>Default for most teams:</strong> Start with LoRA or QLoRA on an instruct checkpoint. Move to full fine-tuning only when evaluation shows adapter capacity is the bottleneck.
+      <strong>Practical default:</strong> Start with LoRA or QLoRA (rank 8-64, applied to attention and MLP projections) on an instruction-tuned checkpoint. Move to full fine-tuning only when evaluation on held-out data shows the adapter's capacity, not the dataset or hyperparameters, is the actual bottleneck — this is a real but relatively rare situation in practice, most commonly seen when adapting to a genuinely new domain vocabulary or a very large, diverse instruction-tuning dataset.
     </div>
   </section>
 
   <section>
     <h2>Continued Pretraining vs Instruction Tuning</h2>
-    <p>Continued pretraining (domain-adaptive pretraining) feeds raw domain text with next-token loss to inject vocabulary and facts before SFT. Useful for medicine, finance, or internal wiki corpora where the base model lacks terminology.</p>
-    <p>Instruction tuning comes after and teaches task format. Order matters: domain knowledge first, behavior shaping second. Skipping straight to SFT on niche tasks without domain exposure may yield fluent but factually weak outputs.</p>
+    <p>Continued pretraining, also called domain-adaptive pretraining (DAPT), applies the exact same next-token-prediction objective used in original pretraining, but on a narrower, domain-specific unlabeled corpus (e.g. millions of tokens of legal filings, medical literature, or an internal company wiki) rather than labeled prompt-completion pairs. There is no prompt/completion split and no loss masking — every token in the corpus contributes to the loss, exactly as in pretraining, just with a smaller and more targeted dataset and (usually) fewer total training steps.</p>
+    <p>The purpose is to shift the model's underlying knowledge and vocabulary before you ever try to teach it a task format. A base model that has never seen much biomedical text will not reliably know that "MI" usually means myocardial infarction in a clinical note, regardless of how well-formatted your instruction-tuning examples are — the token-level statistical associations simply were never learned. Continued pretraining injects that domain knowledge directly.</p>
+    <p><strong>Order matters.</strong> The standard recipe is: (1) continued pretraining on raw domain text to build vocabulary and factual grounding, then (2) instruction tuning (SFT) on labeled examples to teach task format, tone, and instruction-following behavior on top of that domain knowledge. Reversing the order, or skipping continued pretraining entirely for a genuinely unfamiliar domain, tends to produce a model that is fluent and confident in its output format but frequently wrong or vague on domain facts — the instruction-tuning stage teaches the model how to answer, not what the true answer is, and it can only draw on knowledge that's actually present in its weights from an earlier stage.</p>
+    <p>A practical risk with continued pretraining: because it uses the full next-token objective over a large corpus, it is much more prone to catastrophic forgetting of general capability than SFT is, simply because more total gradient steps are typically taken over more tokens. Mitigations include mixing in a fraction (commonly 5-20%) of general-domain text alongside the domain-specific corpus, and using a low learning rate with a short warmup and decay schedule rather than the full pretraining schedule.</p>
   </section>
 
   <section>
-    <h2>Hyperparameters and Overfitting</h2>
+    <h2>Beyond SFT: Preference Optimization (RLHF and DPO)</h2>
+    <p>SFT teaches a model to imitate example completions, but imitation alone has a ceiling: it can only be as good as the completions in the dataset, and it provides no signal about relative quality between two plausible-but-different answers. Preference optimization methods address this by training on comparisons — "response A is better than response B for this prompt" — rather than single demonstrations.</p>
+    <h3>RLHF (Reinforcement Learning from Human Feedback)</h3>
+    <p>The classical RLHF pipeline has three stages:</p>
+    <ol>
+      <li><strong>SFT stage</strong> — as described above, producing an initial instruction-following policy <code>&pi;<sub>SFT</sub></code>.</li>
+      <li><strong>Reward modeling</strong> — human annotators are shown pairs of completions <code>(y<sub>w</sub>, y<sub>l</sub>)</code> for the same prompt <code>x</code> ("w" for the preferred/winning response, "l" for the rejected/losing one), and a separate reward model <code>r<sub>&phi;</sub>(x, y)</code> is trained to score responses such that the preferred one scores higher. The standard loss is derived from the Bradley-Terry model of pairwise preference:
+        <pre><code>L(&phi;) = - E_{(x,y_w,y_l)} [ log &sigma;( r_&phi;(x, y_w) - r_&phi;(x, y_l) ) ]</code></pre>
+        where <code>&sigma;</code> is the logistic sigmoid. This trains the reward model to assign a higher scalar score to whichever response the human preferred, without needing an absolute quality scale — only relative ordering.</li>
+      <li><strong>RL fine-tuning (typically PPO)</strong> — the policy is further updated to maximize the learned reward, using Proximal Policy Optimization, with a KL-divergence penalty against the SFT policy to keep the model from drifting too far and degenerately exploiting the reward model:
+        <pre><code>objective(&theta;) = E_{x, y~&pi;_&theta;} [ r_&phi;(x, y) ] - &beta; &middot; KL( &pi;_&theta;(&middot;|x) &Vert; &pi;_SFT(&middot;|x) )</code></pre>
+        The KL term is essential: reward models are imperfect proxies for true human preference, and a policy optimized against them without constraint will find "reward hacks" — outputs that score highly on the learned reward model but are not actually good by the standard a human would apply (excessive hedging, sycophancy, empty verbosity, listing disclaimers, etc., depending on what spurious pattern correlates with high reward in the training data). The KL penalty, controlled by <code>&beta;</code>, bounds how far the policy can move from the known-reasonable SFT starting point per unit of reward gained.</li>
+    </ol>
+    <p>RLHF via PPO is notoriously complex to implement correctly and unstable to tune: it requires keeping four models in memory simultaneously during training (the policy being trained, a frozen reference copy for the KL term, the reward model, and a value/critic network for the PPO advantage estimate), and small hyperparameter mistakes (KL coefficient, reward normalization, learning rate, batch composition) can cause reward hacking or training collapse.</p>
+    <h3>DPO (Direct Preference Optimization)</h3>
+    <p>DPO removes the separate reward model and the RL loop entirely, while provably optimizing the same objective as RLHF under the KL-constrained reward maximization formulation above. The key mathematical insight is that the optimal policy for the RLHF objective has a closed-form relationship to the reward function:</p>
+    <pre><code>r(x, y) = &beta; log( &pi;_&theta;(y|x) / &pi;_ref(y|x) ) + &beta; log Z(x)</code></pre>
+    <p>where <code>Z(x)</code> is a partition function that depends only on the prompt <code>x</code>, not on the response <code>y</code>. Substituting this reformulation of the reward directly into the Bradley-Terry preference loss causes the intractable partition function <code>Z(x)</code> to cancel out algebraically (because it appears identically in both the winning and losing response's reward term, and the loss only depends on their difference), leaving a loss that can be computed directly from the policy's own log-probabilities, with no reward model and no sampling/RL loop required:</p>
+    <pre><code>L_DPO(&theta;) = - E_{(x,y_w,y_l)} [
+    log &sigma;( &beta; log(&pi;_&theta;(y_w|x)/&pi;_ref(y_w|x))
+              - &beta; log(&pi;_&theta;(y_l|x)/&pi;_ref(y_l|x)) )
+]</code></pre>
+    <p>In implementation terms: run both the trainable policy and a frozen reference model (usually initialized as a copy of the SFT checkpoint) forward on the same preferred/rejected pair, take the sequence log-probabilities under each, and optimize the above logistic loss with ordinary supervised-style gradient descent — no sampling from the policy during training, no reward model, no critic network, no PPO instabilities. The gradient of this loss has an intuitive interpretation: it increases the log-probability of the preferred response and decreases the log-probability of the rejected response, with the update weighted more heavily when the current implicit reward model has the ranking wrong (i.e. when the model currently prefers the rejected response), which falls directly out of the sigmoid's derivative.</p>
+    <p><code>&beta;</code> plays the same role as in RLHF's KL penalty: it controls how far the policy is allowed to deviate from the reference model. Small <code>&beta;</code> allows more aggressive movement toward the preferred responses (larger effective step size relative to the reference), large <code>&beta;</code> keeps the policy closer to the reference.</p>
+    <p>Because DPO only requires a static, offline preference dataset rather than online sampling and reward evaluation, it is dramatically simpler to implement, cheaper to run, and more stable to train than PPO-based RLHF, and it has become the more common default for preference tuning in practice, with PPO-style RLHF (or its variants) reserved for settings where truly online, adaptive reward signals are needed.</p>
+  </section>
+
+  <section>
+    <h2>Hyperparameters, in Depth</h2>
     <ul>
-      <li><strong>Learning rate</strong> - typically 10x to 100x lower than pretraining</li>
-      <li><strong>Rank (LoRA)</strong> - higher rank captures more capacity but risks overfitting</li>
-      <li><strong>Batch size and sequence length</strong> - match production limits</li>
-      <li><strong>Evaluation</strong> - hold out real user-style prompts, not training paraphrases</li>
+      <li><strong>Learning rate.</strong> Fine-tuning learning rates are typically 10x to 100x lower than pretraining rates for the same model — full fine-tuning of large models commonly uses rates on the order of 1e-5 to 5e-5, while LoRA, because it only trains a small set of freshly-initialized adapter parameters, can tolerate higher rates, commonly 1e-4 to 3e-4. A learning rate that is too high for full fine-tuning is the single most common cause of catastrophic forgetting, because it lets a small number of gradient steps move the weights far from their pretrained values.</li>
+      <li><strong>Learning rate schedule.</strong> A short linear or cosine warmup (typically 3-10% of total steps) followed by cosine or linear decay to near zero is standard. Warmup avoids destabilizing the model with large updates before the optimizer's moment estimates have stabilized; decay lets the model settle into a sharper minimum by the end of training rather than continuing to jump around a wide loss basin.</li>
+      <li><strong>LoRA rank (r).</strong> Higher rank increases the adapter's representational capacity (more free parameters in <code>A</code> and <code>B</code>) but also increases overfitting risk on small datasets and increases (modestly) training and merge compute. Typical values range from 4 (very light adaptation, e.g. stylistic tuning) to 64 or higher (substantial behavioral change, e.g. a new task family entirely). Rank is usually tuned empirically by sweeping a small set of values and tracking held-out validation loss and downstream task metrics, since the "correct" rank depends on how different the target task distribution is from the base model's pretraining distribution.</li>
+      <li><strong>LoRA alpha and dropout.</strong> Alpha, as derived earlier, scales the effective magnitude of the update; LoRA dropout (applied to the input of the low-rank branch during training) is a standard regularizer against overfitting the adapter to a small dataset, typically 0.05-0.1.</li>
+      <li><strong>Batch size and gradient accumulation.</strong> Larger effective batch sizes produce smoother, lower-variance gradient estimates, which generally helps stability, but very large batches on small fine-tuning datasets can reduce the number of gradient steps taken per epoch enough that the model doesn't get sufficient updates before the epoch budget runs out. Gradient accumulation (summing gradients over several forward/backward passes before applying an optimizer step) is the standard way to reach a target effective batch size when per-step GPU memory limits the physical batch size.</li>
+      <li><strong>Sequence length.</strong> Should match the distribution of production inputs; training exclusively on short sequences and then serving long-context production inputs produces degraded performance at the lengths never seen during fine-tuning, both because of insufficient training signal at that length and, in some architectures, because positional encoding behavior at unseen lengths can be poorly calibrated.</li>
+      <li><strong>Weight decay.</strong> A small L2 penalty (commonly around 0.0-0.1) on trainable parameters, discouraging weights (or, for LoRA, adapter weights specifically) from growing large in ways that don't improve the loss, acting as a mild regularizer against overfitting.</li>
+      <li><strong>Evaluation set design.</strong> The single most common mistake in fine-tuning: using a held-out split of the same dataset for evaluation, where "held-out" only means the exact (prompt, completion) pairs are excluded, but the prompts are paraphrases or minor variations of training prompts. This produces evaluation numbers that look excellent while masking severe overfitting, because the model can still be relying on surface pattern-matching to near-duplicate training examples rather than generalizing. Effective evaluation uses genuinely distributionally different prompts — ideally sampled from the same source as real production traffic, collected independently of the training data construction process.</li>
     </ul>
-    <p>Signs of overfitting: near-perfect training loss, degraded general benchmarks, repetitive phrasing, and sensitivity to minor prompt wording changes.</p>
+    <h3>Diagnosing overfitting</h3>
+    <p>The clearest quantitative signature is a widening gap between training loss (which keeps falling) and validation loss (which plateaus, then rises). Qualitatively, an overfit model shows: near-verbatim reproduction of training examples when given prompts similar to training prompts; degraded performance on general-capability benchmarks the model previously scored well on (a direct measurement of catastrophic forgetting); repetitive or templated phrasing that mirrors patterns overrepresented in the fine-tuning set; and disproportionate sensitivity to small, semantically irrelevant wording changes in the prompt (a sign the model has learned surface statistical correlations specific to the training phrasing rather than the underlying task).</p>
+  </section>
+
+  <section>
+    <h2>Catastrophic Forgetting — Mechanism and Mitigation</h2>
+    <p>Catastrophic forgetting refers to a fine-tuned model losing capability on tasks or knowledge it demonstrated well before fine-tuning, as a side effect of weight updates optimized purely for the new, narrower objective. Mechanistically, gradient descent has no built-in notion of "don't break what already works" — every update step is computed only from the current batch's loss, and a parameter that happens to be important for some pretrained capability but irrelevant to the fine-tuning task can still be pushed away from its useful value if doing so reduces the fine-tuning loss, even slightly.</p>
+    <p>Several factors increase forgetting risk: high learning rates (larger steps away from the pretrained optimum), many epochs over a narrow dataset (repeated pressure in the same direction), full fine-tuning versus PEFT (more parameters free to move), and a fine-tuning distribution very different from, or much narrower than, the pretraining distribution (concentrated gradient pressure on a specific sub-region of parameter space).</p>
+    <p>Common mitigation strategies:</p>
+    <ul>
+      <li><strong>Parameter-efficient fine-tuning</strong> is itself a strong mitigation: because the base weights are frozen entirely (LoRA/QLoRA) or only a tiny fraction of parameters move, most of the network's pretrained knowledge is structurally protected from being overwritten.</li>
+      <li><strong>Lower learning rates and fewer epochs</strong>, directly limiting how far parameters can move from their pretrained values.</li>
+      <li><strong>Data replay / rehearsal</strong> — mixing a fraction of general-purpose or original-task data into the fine-tuning batches alongside the new task's data, so the gradient signal continues to reinforce the original capability even while learning the new one.</li>
+      <li><strong>Elastic Weight Consolidation (EWC)</strong> and related regularization methods add a penalty term to the loss proportional to the (estimated, e.g. via the diagonal of the Fisher information matrix) importance of each parameter for the original task, multiplied by how far that parameter has moved:
+        <pre><code>L_EWC(&theta;) = L_task(&theta;) + (&lambda;/2) &sum;_i F_i (&theta;_i - &theta;*_i)^2</code></pre>
+        where <code>&theta;*</code> is the pretrained parameter value, <code>F_i</code> is the estimated importance (Fisher information) of parameter <code>i</code>, and <code>&lambda;</code> controls the strength of the penalty. This lets important parameters move less while less-important parameters remain free to adapt.</li>
+      <li><strong>Multi-task or mixed-objective training</strong> — rather than fine-tuning purely on the new narrow task, include a broader mixture of tasks in the same training run, so the model is never optimized against a single narrow objective in isolation.</li>
+    </ul>
   </section>
 
   <section>
     <h2>Serving Fine-Tuned Models</h2>
-    <p>LoRA adapters can load atop a shared base in vLLM, TGI, or custom servers, reducing duplicate weight storage. Version adapters independently from the base checkpoint. Document which base revision each adapter was trained on; base upgrades may require re-tuning.</p>
-    <p>For API providers, fine-tuning APIs abstract storage and training, but you still own dataset quality, eval, and rollback strategy when a new fine-tune regresses production metrics.</p>
+    <p>LoRA adapters, being small and structurally separate from the frozen base weights until merged, can be loaded on top of a single shared base model at serving time — engines such as vLLM and Hugging Face TGI support dynamically swapping or even simultaneously serving multiple LoRA adapters against one resident base model in GPU memory, which is the foundation of most multi-tenant, multi-task fine-tuned deployment setups: one base model deployment, many lightweight task- or customer-specific adapters loaded per request.</p>
+    <p>Two serving strategies for LoRA specifically:</p>
+    <ul>
+      <li><strong>Merged weights.</strong> <code>W' = W + (&alpha;/r)BA</code> is computed once, offline, producing a single dense checkpoint indistinguishable in structure from a fully fine-tuned model. Zero additional inference-time compute or latency versus the base model, but you lose the ability to swap adapters at request time and you pay the storage cost of a full model copy per adapter.</li>
+      <li><strong>Unmerged / dynamic adapters.</strong> The base weights stay frozen and shared; <code>A</code> and <code>B</code> are loaded per-request or per-tenant and applied as an extra low-rank matmul at inference time. Slightly higher latency and engineering complexity, but dramatically lower storage (kilobytes to low megabytes per adapter rather than gigabytes) and the ability to serve many specialized behaviors from one base deployment.</li>
+    </ul>
+    <p>Regardless of strategy, version adapters independently from the base checkpoint and document precisely which base model revision each adapter was trained against — an adapter trained against one base checkpoint is not guaranteed to behave correctly, or even to be numerically well-formed, if merged onto or served alongside a different (even seemingly minor) revision of the base weights, since the low-rank update was learned relative to that specific frozen weight matrix.</p>
+    <p>For hosted fine-tuning APIs (where a provider abstracts away the training infrastructure), the provider typically owns the training loop, hardware, and checkpoint storage, but you still own dataset quality, evaluation methodology, and rollback strategy — if a new fine-tune regresses a production metric after deployment, you need your own held-out evaluation suite and a fast rollback path to the previous checkpoint or adapter version, independent of whatever the provider offers.</p>
   </section>
 
   <nav class="page-footer-nav">
@@ -104,5 +229,3 @@ model.print_trainable_parameters()  # ~0.1% of weights trainable</code></pre>
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-

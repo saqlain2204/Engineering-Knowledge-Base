@@ -14,7 +14,7 @@
     <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Reinforcement Learning</p>
   </nav>
   <h1>Reinforcement Learning: Complete Reference</h1>
-  <p>From Markov decision processes and Bellman equations through policy gradients, PPO, SAC, offline RL, and RL for LLM alignment, with derivations, intuition, and code.</p>
+  <p>From Markov decision processes and Bellman equations through policy gradients, PPO, SAC, offline RL, distributional RL, and RL for LLM alignment, with full derivations, intuition, worked numeric examples, and code.</p>
 </header>
 
 <nav class="article-toc" aria-label="Table of contents">
@@ -31,11 +31,12 @@
     <li><a href="#function-approx">Function Approximation and Deep RL</a></li>
     <li><a href="#policy-gradient">Policy Gradient Methods</a></li>
     <li><a href="#actor-critic">Actor-Critic and Advantage</a></li>
-    <li><a href="#trpo-ppo">TRPO and PPO</a></li>
+    <li><a href="#trpo-ppo">Natural Gradients, TRPO and PPO</a></li>
     <li><a href="#continuous">Continuous Control: DDPG, TD3, SAC</a></li>
     <li><a href="#bandits">Multi-Armed Bandits</a></li>
     <li><a href="#exploration">Exploration Strategies</a></li>
     <li><a href="#offline-imitation">Offline RL and Imitation Learning</a></li>
+    <li><a href="#distributional">Distributional RL</a></li>
     <li><a href="#advanced">Advanced Topics</a></li>
     <li><a href="#environments">RL Environments and APIs</a></li>
     <li><a href="#rewards">Reward Design, Shaping, and Hacking</a></li>
@@ -51,8 +52,8 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="intro">
     <h2>1. What Is Reinforcement Learning?</h2>
-    <p>Reinforcement learning (RL) is the study of how an <strong>agent</strong> learns to act in an <strong>environment</strong> by trial and error to maximize cumulative <strong>reward</strong>. Unlike supervised learning, there is no fixed label for every input. The agent discovers which actions are good through feedback that may be delayed, sparse, or noisy.</p>
-    <p>The agent observes state $s_t$, takes action $a_t$, receives reward $r_{t+1}$, and transitions to $s_{t+1}$. The goal is to learn a <strong>policy</strong> $\pi(a|s)$ that maximizes expected discounted return.</p>
+    <p>Reinforcement learning (RL) is the mathematical study of sequential decision-making under uncertainty. An <strong>agent</strong> interacts with an <strong>environment</strong> over discrete time steps. At each step the agent observes a state, chooses an action, and receives a scalar reward together with a new state. The objective is not to minimize a prediction error on a fixed dataset, as in supervised learning, but to choose a behavior policy that maximizes the total reward accumulated over time. This shifts the entire problem: data is not i.i.d., the agent's own choices affect what data it will see next (the distribution of visited states depends on the policy), and consequences of an action can be delayed by many steps.</p>
+    <p>Formally, at each discrete time $t = 0, 1, 2, \ldots$ the agent observes state $s_t \in \mathcal{S}$, samples action $a_t \sim \pi(\cdot|s_t)$ from its policy, the environment responds with reward $r_{t+1} \in \mathbb{R}$ and next state $s_{t+1} \sim P(\cdot|s_t,a_t)$. This loop repeats until a terminal state is reached (episodic) or forever (continuing). The agent's goal is to find $\pi^\star = \arg\max_\pi \mathbb{E}_\pi\left[\sum_t \gamma^t r_{t+1}\right]$.</p>
 
     <h3>Core vocabulary</h3>
     <table>
@@ -60,26 +61,31 @@
       <tbody>
         <tr><td>$s, s'$</td><td>State and next state</td></tr>
         <tr><td>$a$</td><td>Action</td></tr>
-        <tr><td>$r$</td><td>Scalar reward signal</td></tr>
+        <tr><td>$r$</td><td>Scalar reward signal, the only training signal RL uses to shape behavior</td></tr>
         <tr><td>$\pi(a|s)$</td><td>Policy: probability of action $a$ in state $s$</td></tr>
-        <tr><td>$P(s'|s,a)$</td><td>Transition dynamics</td></tr>
+        <tr><td>$P(s'|s,a)$</td><td>Transition dynamics (the "physics" of the environment)</td></tr>
         <tr><td>$R(s,a,s')$ or $R(s,a)$</td><td>Reward function</td></tr>
-        <tr><td>$\gamma \in [0,1)$</td><td>Discount factor</td></tr>
-        <tr><td>$V^\pi(s)$</td><td>State value under policy $\pi$</td></tr>
-        <tr><td>$Q^\pi(s,a)$</td><td>Action-value under policy $\pi$</td></tr>
-        <tr><td>$A^\pi(s,a)$</td><td>Advantage: $Q^\pi(s,a) - V^\pi(s)$</td></tr>
+        <tr><td>$\gamma \in [0,1)$</td><td>Discount factor, trades off immediate vs future reward</td></tr>
+        <tr><td>$V^\pi(s)$</td><td>State value under policy $\pi$: expected return starting from $s$</td></tr>
+        <tr><td>$Q^\pi(s,a)$</td><td>Action-value under policy $\pi$: expected return after taking $a$ in $s$, then following $\pi$</td></tr>
+        <tr><td>$A^\pi(s,a)$</td><td>Advantage: $Q^\pi(s,a) - V^\pi(s)$, how much better than average $a$ is</td></tr>
+        <tr><td>$\tau$</td><td>A full trajectory $(s_0,a_0,r_1,s_1,a_1,r_2,\ldots)$</td></tr>
+        <tr><td>$d^\pi(s)$</td><td>Discounted state-visitation distribution induced by $\pi$</td></tr>
       </tbody>
     </table>
 
-    <h3>RL vs supervised vs unsupervised</h3>
+    <h3>RL vs supervised vs unsupervised learning</h3>
     <ul>
-      <li><strong>Supervised:</strong> $(x, y)$ pairs; minimize prediction error.</li>
-      <li><strong>Unsupervised:</strong> find structure in data without labels.</li>
-      <li><strong>RL:</strong> sequential decisions; learn from scalar feedback and consequences of actions. Credit assignment (which past action caused later reward) is the central difficulty.</li>
+      <li><strong>Supervised learning:</strong> fixed dataset of $(x,y)$ pairs, i.i.d. samples, a single differentiable loss (cross-entropy, MSE). The gradient of the loss with respect to model output is directly computable.</li>
+      <li><strong>Unsupervised learning:</strong> discover structure (clusters, density, latent factors) with no labels at all.</li>
+      <li><strong>Reinforcement learning:</strong> data is generated by the agent's own behavior (on-policy data is non-stationary as the policy changes); the only feedback is a scalar reward, which may be delayed by many steps from the action that caused it (the <strong>credit assignment problem</strong>); and there is a fundamental <strong>exploration-exploitation dilemma</strong> — the agent must sometimes choose actions it believes are suboptimal purely to gather information that could improve future decisions.</li>
     </ul>
 
+    <h3>Why credit assignment is hard</h3>
+    <p>Suppose an agent plays a 200-move game of chess and wins. The single reward of $+1$ arrives only at the terminal move, yet the outcome was influenced by decisions made 150 moves earlier. Naive supervised learning has no mechanism to decide which of the 200 moves "caused" the win. RL solves this with bootstrapped value estimates (an intermediate quantity $V(s)$ or $Q(s,a)$ that lets reward information propagate backward through the trajectory one edge at a time) and, in the policy-gradient family, by re-weighting the log-probability of every action taken in the trajectory by the return that followed it. Both mechanisms are covered in full below.</p>
+
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> RL is like learning chess by playing games, not by memorizing expert moves alone. You need both demonstrations (optional) and experience of winning/losing to internalize long-term strategy.
+      <strong>Intuition:</strong> RL is like learning to play chess purely by playing games against yourself and adjusting your instincts based on who won, versus supervised learning, which is like memorizing an annotated database of grandmaster moves. In practice the strongest systems (AlphaZero, RLHF-trained LLMs) combine both: supervised pretraining or imitation gives a reasonable starting policy, and RL refines it toward an objective that supervised data alone cannot express (a game-winning strategy, a human preference ordering, a verified correct proof).</p>
     </div>
 
     <p class="refer-link"><small>Refer: <a href="https://web.stanford.edu/~sidhart/book/" rel="noopener noreferrer">Sutton &amp; Barto: Reinforcement Learning: An Introduction</a> · <a href="https://arxiv.org/abs/1703.03400" rel="noopener noreferrer">A Brief Survey of Deep RL (Arulkumaran et al.)</a></small></p>
@@ -88,37 +94,44 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="mdp">
     <h2>2. Markov Decision Processes (MDPs)</h2>
-    <p>An MDP is the standard mathematical framework for RL. It is a tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$:</p>
+    <p>An MDP is the standard mathematical framework used to formalize an RL problem. It is a tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma, \mu_0)$:</p>
     <ul>
-      <li>$\mathcal{S}$: state space</li>
-      <li>$\mathcal{A}$: action space (discrete or continuous)</li>
-      <li>$P(s_{t+1}|s_t, a_t)$: transition kernel</li>
-      <li>$R(s_t, a_t, s_{t+1})$ or expected reward $R(s,a)$</li>
+      <li>$\mathcal{S}$: state space, discrete or continuous</li>
+      <li>$\mathcal{A}$: action space, discrete or continuous</li>
+      <li>$P(s_{t+1}|s_t, a_t)$: transition kernel, a probability distribution over next states for every state-action pair</li>
+      <li>$R(s_t, a_t, s_{t+1})$ or expected reward $R(s,a) = \mathbb{E}_{s' \sim P(\cdot|s,a)}[R(s,a,s')]$</li>
       <li>$\gamma$: discount factor</li>
+      <li>$\mu_0$: initial state distribution, $s_0 \sim \mu_0$</li>
     </ul>
 
     <h3>Markov property</h3>
-    <p>The future is independent of the past given the present:</p>
+    <p>The future is conditionally independent of the past given the present:</p>
     $$P(s_{t+1}|s_t, a_t, s_{t-1}, \ldots, s_0) = P(s_{t+1}|s_t, a_t)$$
+    <p>This is not an assumption about the physical world; it is a modeling choice about what we put into the state. Any process can be made Markov by enlarging the state to include enough history (e.g. stacking the last $k$ frames in Atari to recover velocity information that a single frame lacks). The practical engineering skill in RL is choosing a state representation that is Markov, or close enough to Markov that the resulting approximation error is tolerable.</p>
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> The current state must summarize everything relevant for predicting the future. If it does not (e.g., a robot with limited sensors), you have a <strong>POMDP</strong> and typically maintain a belief state or use history / recurrent networks.
+      <strong>Intuition:</strong> The current state must summarize everything relevant for predicting the future. If it does not (e.g., a robot with limited sensors, or a card game where you cannot see the opponent's hand), you have a <strong>POMDP</strong>, and the optimal policy in general depends on the entire history of observations, not just the current one.
     </div>
 
     <h3>Episodic vs continuing tasks</h3>
     <ul>
-      <li><strong>Episodic:</strong> finite horizon ending in terminal states (games, robotics episodes).</li>
-      <li><strong>Continuing:</strong> no terminal state; infinite horizon with discounting (resource allocation, perpetual control).</li>
+      <li><strong>Episodic:</strong> the process reaches an absorbing terminal state after a finite (possibly random) number of steps; the return is well defined even with $\gamma=1$ because the sum is finite. Games, one robotic pick-and-place attempt, and a single LLM response generation (terminating at the end-of-sequence token) are episodic.</li>
+      <li><strong>Continuing:</strong> there is no terminal state; the process runs forever. The return $\sum_{t=0}^\infty \gamma^t r_{t+1}$ must be discounted ($\gamma<1$) to remain finite unless the average-reward formulation is used instead: $\rho^\pi = \lim_{T\to\infty} \frac{1}{T}\mathbb{E}\left[\sum_{t=0}^{T-1} r_{t+1}\right]$, common in queueing and resource-allocation problems.</li>
     </ul>
 
     <h3>Partially Observable MDPs (POMDPs)</h3>
-    <p>Agent receives observation $o_t$ from emission function $O(o|s,a)$, not full state. Solutions: stack observations, learn memory (RNN/Transformer), estimate belief $b(s)$, or treat observation as state (works if Markov in practice).</p>
+    <p>A POMDP adds an observation space $\mathcal{O}$ and emission function $O(o|s,a)$; the agent receives $o_t$, not the true state $s_t$. Optimal behavior in a POMDP is a function of the entire observation-action history, or equivalently of the <strong>belief state</strong> $b_t(s) = P(s_t = s \mid o_0, a_0, \ldots, o_t)$, updated by Bayes' rule at every step:</p>
+    $$b_{t+1}(s') \propto O(o_{t+1}|s',a_t) \sum_s P(s'|s,a_t) b_t(s)$$
+    <p>Belief-state planning is exact but the belief space is continuous and high-dimensional even for small $|\mathcal{S}|$, so exact POMDP solvers (e.g. point-based value iteration) scale poorly. In deep RL the standard workaround is to approximate the belief implicitly with a recurrent network (LSTM/GRU) or a transformer that attends over the recent observation history, letting the network learn whatever sufficient statistic it needs rather than computing the Bayesian belief explicitly. Frame-stacking (stack the last $k$ raw observations as the state) is a cheap, effective special case that works when the missing information (e.g. velocity from consecutive positions) has a short memory horizon.</p>
 
     <h3>Policy types</h3>
     <ul>
-      <li><strong>Deterministic:</strong> $a = \mu(s)$</li>
-      <li><strong>Stochastic:</strong> $\pi(a|s)$, required for exploration and policy gradient theory</li>
-      <li><strong>Markovian:</strong> depends only on current state (or observation)</li>
+      <li><strong>Deterministic:</strong> $a = \mu(s)$, a single action per state. Used in DDPG/TD3.</li>
+      <li><strong>Stochastic:</strong> $\pi(a|s)$, a distribution over actions. Necessary for exploration during learning, for well-defined policy-gradient theory (the log-probability gradient is undefined for a deterministic policy without extra machinery), and for game-theoretic settings where a deterministic policy can be exploited (e.g. rock-paper-scissors, where the unique Nash equilibrium is the uniform stochastic policy).</li>
+      <li><strong>Markovian:</strong> depends only on the current state (or observation / belief), not on the full history.</li>
     </ul>
+
+    <h3>Existence and structure of the optimal policy</h3>
+    <p>For any finite MDP with bounded rewards, there exists an optimal policy that is (a) stationary — does not depend on $t$ — and (b) deterministic. This is a non-obvious but classical result: even though stochastic policies form a strictly larger search space, the best stochastic policy can never beat the best deterministic one, because $V^*(s) = \max_a Q^*(s,a)$ is achieved by concentrating all probability mass on the maximizing action. Stochastic policies remain useful anyway, purely as an exploration and optimization device during learning.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
@@ -127,24 +140,33 @@
 
     <h3>Return (cumulative reward)</h3>
     $$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \cdots = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}$$
+    <p>The return satisfies the recursive identity $G_t = R_{t+1} + \gamma G_{t+1}$, which is the seed of every Bellman equation in this document.</p>
 
     <div class="callout callout-intuition">
-      <strong>Intuition for $\gamma$:</strong> $\gamma$ near 0 makes the agent myopic (care about immediate reward). $\gamma$ near 1 makes it far-sighted. $\gamma &lt; 1$ also guarantees bounded returns in continuing tasks and reflects uncertainty about future interactions.
+      <strong>Intuition for $\gamma$:</strong> $\gamma$ near 0 makes the agent myopic (it only cares about the very next reward, like a short-sighted trader who ignores tomorrow). $\gamma$ near 1 makes it far-sighted (it weighs distant future rewards almost as heavily as immediate ones). $\gamma &lt; 1$ also guarantees bounded returns in continuing tasks (geometric series bound $|G_t| \leq R_{\max}/(1-\gamma)$) and can be interpreted probabilistically as the agent believing the episode terminates at each step with probability $1-\gamma$, reflecting genuine uncertainty about whether future interactions will happen at all.
     </div>
+
+    <h3>Effective horizon</h3>
+    <p>A useful rule of thumb: the "effective horizon" of a discount factor is roughly $1/(1-\gamma)$ steps, since $\gamma^{1/(1-\gamma)} \approx e^{-1} \approx 0.37$. So $\gamma=0.99$ corresponds to caring meaningfully about roughly the next 100 steps, and $\gamma=0.999$ about the next 1000. Choosing $\gamma$ too small biases the agent toward short-sighted, sometimes catastrophically wrong, behavior (e.g. a driving agent that brakes too late because braking early costs a tiny discounted penalty it doesn't value); choosing $\gamma$ too close to 1 increases the variance of Monte Carlo return estimates and can slow learning.</p>
 
     <h3>State-value function</h3>
     $$V^\pi(s) = \mathbb{E}_\pi[G_t \mid S_t = s] = \mathbb{E}_\pi\left[\sum_{k=0}^{\infty} \gamma^k R_{t+k+1} \mid S_t = s\right]$$
+    <p>$V^\pi(s)$ answers: "if I am in state $s$ and follow policy $\pi$ from now on, how much total discounted reward do I expect?" It depends on the policy because different policies visit different future states and take different actions in them.</p>
 
     <h3>Action-value function (Q-function)</h3>
     $$Q^\pi(s,a) = \mathbb{E}_\pi[G_t \mid S_t = s, A_t = a]$$
+    <p>$Q^\pi(s,a)$ answers: "if I am in state $s$, take action $a$ right now (possibly not the action $\pi$ would have chosen), and follow $\pi$ thereafter, how much total discounted reward do I expect?" Because $Q$ conditions on the immediate action, a greedy policy can be extracted from it directly without needing a model of the environment: $\pi(s) = \arg\max_a Q(s,a)$. This is precisely why value-based methods (Q-learning, DQN) can be model-free while still supporting planning-like one-step lookahead.</p>
 
     <h3>Advantage function</h3>
     $$A^\pi(s,a) = Q^\pi(s,a) - V^\pi(s)$$
-    <p>Advantage measures how much better action $a$ is than the average action under $\pi$ in state $s$. Policy gradients use advantages to reduce variance.</p>
+    <p>Advantage measures how much better action $a$ is than the policy's own average action in state $s$. By construction $\mathbb{E}_{a\sim\pi(\cdot|s)}[A^\pi(s,a)] = 0$ for every $s$: the advantage of the average action under $\pi$ is exactly zero. Positive advantage means "do more of this than $\pi$ currently does"; negative means "do less." Policy gradients use advantages instead of raw returns or Q-values specifically because centering around zero removes a huge, state-dependent additive constant from the learning signal, which is the single biggest source of variance reduction available without introducing bias (proved formally in section 10.3).</p>
 
-    <h3>Optimal policy</h3>
-    $$\pi^* = \arg\max_\pi \mathbb{E}[G_t \mid \pi]$$
-    <p>There exists an optimal policy that is deterministic (for MDPs) and satisfies $\pi^*(a|s) &gt; 0 \iff Q^*(s,a) = \max_{a'} Q^*(s,a')$.</p>
+    <h3>Optimal policy and optimal value functions</h3>
+    $$\pi^* = \arg\max_\pi \mathbb{E}[G_t \mid \pi], \qquad V^*(s) = \max_\pi V^\pi(s), \qquad Q^*(s,a) = \max_\pi Q^\pi(s,a)$$
+    <p>There exists an optimal policy that is deterministic and satisfies $\pi^*(a|s) &gt; 0 \iff Q^*(s,a) = \max_{a'} Q^*(s,a')$. All optimal policies share the same $V^*$ and $Q^*$, even though there can be more than one optimal policy when several actions tie for the maximum.</p>
+
+    <h3>Worked numeric example</h3>
+    <p>Consider a 1-state, 2-action bandit-like MDP that always terminates after one step: action $a_1$ gives reward $10$ with probability $0.5$ and reward $0$ otherwise; action $a_2$ always gives reward $4$. Then $Q^\pi(s,a_1)=5$, $Q^\pi(s,a_2)=4$ regardless of $\pi$ (since the episode ends immediately, $Q$ does not depend on future behavior). $V^\pi(s) = \pi(a_1|s)\cdot 5 + \pi(a_2|s)\cdot 4$. The optimal policy places all probability on $a_1$, giving $V^*(s)=5$. If $\pi$ is $\epsilon$-greedy with $\epsilon=0.2$ favoring $a_1$: $V^\pi(s) = 0.9(5)+0.1(4)=4.9$. The advantage $A^\pi(s,a_1) = 5-4.9=0.1$, $A^\pi(s,a_2)=4-4.9=-0.9$, and indeed $0.9(0.1)+0.1(-0.9)=0$, confirming the zero-mean property.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
@@ -152,60 +174,72 @@
     <h2>4. Bellman Equations: Derivation and Intuition</h2>
 
     <h3>4.1 Bellman expectation equation for $V^\pi$</h3>
-    <p>Start from the definition and split the sum at the first reward:</p>
+    <p>Start from the definition and split the sum at the first reward, using $G_t = R_{t+1}+\gamma G_{t+1}$:</p>
     $$V^\pi(s) = \mathbb{E}_\pi[R_{t+1} + \gamma G_{t+1} \mid S_t = s]$$
-    <p>Expand expectation over actions and next states under policy $\pi$:</p>
+    <p>By the tower rule of expectation, condition first on the action taken, then on the resulting next state, and use the Markov property so that $\mathbb{E}[G_{t+1}\mid S_{t+1}=s'] = V^\pi(s')$:</p>
     $$\boxed{V^\pi(s) = \sum_a \pi(a|s) \sum_{s'} P(s'|s,a)\left[R(s,a,s') + \gamma V^\pi(s')\right]}$$
 
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> The value of being in $s$ equals the expected immediate reward plus the discounted value of wherever you land next. This recursive structure is why dynamic programming works.
+      <strong>Intuition:</strong> The value of being in $s$ equals the expected immediate reward plus the discounted value of wherever you land next, averaged over the policy's action choice and the environment's randomness. This recursive, one-step-lookahead structure — value today equals reward now plus discounted value tomorrow — is the single mathematical fact from which essentially all of RL is built. Dynamic programming works because this equation is a linear system (for fixed $\pi$) or a fixed-point equation (for the optimal case) that can be solved iteratively.
     </div>
 
     <h3>4.2 Bellman expectation equation for $Q^\pi$</h3>
     $$\boxed{Q^\pi(s,a) = \sum_{s'} P(s'|s,a)\left[R(s,a,s') + \gamma \sum_{a'} \pi(a'|s') Q^\pi(s',a')\right]}$$
+    <p>Read right to left: from $(s,a)$, the environment gives a reward and a next state $s'$; from $s'$, the policy picks $a'$ and the value continues as $Q^\pi(s',a')$.</p>
 
     <h3>4.3 Bellman optimality equations</h3>
     $$V^*(s) = \max_a \sum_{s'} P(s'|s,a)\left[R(s,a,s') + \gamma V^*(s')\right]$$
     $$Q^*(s,a) = \sum_{s'} P(s'|s,a)\left[R(s,a,s') + \gamma \max_{a'} Q^*(s',a')\right]$$
 
     <div class="callout callout-derivation">
-      <strong>Derivation sketch (optimality):</strong> At optimality, the agent picks the action maximizing expected return. Replacing $\pi(a|s)$ with $\arg\max_a$ in the expectation equation yields the Bellman optimality equation. $V^*$ and $Q^*$ are fixed points of these operators.
+      <strong>Derivation sketch (optimality):</strong> At optimality, the agent picks, in every state it might reach, the action maximizing expected return from that point on. Replacing the policy average $\sum_a \pi(a|s)(\cdot)$ with $\max_a(\cdot)$ in the expectation equation yields the Bellman optimality equation. Formally this follows from Bellman's principle of optimality: an optimal policy has the property that, whatever the initial decision, the remaining decisions must constitute an optimal policy with regard to the state resulting from the first decision. $V^*$ and $Q^*$ are the unique fixed points of the Bellman optimality operators $\mathcal{T}^*$, which are $\gamma$-contractions in the max-norm on the space of bounded value functions (Banach fixed-point theorem), which is exactly why value iteration converges from any initialization.
     </div>
 
-    <h3>4.4 Relationship between $V$ and $Q$</h3>
-    $$V^\pi(s) = \sum_a \pi(a|s) Q^\pi(s,a), \quad Q^\pi(s,a) = \mathbb{E}[R + \gamma V^\pi(s') \mid s,a]$$
+    <h3>4.4 Contraction property (why iterative methods converge)</h3>
+    <p>Define the Bellman optimality operator on value functions, $(\mathcal{T}^*V)(s) = \max_a\sum_{s'}P(s'|s,a)[R(s,a,s')+\gamma V(s')]$. For any two value functions $V_1,V_2$:</p>
+    $$\|\mathcal{T}^*V_1 - \mathcal{T}^*V_2\|_\infty \leq \gamma \|V_1 - V_2\|_\infty$$
+    <p>This holds because the max operator is non-expansive ($|\max_a f(a) - \max_a g(a)| \le \max_a|f(a)-g(a)|$) and the expectation over $P$ is a convex combination, also non-expansive; the only contraction factor comes from the explicit $\gamma$ multiplying $V$. Since $\gamma<1$, repeated application of $\mathcal{T}^*$ to any starting $V_0$ converges geometrically to the unique fixed point $V^*$, at rate $\gamma^k$ after $k$ iterations. The same argument applies to $\mathcal{T}^\pi$ (the policy evaluation operator) converging to $V^\pi$, and to the tabular Q-learning and value-iteration updates below.</p>
+
+    <h3>4.5 Relationship between $V$ and $Q$</h3>
+    $$V^\pi(s) = \sum_a \pi(a|s) Q^\pi(s,a), \quad Q^\pi(s,a) = \mathbb{E}_{s'\sim P(\cdot|s,a)}[R(s,a,s') + \gamma V^\pi(s')]$$
     $$V^*(s) = \max_a Q^*(s,a), \quad \pi^*(s) = \arg\max_a Q^*(s,a)$$
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="dp">
     <h2>5. Dynamic Programming (Model-Based Tabular)</h2>
-    <p>When $P$ and $R$ are known, DP computes optimal policies without environment interaction. DP requires full sweeps over state space, feasible only only for small discrete problems but foundational for understanding RL.</p>
+    <p>When $P$ and $R$ are fully known and $\mathcal{S}, \mathcal{A}$ are small and discrete, DP computes optimal policies exactly without any environment interaction. DP requires full sweeps over the state space at every iteration, which becomes infeasible as $|\mathcal{S}|$ grows (the "curse of dimensionality" — a robot with 10 continuous joints discretized into 100 bins each has $100^{10}$ states), but it is the conceptual foundation every subsequent RL algorithm approximates.</p>
 
     <h3>5.1 Policy evaluation</h3>
-    <p>Iteratively apply Bellman expectation until convergence:</p>
-    $$V_{k+1}(s) = \sum_a \pi(a|s) \sum_{s'} P(s'|s,a)\left[R + \gamma V_k(s')\right]$$
-    <p>Converges to $V^\pi$ as $k \to \infty$ (contraction mapping with modulus $\gamma$).</p>
+    <p>Iteratively apply the Bellman expectation operator until convergence:</p>
+    $$V_{k+1}(s) = \sum_a \pi(a|s) \sum_{s'} P(s'|s,a)\left[R(s,a,s') + \gamma V_k(s')\right]$$
+    <p>Converges to $V^\pi$ as $k \to \infty$ because this is exactly the $\gamma$-contraction $\mathcal{T}^\pi$ described above. In practice, exact convergence is never needed; a fixed number of sweeps (or a small tolerance $\|V_{k+1}-V_k\|_\infty &lt; \theta$) suffices for policy improvement to make progress.</p>
 
     <h3>5.2 Policy improvement theorem</h3>
-    <p>Define greedy policy w.r.t. $V^\pi$:</p>
-    $$\pi'(s) = \arg\max_a \sum_{s'} P(s'|s,a)[R + \gamma V^\pi(s')]$$
-    <p>Then $V^{\pi'}(s) \geq V^\pi(s)$ for all $s$, with strict improvement unless $\pi$ is already optimal.</p>
-
+    <p>Define the greedy policy with respect to $V^\pi$:</p>
+    $$\pi'(s) = \arg\max_a \sum_{s'} P(s'|s,a)[R(s,a,s') + \gamma V^\pi(s')] = \arg\max_a Q^\pi(s,a)$$
+    <p><strong>Theorem:</strong> $V^{\pi'}(s) \geq V^\pi(s)$ for all $s$, with strict inequality at some $s$ unless $\pi$ is already optimal.</p>
+    <div class="callout callout-derivation">
+      <strong>Proof sketch:</strong> By construction $Q^\pi(s,\pi'(s)) \geq V^\pi(s)$ for every $s$ (the greedy action can only match or beat the average action $\pi$ already takes). Chain this inequality forward through time: $V^\pi(s) \leq Q^\pi(s,\pi'(s)) = \mathbb{E}[R_{t+1}+\gamma V^\pi(S_{t+1})\mid S_t=s,A_t=\pi'(s)] \leq \mathbb{E}[R_{t+1}+\gamma Q^\pi(S_{t+1},\pi'(S_{t+1}))\mid \ldots] \leq \cdots \to V^{\pi'}(s)$, repeatedly substituting the same one-step improvement bound at every future time step. The chain telescopes to give $V^\pi(s) \leq V^{\pi'}(s)$.
+    </div>
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> If you act greedily according to your current value estimates, you can only do better (or stay equal). You never forget what the old policy already achieved.
+      <strong>Intuition:</strong> If you act greedily according to your current value estimates, you can only do better or stay equal — you never "forget" what the old policy already achieved, because every step of the new policy is locally at least as good as the old policy's average action, and these local gains compound.
     </div>
 
     <h3>5.3 Policy iteration</h3>
     <ol>
-      <li>Evaluate $V^\pi$ (exactly or iteratively).</li>
+      <li>Evaluate $V^\pi$ (exactly, by solving the linear system $V=R^\pi+\gamma P^\pi V$, or iteratively).</li>
       <li>Improve: $\pi \leftarrow \text{greedy}(V^\pi)$.</li>
-      <li>Repeat until policy stable.</li>
+      <li>Repeat until the policy is stable (no state changes its greedy action).</li>
     </ol>
+    <p>Policy iteration converges to $\pi^*$ in a finite number of iterations for finite MDPs, because there are only finitely many deterministic policies and each iteration strictly improves (or terminates). In practice it often converges in surprisingly few iterations (dozens) even for MDPs with thousands of states, because each round performs a "hard" improvement affecting many states simultaneously.</p>
 
     <h3>5.4 Value iteration</h3>
-    $$V_{k+1}(s) = \max_a \sum_{s'} P(s'|s,a)[R + \gamma V_k(s')]$$
-    <p>Combines evaluation and improvement in one step. Extract policy after convergence: $\pi(s) = \arg\max_a \sum_{s'} P(s'|s,a)[R + \gamma V^*(s')]$.</p>
+    $$V_{k+1}(s) = \max_a \sum_{s'} P(s'|s,a)[R(s,a,s') + \gamma V_k(s')]$$
+    <p>Combines evaluation and improvement into a single sweep by applying $\mathcal{T}^*$ directly, rather than fully evaluating each intermediate policy. Extract the greedy policy only after convergence (or after enough sweeps that $\|V_{k+1}-V_k\|_\infty$ is below a stopping tolerance $\theta$, which bounds the sub-optimality of the extracted policy by $\frac{2\gamma\theta}{1-\gamma}$).</p>
+
+    <h3>5.5 Asynchronous and prioritized sweeping</h3>
+    <p>Standard DP updates every state on every sweep. Asynchronous DP updates states in any order, even skipping some, as long as every state keeps getting updated infinitely often in the limit — convergence still holds because each individual update is still a contraction toward the fixed point. <strong>Prioritized sweeping</strong> maintains a priority queue keyed by the magnitude of the Bellman error $|\max_a\sum_{s'}P(s'|s,a)[R+\gamma V(s')] - V(s)|$ and always updates the state with the largest error next, which propagates value changes through the state graph far faster than uniform sweeps, especially in sparse-reward domains.</p>
 
     <pre><code># Tabular value iteration (toy example)
 import numpy as np
@@ -219,74 +253,99 @@ for _ in range(1000):
             q = sum(P[s, a, sp] * (R[s, a, sp] + gamma * V[sp]) for sp in range(n_states))
             q_sa.append(q)
         V_new[s] = max(q_sa)
-    V = V_new</code></pre>
+    V = V_new
+    # policy extraction after convergence:
+    # pi[s] = argmax_a sum_sp P[s,a,sp] * (R[s,a,sp] + gamma * V[sp])</code></pre>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="mc">
     <h2>6. Monte Carlo Methods</h2>
-    <p>MC methods learn from complete episodes of experience. No bootstrapping: they use actual returns $G_t$ as targets.</p>
+    <p>MC methods learn from complete episodes of real experience without ever needing $P$ or $R$ explicitly. No bootstrapping: they use the actual observed return $G_t$, computed by summing real rewards to the end of the episode, as the learning target. This makes MC estimates unbiased but high-variance, and it requires episodic tasks (or at least a way to truncate and bootstrap at the horizon).</p>
 
     <h3>6.1 MC prediction</h3>
-    <p>Estimate $V^\pi(s)$ by averaging returns observed after visiting $s$:</p>
-    $$V(s) \leftarrow \text{average of } G_t \text{ for all visits to } s$$
+    <p>Estimate $V^\pi(s)$ by averaging the returns observed after every visit to $s$ across many sampled episodes:</p>
+    $$V(s) \leftarrow \text{average of } G_t \text{ over all visits to } s \text{ across episodes}$$
+    <p>Incremental (running-mean) form, useful for online updates and for non-stationary problems with a fixed step size $\alpha$ instead of $1/N(s)$:</p>
+    $$V(S_t) \leftarrow V(S_t) + \alpha \left[G_t - V(S_t)\right]$$
 
     <h3>6.2 First-visit vs every-visit MC</h3>
     <ul>
-      <li><strong>First-visit:</strong> count return only at first occurrence of $s$ in episode.</li>
-      <li><strong>Every-visit:</strong> count at every occurrence. Both converge to $V^\pi(s)$ under standard conditions.</li>
+      <li><strong>First-visit:</strong> count the return only at the first occurrence of $s$ within an episode. Each episode contributes an i.i.d. sample per state (assuming episodes are independent), which makes the standard law-of-large-numbers convergence argument immediate.</li>
+      <li><strong>Every-visit:</strong> count the return at every occurrence of $s$ within an episode, even if $s$ recurs. Samples within an episode are then correlated, but every-visit MC still converges to $V^\pi(s)$ under standard conditions (and is typically preferred in practice because it uses data more efficiently).</li>
     </ul>
 
     <h3>6.3 MC control (on-policy)</h3>
-    <p>Alternate policy evaluation and improvement using $\epsilon$-greedy exploration:</p>
+    <p>Alternate policy evaluation (estimate $Q^\pi$ by MC, since a model-free greedy improvement needs $Q$, not $V$, to avoid requiring $P$) and policy improvement using an $\epsilon$-soft policy to keep exploring:</p>
     $$\pi(a|s) = \begin{cases} 1 - \epsilon + \frac{\epsilon}{|\mathcal{A}|} & a = \arg\max_a Q(s,a) \\ \frac{\epsilon}{|\mathcal{A}|} & \text{otherwise} \end{cases}$$
+    <p><strong>GLIE</strong> (Greedy in the Limit with Infinite Exploration) is the condition that guarantees convergence of MC control to $Q^*$: every state-action pair must be visited infinitely often, and the policy must converge to the greedy policy in the limit. A common schedule that satisfies GLIE is $\epsilon_k = 1/k$ where $k$ is the episode index.</p>
 
     <h3>6.4 Off-policy MC and importance sampling</h3>
-    <p>Learn about target policy $\pi$ from data collected by behavior policy $b$. Weight returns by likelihood ratio:</p>
+    <p>Learn about a target policy $\pi$ from data collected by a different behavior policy $b$ (this is essential when you want to reuse old data, learn about a deterministic greedy target while behaving exploratorily, or learn many target policies from one stream of experience — the "Horde" architecture). Weight each observed return by the likelihood ratio between the two policies along the trajectory:</p>
     $$\rho_{t:T-1} = \prod_{k=t}^{T-1} \frac{\pi(A_k|S_k)}{b(A_k|S_k)}$$
-    $$V(s) = \mathbb{E}_b[\rho G_t \mid S_t = s]$$
-    <p>Ordinary importance sampling is unbiased but high variance; weighted IS trades bias for lower variance.</p>
+    $$V(s) = \frac{\mathbb{E}_b[\rho_{t:T-1}\, G_t \mid S_t = s]}{1}\quad \text{(ordinary IS)}, \qquad V(s) = \frac{\mathbb{E}_b[\rho_{t:T-1}\,G_t]}{\mathbb{E}_b[\rho_{t:T-1}]} \quad \text{(weighted IS)}$$
+    <p>Ordinary importance sampling is unbiased but can have unbounded (even infinite) variance, because $\rho$ is a product of ratios that can blow up over long trajectories. Weighted importance sampling normalizes by the sum of weights, which introduces a small bias (vanishing as sample size grows) in exchange for dramatically lower variance — nearly always the better practical choice. Note $b$ must have <strong>coverage</strong> of $\pi$: $\pi(a|s)&gt;0 \implies b(a|s)&gt;0$ for every $(s,a)$ that $\pi$ might visit, or the ratio is undefined.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="td">
     <h2>7. Temporal-Difference Learning</h2>
-    <p>TD methods bootstrap: update estimates using other estimates. They combine MC (learning from experience) with DP (bootstrapping).</p>
+    <p>TD methods bootstrap: they update value estimates using other value estimates rather than waiting for a full-episode return. TD is the hybrid of MC (learn from real sampled experience, no need for a model) and DP (bootstrap off existing estimates, don't wait for the episode to end). This combination is what makes TD the workhorse of essentially all practical RL: it can learn online, step by step, from incomplete episodes, and even in continuing (non-episodic) tasks.</p>
 
     <h3>7.1 TD(0) for prediction</h3>
     $$V(S_t) \leftarrow V(S_t) + \alpha \left[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)\right]$$
-    <p>The term in brackets is the <strong>TD error</strong>:</p>
+    <p>The bracketed term is the <strong>TD error</strong>:</p>
     $$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+    <p>$R_{t+1}+\gamma V(S_{t+1})$ is called the <strong>TD target</strong>: a one-step-lookahead, bootstrapped estimate of the true return $G_t$. Unlike the MC target $G_t$ itself, the TD target has lower variance (it depends on only one random transition, not the entire rest of the trajectory) but is biased whenever $V$ is not yet accurate, since it partly trusts a possibly-wrong estimate $V(S_{t+1})$.</p>
 
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> TD adjusts your prediction toward a one-step lookahead target. You do not wait for episode end. You learn online from partial trajectories.
+      <strong>Intuition:</strong> TD adjusts your prediction toward a one-step lookahead target, the way you might revise your estimate of how long a road trip will take the moment you see the first traffic jam, rather than waiting until you actually arrive. You do not wait for the episode to end; you learn online from every single transition.
     </div>
 
-    <h3>7.2 SARSA (on-policy control)</h3>
-    $$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t, A_t)\right]$$
-    <p>Named after tuple $(S, A, R, S', A')$. Learns the Q-values of the policy being followed (including exploration).</p>
+    <h3>7.2 Bias–variance tradeoff: MC vs TD</h3>
+    <table>
+      <thead><tr><th></th><th>Monte Carlo</th><th>TD(0)</th></tr></thead>
+      <tbody>
+        <tr><td>Target</td><td>$G_t$ (full return)</td><td>$R_{t+1}+\gamma V(S_{t+1})$ (bootstrapped)</td></tr>
+        <tr><td>Bias</td><td>Unbiased estimate of $V^\pi(S_t)$</td><td>Biased while $V$ is inaccurate; converges to unbiased at the fixed point</td></tr>
+        <tr><td>Variance</td><td>High (depends on every random reward/transition in the rest of the episode)</td><td>Low (depends on one transition)</td></tr>
+        <tr><td>Markov property use</td><td>Does not exploit it</td><td>Exploits it directly; converges faster in Markov environments</td></tr>
+        <tr><td>Requires episode end</td><td>Yes</td><td>No; works step by step, even in continuing tasks</td></tr>
+      </tbody>
+    </table>
 
-    <h3>7.3 Q-learning (off-policy control)</h3>
+    <h3>7.3 SARSA (on-policy control)</h3>
+    $$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t, A_t)\right]$$
+    <p>Named after the quintuple $(S_t, A_t, R_{t+1}, S_{t+1}, A_{t+1})$ needed for the update. SARSA learns the Q-values of the policy it is actually following, including its exploratory noise — it is <strong>on-policy</strong>. Concretely, if the behavior is $\epsilon$-greedy, SARSA's $Q$ reflects the risk of occasionally taking a random (possibly bad) action, so it learns a policy that is naturally cautious near dangerous states (the classic Cliff Walking example: SARSA hugs a safer path away from the cliff edge because it accounts for the chance of a random slip, whereas Q-learning below walks right along the edge because it evaluates the greedy policy, ignoring its own exploration noise).</p>
+
+    <h3>7.4 Q-learning (off-policy control)</h3>
     $$\boxed{Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[R_{t+1} + \gamma \max_a Q(S_{t+1}, a) - Q(S_t, A_t)\right]}$$
-    <p>Uses max over next actions. It learns $Q^*$ while following an exploratory behavior policy (e.g., $\epsilon$-greedy).</p>
+    <p>Uses the max over next actions rather than the action actually taken. It learns $Q^*$ directly, decoupled from the behavior policy used to generate data (which can be any exploratory policy, e.g. $\epsilon$-greedy) — it is <strong>off-policy</strong>. This is what makes replay buffers possible: transitions collected under an old, different policy remain valid training data for Q-learning's target.</p>
 
     <div class="callout callout-derivation">
-      <strong>Why Q-learning converges (tabular):</strong> The update is a contraction mapping on $Q$ toward the Bellman optimality operator. With sufficient exploration (every state-action pair visited infinitely often) and appropriate learning rate schedule, $Q \to Q^*$.
+      <strong>Why Q-learning converges (tabular):</strong> The expected update is exactly one application of the Bellman optimality operator $\mathcal{T}^*$, which is a $\gamma$-contraction (section 4.4). Robbins-Monro stochastic approximation theory then guarantees convergence of the noisy, sample-based update to the same fixed point $Q^*$, provided (a) every state-action pair is visited infinitely often, and (b) the learning rate schedule satisfies $\sum_t \alpha_t = \infty$ and $\sum_t \alpha_t^2 &lt; \infty$ (e.g. $\alpha_t = 1/t$). Condition (a) is why exploration matters even for an off-policy algorithm: without visiting an action, you can never learn its value, no matter how the update rule handles the data you do have.
     </div>
 
-    <h3>7.4 Expected SARSA</h3>
-    $$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[R_{t+1} + \gamma \mathbb{E}_{\pi}[Q(S_{t+1}, \cdot)] - Q(S_t, A_t)\right]$$
-    <p>Lower variance than SARSA; intermediate between SARSA and Q-learning.</p>
+    <h3>7.5 Maximization bias and Double Q-learning</h3>
+    <p>Q-learning's $\max_a Q(S_{t+1},a)$ is a biased estimator of $\mathbb{E}[\max_a Q^*(S_{t+1},a)]$ whenever $Q$ is itself a noisy estimate: $\mathbb{E}[\max_a \hat{Q}(s,a)] \geq \max_a \mathbb{E}[\hat{Q}(s,a)]$ by Jensen's inequality applied to the convex $\max$ function, so the same noisy values that are used to pick the best action are also used to evaluate it, systematically over-estimating $Q$. <strong>Double Q-learning</strong> fixes this by maintaining two independent estimators $Q_1, Q_2$; use one to select the action and the other to evaluate it:</p>
+    $$Q_1(S_t,A_t) \leftarrow Q_1(S_t,A_t) + \alpha\left[R_{t+1} + \gamma\, Q_2\!\left(S_{t+1}, \arg\max_a Q_1(S_{t+1},a)\right) - Q_1(S_t,A_t)\right]$$
+    <p>(with the roles of $Q_1, Q_2$ swapped with probability $0.5$ at each step). This decouples selection from evaluation and removes the positive bias.</p>
 
-    <h3>7.5 N-step returns</h3>
-    <p>N-step return bridges 1-step TD and MC:</p>
+    <h3>7.6 Expected SARSA</h3>
+    $$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \left[R_{t+1} + \gamma \sum_a \pi(a|S_{t+1})Q(S_{t+1}, a) - Q(S_t, A_t)\right]$$
+    <p>Instead of sampling a single next action (SARSA) or taking the max (Q-learning), Expected SARSA averages over the full action distribution under $\pi$. This eliminates the sampling variance from $A_{t+1}$ entirely, at the cost of a slightly more expensive update ($O(|\mathcal{A}|)$ instead of $O(1)$). It generalizes both algorithms: it equals Q-learning when $\pi$ is greedy, and equals ordinary SARSA in expectation when $\pi$ is the behavior policy.</p>
+
+    <h3>7.7 N-step returns</h3>
+    <p>N-step return bridges 1-step TD and full-episode MC:</p>
     $$G_t^{(n)} = \sum_{k=0}^{n-1} \gamma^k R_{t+k+1} + \gamma^n V(S_{t+n})$$
-    <p>N-step SARSA / Q-learning use $G_t^{(n)}$ as target. Larger $n$ → lower bias, higher variance.</p>
+    <p>N-step SARSA / Q-learning use $G_t^{(n)}$ as the update target. As $n\to\infty$ (or to episode end) this recovers the MC target; $n=1$ recovers ordinary TD(0). Larger $n$ reduces bias (relies less on a possibly-inaccurate bootstrapped $V$) but increases variance (accumulates more random rewards). Intermediate $n$ (e.g. 3–10 in practice) often trains fastest, which is exactly the empirical motivation behind Rainbow's use of multi-step returns and behind GAE in the policy-gradient setting (section 11.2).</p>
 
-    <h3>7.6 TD($\lambda$) and eligibility traces</h3>
-    <p>Bridge MC and TD with trace decay $\lambda \in [0,1]$:</p>
+    <h3>7.8 TD($\lambda$) and eligibility traces</h3>
+    <p>Rather than picking one fixed $n$, TD($\lambda$) forms a target that is an exponentially-weighted average over <em>all</em> n-step returns simultaneously, with weight $(1-\lambda)\lambda^{n-1}$ on the $n$-step return, so the weights sum to 1:</p>
     $$G_t^{(\lambda)} = (1-\lambda) \sum_{n=1}^{\infty} \lambda^{n-1} G_t^{(n)}$$
-    <p>Eligibility trace update: $E_t(s) = \gamma \lambda E_{t-1}(s) + \mathbf{1}(S_t = s)$. Combines credit assignment over multiple steps.</p>
+    <p>This is the "forward view" — it requires knowledge of the future. The equivalent, and practically implementable, "backward view" uses <strong>eligibility traces</strong> $E_t(s)$, a decaying memory of which states were recently visited:</p>
+    $$E_t(s) = \gamma \lambda E_{t-1}(s) + \mathbf{1}(S_t = s), \qquad V(s) \leftarrow V(s) + \alpha\, \delta_t\, E_t(s) \; \forall s$$
+    <p>At each step, the current one-step TD error $\delta_t$ is broadcast backward to every recently-visited state, weighted by how recently and how frequently it was visited (its eligibility). This lets credit propagate over many steps within a single pass through the data, and it is mathematically equivalent (exactly, in the offline case) to the forward-view $\lambda$-return. $\lambda=0$ recovers TD(0); $\lambda=1$ recovers (a close cousin of) every-visit MC.</p>
 
     <pre><code># Tabular Q-learning
 import numpy as np
@@ -304,10 +363,10 @@ for episode in range(num_episodes):
     <table>
       <thead><tr><th></th><th>On-policy</th><th>Off-policy</th></tr></thead>
       <tbody>
-        <tr><td>Learns about</td><td>Policy being executed</td><td>Different (target) policy</td></tr>
-        <tr><td>Examples</td><td>SARSA, PPO, A2C</td><td>Q-learning, DQN, SAC, DDPG</td></tr>
-        <tr><td>Data reuse</td><td>Discard old data after update</td><td>Replay buffer, importance sampling</td></tr>
-        <tr><td>Stability</td><td>Often more stable</td><td>More sample-efficient but deadly triad risk</td></tr>
+        <tr><td>Learns about</td><td>The policy being executed (including its exploration noise)</td><td>A different (target) policy, decoupled from behavior</td></tr>
+        <tr><td>Examples</td><td>SARSA, PPO, A2C, TRPO</td><td>Q-learning, DQN, SAC, DDPG, TD3</td></tr>
+        <tr><td>Data reuse</td><td>Generally must discard data after each update (or a small number of updates), since it must match the current policy</td><td>Replay buffer, importance sampling; can reuse old data extensively</td></tr>
+        <tr><td>Stability</td><td>Often more stable, lower variance guarantees near the current policy</td><td>More sample-efficient but at risk of the "deadly triad" (section 9.2)</td></tr>
       </tbody>
     </table>
   </section>
@@ -317,67 +376,70 @@ for episode in range(num_episodes):
     <h2>8. Planning and Model-Based RL</h2>
 
     <h3>8.1 Dyna-Q</h3>
-    <p>Interleave real experience with simulated experience from a learned model $\hat{P}, \hat{R}$:</p>
+    <p>Interleave real experience with simulated experience generated from a learned model $\hat{P}, \hat{R}$ (for deterministic or small discrete environments, a simple lookup table of observed transitions suffices as the model):</p>
     <ol>
-      <li>Act in real env, update Q with Q-learning.</li>
-      <li>Update model from transition $(s,a,r,s')$.</li>
-      <li>Run $n$ planning steps: sample simulated transitions, update Q.</li>
+      <li>Act in the real environment, observe $(s,a,r,s')$, update $Q$ with an ordinary Q-learning update.</li>
+      <li>Update the model with the observed transition: $\hat{P}(s'|s,a) \leftarrow$ observed, $\hat{R}(s,a) \leftarrow r$.</li>
+      <li>Run $n$ planning steps: repeatedly sample a previously-seen $(s,a)$, simulate $(r,s')$ from the model, and apply the same Q-learning update to these imagined transitions.</li>
     </ol>
+    <p>Every additional planning step is essentially free extra training data mined from experience the agent already has, dramatically improving sample efficiency in domains where the model is easy to learn (deterministic or low-noise dynamics).</p>
 
     <h3>8.2 Monte Carlo Tree Search (MCTS)</h3>
-    <p>Build a search tree via four steps per simulation:</p>
+    <p>MCTS builds an asymmetric search tree online, at decision time, by running many simulations, each consisting of four phases:</p>
     <ol>
-      <li><strong>Selection:</strong> traverse using UCB1 until leaf.</li>
-      <li><strong>Expansion:</strong> add child nodes.</li>
-      <li><strong>Simulation:</strong> rollout to terminal or depth limit.</li>
-      <li><strong>Backpropagation:</strong> update visit counts and values.</li>
+      <li><strong>Selection:</strong> starting at the root, traverse the tree choosing the child that maximizes an upper-confidence bound (UCB1, below) until reaching a node with unexpanded children (a leaf of the current tree).</li>
+      <li><strong>Expansion:</strong> add one or more child nodes for untried actions at that leaf.</li>
+      <li><strong>Simulation (rollout):</strong> from the new node, play out to a terminal state (or a fixed depth) using a fast default policy (random, or a learned policy network as in AlphaZero) to obtain an outcome estimate.</li>
+      <li><strong>Backpropagation:</strong> propagate the simulation's outcome back up every node on the path, incrementing visit counts $N(s,a)$ and updating action-value estimates $Q(s,a)$.</li>
     </ol>
-    <p>UCB1 for action $a$ at node $s$:</p>
+    <p>UCB1, used for action selection at each node during selection, balances exploitation of high-value actions against exploration of rarely-tried ones:</p>
     $$\text{UCB1}(s,a) = Q(s,a) + c \sqrt{\frac{\ln N(s)}{N(s,a)}}$$
-    <p>MCTS powered AlphaGo/AlphaZero. In LLMs, MCTS appears in reasoning-time search over token/action trees.</p>
+    <p>The exploration bonus shrinks as $N(s,a)$ grows (that action has been tried often, its estimate is trustworthy) but grows with $\ln N(s)$ (the more total visits to the parent, the more we should reconsider under-tried siblings). AlphaZero's variant, PUCT, additionally weights the exploration bonus by a learned prior policy $P(s,a)$ from a neural network, focusing search on moves the network considers plausible: $\text{PUCT}(s,a) = Q(s,a) + c\, P(s,a)\frac{\sqrt{N(s)}}{1+N(s,a)}$. MCTS combined with deep value/policy networks powered AlphaGo and AlphaZero; in modern LLM reasoning, tree-search variants over token or reasoning-step "actions" are used at inference time to improve answer quality via structured search rather than a single greedy decode.</p>
 
     <h3>8.3 Model-based deep RL</h3>
     <ul>
-      <li><strong>World models</strong> (Dreamer, MuZero): learn latent dynamics, plan in imagination.</li>
-      <li><strong>MBPO, PETS:</strong> use probabilistic models for sample-efficient control.</li>
-      <li><strong>Tradeoff:</strong> model error compounds in long rollouts; short horizons + policy refinement work best.</li>
+      <li><strong>World models</strong> (Dreamer, MuZero): learn a compact latent dynamics model $z_{t+1} = f(z_t, a_t)$ from raw observations, and plan or train a policy entirely "in imagination" by unrolling the latent model, never touching the real environment during the inner training loop. MuZero notably does not even require the model to predict raw observations — it only needs to predict reward, value, and policy consistently, which is sufficient for planning with MCTS.</li>
+      <li><strong>MBPO, PETS:</strong> use probabilistic ensembles of dynamics models (to capture epistemic uncertainty and avoid a single overconfident model being exploited by the policy) for sample-efficient continuous control, typically generating short simulated rollouts (a few steps) branching from real states to augment a model-free algorithm's training data.</li>
+      <li><strong>Tradeoff:</strong> model error compounds multiplicatively over long simulated rollouts (small per-step errors accumulate exponentially in rollout length), so model-based methods generally use short imagined horizons and periodically re-ground in real data, or continuously refine the policy with a mix of real and imagined transitions rather than trusting the model indefinitely.</li>
     </ul>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="function-approx">
     <h2>9. Function Approximation and Deep RL</h2>
-    <p>Tabular methods fail when $|S|$ or $|A|$ is huge or continuous. Approximate value or policy with parameterized functions $V(s;\mathbf{w})$, $Q(s,a;\mathbf{w})$, or $\pi(a|s;\boldsymbol{\theta})$.</p>
+    <p>Tabular methods store one number per state (or state-action pair) and fail outright when $|\mathcal{S}|$ or $|\mathcal{A}|$ is huge (e.g. every possible pixel-image observation) or continuous (e.g. joint angles of a robot arm). The fix is to approximate value or policy with a parameterized function: $V(s;\mathbf{w})$, $Q(s,a;\mathbf{w})$, or $\pi(a|s;\boldsymbol{\theta})$, typically a neural network, and to generalize across similar states via shared parameters rather than storing every state independently.</p>
 
     <h3>9.1 Linear function approximation</h3>
     $$V(s;\mathbf{w}) = \mathbf{w}^\top \mathbf{x}(s)$$
-    <p>TD update: $\mathbf{w} \leftarrow \mathbf{w} + \alpha \delta_t \nabla_\mathbf{w} V(S_t;\mathbf{w})$. Convergence requires features $\mathbf{x}(s)$ that make the problem well-conditioned; divergence is possible with off-policy + bootstrapping (the deadly triad).</p>
+    <p>Semi-gradient TD update (the term "semi-gradient" reflects that the target $R+\gamma V(S_{t+1};\mathbf{w})$ itself depends on $\mathbf{w}$, but we deliberately do not differentiate through it, treating it as a fixed target — differentiating through it would give a different, and generally worse, algorithm called "residual gradient"):</p>
+    $$\mathbf{w} \leftarrow \mathbf{w} + \alpha \delta_t \nabla_\mathbf{w} V(S_t;\mathbf{w}) = \mathbf{w} + \alpha \delta_t\, \mathbf{x}(S_t)$$
+    <p>Convergence to a well-defined fixed point is guaranteed <em>on-policy</em> with linear function approximation. Off-policy linear TD can diverge — the classic counterexample is Baird's "star" MDP, where semi-gradient off-policy TD(0) provably diverges even though the true $V^\pi$ is representable by the chosen features.</p>
 
     <h3>9.2 The deadly triad</h3>
-    <p>Instability can arise from combining:</p>
+    <p>Instability and divergence risk arise specifically from combining all three of:</p>
     <ol>
-      <li>Function approximation</li>
-      <li>Bootstrapping (TD)</li>
-      <li>Off-policy learning</li>
+      <li>Function approximation (generalizing means an update to one state's value inevitably perturbs the estimated values of other, similar states)</li>
+      <li>Bootstrapping (TD-style updates whose targets depend on the very estimates being updated, unlike MC targets which are independent of current estimates)</li>
+      <li>Off-policy learning (updating value estimates for a distribution of states different from the one actually being sampled, which decouples the update dynamics from the sampling distribution in a way that can break the contraction argument that guarantees on-policy convergence)</li>
     </ol>
-    <p>DQN mitigates this with experience replay and target networks.</p>
+    <p>Any two of the three are safe; all three together admit provable divergence. DQN mitigates the risk (without eliminating it in principle) with two specific engineering devices: experience replay and target networks, both described next.</p>
 
     <h3>9.3 Deep Q-Network (DQN)</h3>
     $$\mathcal{L}(\mathbf{w}) = \mathbb{E}_{(s,a,r,s') \sim \mathcal{D}}\left[\left(r + \gamma \max_{a'} Q(s',a';\mathbf{w}^-) - Q(s,a;\mathbf{w})\right)^2\right]$$
     <ul>
-      <li><strong>Experience replay:</strong> break temporal correlations, reuse data.</li>
-      <li><strong>Target network $\mathbf{w}^-$:</strong> frozen copy updated periodically for stable targets.</li>
+      <li><strong>Experience replay $\mathcal{D}$:</strong> store transitions in a large circular buffer and sample random mini-batches for each gradient step. This breaks the strong temporal correlation between consecutive transitions (which would otherwise violate the i.i.d. assumption implicit in SGD and cause catastrophic forgetting of earlier experience) and reuses each transition for many gradient updates, greatly improving sample efficiency.</li>
+      <li><strong>Target network $\mathbf{w}^-$:</strong> a frozen (or slowly-updated) copy of the network parameters, used only to compute the bootstrapped target, and periodically synced to the online network (every $C$ steps, hard update) or smoothly tracked (Polyak/exponential-moving-average update $\mathbf{w}^- \leftarrow \tau\mathbf{w} + (1-\tau)\mathbf{w}^-$ with small $\tau$, soft update). Without a target network, the regression target moves every single gradient step (since it's computed by the same network being trained), which is analogous to chasing a moving target and empirically causes severe oscillation or divergence.</li>
     </ul>
 
     <h3>9.4 DQN extensions</h3>
     <table>
       <thead><tr><th>Algorithm</th><th>Key idea</th><th>Benefit</th></tr></thead>
       <tbody>
-        <tr><td><strong>Double DQN</strong></td><td>Decouple action selection and evaluation: $y = r + \gamma Q(s', \arg\max_{a'} Q(s',a';\mathbf{w}); \mathbf{w}^-)$</td><td>Reduces overestimation bias</td></tr>
-        <tr><td><strong>Dueling DQN</strong></td><td>$Q(s,a) = V(s) + A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'} A(s,a')$</td><td>Better value generalization when actions matter little</td></tr>
-        <tr><td><strong>Prioritized replay</strong></td><td>Sample transitions with high TD error more often</td><td>Sample efficiency</td></tr>
-        <tr><td><strong>Rainbow</strong></td><td>Combines multiple DQN improvements</td><td>State-of-art tabular-atari baseline era</td></tr>
-        <tr><td><strong>Noisy Nets</strong></td><td>Learnable parametric noise for exploration</td><td>State-dependent exploration</td></tr>
+        <tr><td><strong>Double DQN</strong></td><td>Decouple action selection and evaluation: $y = r + \gamma Q(s', \arg\max_{a'} Q(s',a';\mathbf{w}); \mathbf{w}^-)$ — use the online network to pick the action, the target network to evaluate it</td><td>Reduces the maximization overestimation bias (section 7.5)</td></tr>
+        <tr><td><strong>Dueling DQN</strong></td><td>Split the network into two streams: $Q(s,a) = V(s) + \left(A(s,a) - \frac{1}{|\mathcal{A}|}\sum_{a'} A(s,a')\right)$, subtracting the mean advantage for identifiability</td><td>Better value generalization when the choice of action matters little in a given state (most states in most environments)</td></tr>
+        <tr><td><strong>Prioritized Experience Replay (PER)</strong></td><td>Sample transitions with probability proportional to $|\delta_t|^\alpha$ (large TD error), with importance-sampling weights $w_i=(N\cdot P(i))^{-\beta}$ to correct the resulting sampling bias</td><td>Focuses learning on transitions the network is currently getting most wrong, improving sample efficiency</td></tr>
+        <tr><td><strong>Rainbow</strong></td><td>Combines Double DQN, Dueling, PER, multi-step returns, distributional RL (C51), and Noisy Nets into one agent</td><td>State-of-the-art tabular-Atari-era baseline; ablations in the paper show every component contributes</td></tr>
+        <tr><td><strong>Noisy Nets</strong></td><td>Replace $\epsilon$-greedy with learnable parametric noise injected into the network weights: $\mathbf{w} = \boldsymbol{\mu} + \boldsymbol{\sigma}\odot\boldsymbol{\epsilon}$, with $\boldsymbol{\mu},\boldsymbol{\sigma}$ learned by gradient descent</td><td>State-dependent, automatically-annealed exploration without hand-tuned $\epsilon$ schedules</td></tr>
       </tbody>
     </table>
 
@@ -386,39 +448,38 @@ target = r + gamma * q_target(s_next).max(dim=1).values * (1 - done)
 loss = F.mse_loss(q_online(s, a), target)
 optimizer.zero_grad()
 loss.backward()
-optimizer.step()</code></pre>
+optimizer.step()
+# periodically: q_target.load_state_dict(q_online.state_dict())</code></pre>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="policy-gradient">
     <h2>10. Policy Gradient Methods</h2>
-    <p>Directly optimize policy parameters $\boldsymbol{\theta}$ to maximize $J(\boldsymbol{\theta}) = \mathbb{E}_{\pi_\theta}[G_0]$.</p>
+    <p>Instead of learning a value function and deriving a policy from it implicitly (value-based methods), policy gradient methods directly parameterize and optimize the policy $\pi_\theta(a|s)$ by gradient ascent on the expected return $J(\boldsymbol{\theta}) = \mathbb{E}_{\pi_\theta}[G_0]$. This is essential whenever the action space is continuous or extremely large (taking a $\max$ or $\arg\max$ over it, as value-based methods require, is intractable), and it naturally produces stochastic policies, useful in partially observable or game-theoretic settings.</p>
 
     <h3>10.1 Policy gradient theorem</h3>
     $$\boxed{\nabla_\theta J(\boldsymbol{\theta}) = \mathbb{E}_{\pi_\theta}\left[\nabla_\theta \log \pi_\theta(A_t|S_t) \cdot Q^{\pi_\theta}(S_t, A_t)\right]}$$
 
     <div class="callout callout-derivation">
-      <strong>Full derivation (policy gradient theorem):</strong>
+      <strong>Full derivation (policy gradient theorem, "log-derivative trick"):</strong>
       <ol>
-        <li>Objective: $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[G_0] = \sum_\tau P(\tau;\theta) G(\tau)$ where $\tau = (s_0,a_0,r_1,\ldots)$.</li>
-        <li>Gradient: $\nabla J = \sum_\tau \nabla P(\tau;\theta) G(\tau) = \mathbb{E}_\tau[\nabla \log P(\tau;\theta) \cdot G(\tau)]$ (likelihood ratio / log-derivative trick).</li>
-        <li>Trajectory probability: $P(\tau;\theta) = p(s_0)\prod_{t=0}^{T-1} \pi_\theta(a_t|s_t) P(s_{t+1}|s_t,a_t)$.</li>
-        <li>Log: $\log P(\tau;\theta) = \text{const} + \sum_t \log \pi_\theta(a_t|s_t)$; dynamics cancel.</li>
-        <li>So $\nabla J = \mathbb{E}[\sum_t \nabla \log \pi_\theta(a_t|s_t) \cdot G_t]$. Using causality, future rewards before $t$ do not affect $a_t$, replace $G_t$ with $Q^{\pi_\theta}(s_t,a_t)$.</li>
+        <li>Objective: $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[G(\tau)] = \sum_\tau P(\tau;\theta) G(\tau)$ where $\tau = (s_0,a_0,r_1,s_1,a_1,\ldots)$ is a full trajectory and $G(\tau)$ is its total discounted return.</li>
+        <li>Differentiate under the sum, then use the identity $\nabla P = P\cdot\nabla\log P$ (valid wherever $P&gt;0$): $\nabla J = \sum_\tau \nabla P(\tau;\theta)\, G(\tau) = \sum_\tau P(\tau;\theta)\, \nabla\log P(\tau;\theta)\, G(\tau) = \mathbb{E}_\tau\left[\nabla \log P(\tau;\theta) \cdot G(\tau)\right]$. This "log-derivative trick" is the crucial step: it converts a gradient of an expectation (which we cannot sample directly, since we cannot differentiate through the sampling process of $\tau\sim\pi_\theta$) into an expectation of a gradient (which we can estimate with ordinary Monte Carlo sampling — this is the REINFORCE / score-function estimator).</li>
+        <li>Trajectory probability factorizes as $P(\tau;\theta) = \mu_0(s_0)\prod_{t=0}^{T-1} \pi_\theta(a_t|s_t)\, P(s_{t+1}|s_t,a_t)$.</li>
+        <li>Take the log: $\log P(\tau;\theta) = \log\mu_0(s_0) + \sum_t \log \pi_\theta(a_t|s_t) + \sum_t \log P(s_{t+1}|s_t,a_t)$; the initial-state and dynamics terms do not depend on $\theta$, so their gradient is exactly zero — the environment's own dynamics cancel entirely out of the policy gradient. This is precisely what makes the estimator model-free: no knowledge of $P$ is required to compute it.</li>
+        <li>So $\nabla J = \mathbb{E}_\tau\left[\left(\sum_t \nabla \log \pi_\theta(a_t|s_t)\right) G(\tau)\right]$. Using the causality argument — rewards obtained before time $t$ cannot be causally affected by the action taken at time $t$, so their expected contribution to the gradient term for $a_t$ is exactly zero — replace the whole-trajectory return $G(\tau)$ multiplying each individual log-probability term with only the return-to-go from that point, $G_t$, whose conditional expectation given $(s_t,a_t)$ is by definition $Q^{\pi_\theta}(s_t,a_t)$.</li>
       </ol>
     </div>
 
     <h3>10.2 REINFORCE (Monte Carlo policy gradient)</h3>
     $$\boldsymbol{\theta} \leftarrow \boldsymbol{\theta} + \alpha \gamma^t G_t \nabla_\theta \log \pi_\theta(A_t|S_t)$$
-    <p>Use full return $G_t$ as unbiased estimate of $Q$. High variance.</p>
+    <p>Uses the actual sampled full return $G_t$ as an unbiased Monte Carlo estimate of $Q^{\pi_\theta}(S_t,A_t)$. The estimator is unbiased but has very high variance, because $G_t$ depends on the entire stochastic remainder of the trajectory — every random action and every random transition from $t$ onward contributes noise, and this noise does not shrink as the trajectory gets longer.</p>
 
     <h3>10.3 Baseline for variance reduction</h3>
-    <p>Subtract baseline $b(S_t)$ that does not depend on $A_t$:</p>
+    <p>Subtract any baseline $b(S_t)$ that does not depend on the action $A_t$:</p>
     $$\nabla J = \mathbb{E}\left[\nabla \log \pi(A_t|S_t) \cdot (G_t - b(S_t))\right]$$
-    <p>Optimal baseline relates to value function. Using $b(S_t) = V(S_t)$ gives advantage-weighted update with the same expectation, lower variance.</p>
-
     <div class="callout callout-derivation">
-      <strong>Why baseline does not bias the gradient:</strong> $\mathbb{E}[\nabla \log \pi(A|S) \cdot b(S)] = b(S) \sum_a \nabla \pi(a|S) = b(S) \nabla \sum_a \pi(a|S) = b(S) \nabla 1 = 0$.
+      <strong>Why a baseline does not bias the gradient:</strong> $\mathbb{E}_{a\sim\pi(\cdot|s)}[\nabla \log \pi(a|s) \cdot b(s)] = b(s)\sum_a \pi(a|s)\nabla \log \pi(a|s) = b(s)\sum_a \nabla \pi(a|s) = b(s)\, \nabla\!\left(\sum_a \pi(a|s)\right) = b(s)\,\nabla(1) = 0$, using $\pi\nabla\log\pi = \nabla\pi$. Since it contributes exactly zero in expectation, subtracting it changes nothing about what the gradient estimator converges to, but it changes the estimator's variance substantially. The variance-optimal (though rarely used in exact form because it requires per-state, per-parameter weighting) baseline is $b^*(s) \approx \frac{\mathbb{E}[(\nabla\log\pi)^2\, G_t]}{\mathbb{E}[(\nabla\log\pi)^2]}$; using $b(S_t)=V^{\pi_\theta}(S_t)$ (the true state-value) is not variance-optimal in the exact theoretical sense but is close in practice, cheap to estimate with a learned critic, and yields exactly the <strong>advantage function</strong> $A^\pi(s,a)=Q^\pi(s,a)-V^\pi(s)$ as the effective learning signal — this is the direct bridge to actor-critic methods in the next section.
     </div>
 
     <pre><code># REINFORCE (PyTorch sketch)
@@ -431,6 +492,7 @@ for t in range(T):
     rewards.append(r_t)
 
 returns = compute_discounted_returns(rewards, gamma)
+returns = (returns - returns.mean()) / (returns.std() + 1e-8)  # simple baseline
 loss = -sum(lp * G for lp, G in zip(log_probs, returns))
 loss.backward()</code></pre>
   </section>
@@ -441,52 +503,74 @@ loss.backward()</code></pre>
 
     <h3>11.1 Actor-Critic architecture</h3>
     <ul>
-      <li><strong>Actor</strong> $\pi_\theta(a|s)$: policy</li>
-      <li><strong>Critic</strong> $V_\mathbf{w}(s)$ or $Q_\mathbf{w}(s,a)$: value estimate for bootstrapping</li>
+      <li><strong>Actor</strong> $\pi_\theta(a|s)$: the policy, updated by policy gradient.</li>
+      <li><strong>Critic</strong> $V_\mathbf{w}(s)$ or $Q_\mathbf{w}(s,a)$: a learned value estimate, trained by TD, used to (a) provide a low-variance baseline and (b) bootstrap so the actor does not need to wait for a full-episode return before updating.</li>
     </ul>
-    $$\boldsymbol{\theta} \leftarrow \boldsymbol{\theta} + \alpha \nabla_\theta \log \pi_\theta(A_t|S_t) \cdot \delta_t$$
-    $$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+    $$\boldsymbol{\theta} \leftarrow \boldsymbol{\theta} + \alpha \nabla_\theta \log \pi_\theta(A_t|S_t) \cdot \delta_t, \qquad \delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+    <p>Because $\mathbb{E}[\delta_t \mid S_t,A_t] = Q^\pi(S_t,A_t) - V^\pi(S_t) = A^\pi(S_t,A_t)$ (when $V$ is exact), the one-step TD error is itself an unbiased, low-variance estimate of the advantage — this is why actor-critic replaces the slow, high-variance Monte Carlo return of REINFORCE with a fast, bootstrapped, online update, at the cost of the small bias introduced whenever $V$ is not yet perfectly learned.</p>
 
     <h3>11.2 Generalized Advantage Estimation (GAE)</h3>
+    <p>GAE generalizes the n-step-return bias–variance tradeoff (section 7.7) to advantage estimation. Define the one-step TD error at every timestep:</p>
     $$\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$$
+    <p>and form an exponentially-weighted sum of these errors, analogous to the TD($\lambda$) backward view:</p>
     $$\hat{A}_t^{\text{GAE}(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma \lambda)^l \delta_{t+l}$$
-    <p>$\lambda = 0$: one-step TD advantage (low variance, high bias). $\lambda = 1$: MC advantage (low bias, high variance). PPO uses GAE extensively.</p>
+    <p>$\lambda = 0$ collapses this to the one-step TD advantage estimate $\delta_t$ alone (low variance, high bias if $V$ is inaccurate). $\lambda = 1$ recovers the full Monte Carlo advantage estimate $G_t - V(S_t)$ (low bias, high variance). Intermediate $\lambda$ (commonly $0.9$–$0.97$) interpolates, and is what nearly every modern on-policy algorithm (PPO, TRPO, A2C) uses in practice because it consistently trains faster and more stably than either extreme.</p>
+    <p>In practice GAE is computed backward through a finite rollout of length $T$ with a recursive formula, avoiding the need to sum an infinite series explicitly:</p>
+    $$\hat{A}_t = \delta_t + \gamma\lambda\, \hat{A}_{t+1}, \qquad \hat{A}_T = \delta_T$$
 
     <div class="callout callout-derivation">
-      <strong>GAE intuition:</strong> Exponentially-weighted sum of TD errors combines multi-step returns. $\lambda$ controls bias-variance tradeoff in credit assignment, critical for stable policy updates in robotics and LLM RLHF.
+      <strong>GAE bias-variance derivation intuition:</strong> Write the $n$-step advantage estimator $\hat{A}_t^{(n)} = \sum_{l=0}^{n-1}\gamma^l\delta_{t+l} = G_t^{(n)} - V(S_t)$ (obtained by telescoping the sum of TD errors, since consecutive $V(S_{t+l})$ terms cancel except at the two ends). GAE is then, exactly analogous to the $\lambda$-return, the exponentially-weighted average $(1-\lambda)\sum_{n=1}^\infty \lambda^{n-1}\hat{A}_t^{(n)}$, which simplifies algebraically to the compact form above. $\lambda$ therefore plays exactly the same bias-variance role in advantage estimation that it plays in TD($\lambda$) value estimation, and is critical for stable policy updates especially in high-dimensional continuous control and in LLM RLHF, where the value function (critic) is itself a large, imperfectly-trained neural network and errors in $V$ can otherwise dominate the advantage signal.
     </div>
 
     <h3>11.3 A2C / A3C</h3>
     <ul>
-      <li><strong>A2C:</strong> synchronous parallel workers, shared gradients.</li>
-      <li><strong>A3C:</strong> asynchronous workers with Hogwild-style updates.</li>
+      <li><strong>A2C (Advantage Actor-Critic):</strong> synchronous, multiple parallel environment workers collect a batch of rollouts, gradients are averaged and applied in a single synchronized update. Simpler to implement and debug, plays well with GPU batching.</li>
+      <li><strong>A3C (Asynchronous Advantage Actor-Critic):</strong> multiple CPU workers each maintain their own copy of the network, interact with their own environment instance, and apply gradients asynchronously to a shared set of parameters (Hogwild-style, no locking). Historically important for scaling RL without GPUs, but the asynchrony introduces stale-gradient noise, and in practice A2C with vectorized environments on modern hardware generally matches or beats A3C at equal compute while being far simpler.</li>
     </ul>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="trpo-ppo">
-    <h2>12. TRPO and PPO</h2>
+    <h2>12. Natural Gradients, TRPO and PPO</h2>
 
-    <h3>12.1 Trust region motivation</h3>
-    <p>Large policy updates can collapse performance. TRPO constrains KL divergence between old and new policy per update.</p>
+    <h3>12.1 Why raw policy gradient steps are dangerous</h3>
+    <p>A vanilla policy-gradient step $\theta \leftarrow \theta + \alpha \nabla_\theta J$ treats all parameters as living in ordinary Euclidean space, but a fixed-size step in parameter space can correspond to an arbitrarily large or small change in the actual output distribution $\pi_\theta(\cdot|s)$, depending on the local curvature of the policy's parameterization. A single overly-large update can catastrophically shift the policy into a much worse region of behavior (and because the policy also controls what data is collected next, a bad policy leads to bad data, leading to bad gradients, in a vicious feedback loop that can permanently collapse performance — unlike supervised learning, there is no fixed validation set to catch this early).</p>
 
-    <h3>12.2 Surrogate objective (policy improvement lower bound)</h3>
+    <h3>12.2 Natural policy gradient</h3>
+    <p>The natural gradient rescales the ordinary gradient by the inverse of the Fisher information matrix $F(\theta) = \mathbb{E}_{s,a\sim\pi_\theta}\left[\nabla_\theta \log\pi_\theta(a|s)\,\nabla_\theta\log\pi_\theta(a|s)^\top\right]$, which locally approximates the KL divergence between $\pi_\theta$ and a nearby $\pi_{\theta+\Delta\theta}$ as $\text{KL}(\pi_\theta\|\pi_{\theta+\Delta\theta}) \approx \frac12 \Delta\theta^\top F(\theta)\Delta\theta$:</p>
+    $$\Delta\theta_{\text{natural}} = F(\theta)^{-1} \nabla_\theta J(\theta)$$
+    <p>This produces a step of constant size in <em>distribution</em> space (measured by KL divergence) rather than constant size in raw parameter space, which is exactly the geometry that matters for a policy. The practical obstacle is that $F(\theta)^{-1}$ is a $d\times d$ matrix for $d$ parameters, infeasible to form or invert explicitly for a deep network with millions of parameters.</p>
+
+    <h3>12.3 TRPO: trust region motivation and constrained objective</h3>
+    <p>TRPO solves the natural-gradient computational problem by (a) using conjugate gradient to solve $F(\theta)\,x = \nabla J$ approximately without ever forming $F^{-1}$ explicitly (only Fisher-vector products $F\cdot v$ are needed, computable efficiently by automatic differentiation), and (b) explicitly enforcing a trust-region constraint rather than taking an unconstrained natural-gradient step, guaranteeing monotonic improvement.</p>
+
+    <h3>12.4 Surrogate objective (policy improvement lower bound)</h3>
     $$L^{\text{CPI}}(\boldsymbol{\theta}) = \mathbb{E}_t\left[\frac{\pi_\theta(A_t|S_t)}{\pi_{\theta_{\text{old}}}(A_t|S_t)} \hat{A}_t\right] = \mathbb{E}_t\left[r_t(\boldsymbol{\theta}) \hat{A}_t\right]$$
-    <p>where $r_t(\boldsymbol{\theta}) = \frac{\pi_\theta(A_t|S_t)}{\pi_{\theta_{\text{old}}}(A_t|S_t)}$ is the probability ratio.</p>
+    <p>where $r_t(\boldsymbol{\theta}) = \frac{\pi_\theta(A_t|S_t)}{\pi_{\theta_{\text{old}}}(A_t|S_t)}$ is the probability ratio. This surrogate is derived from the exact policy-improvement identity $J(\pi) - J(\pi_{\text{old}}) = \mathbb{E}_{s\sim d^\pi, a\sim\pi}[A^{\pi_{\text{old}}}(s,a)]$ by approximating the true (hard to sample) state distribution $d^\pi$ of the new policy with the state distribution of the old policy (an approximation valid only when $\pi$ and $\pi_{\text{old}}$ are close), while correcting for the change in action distribution exactly via importance sampling with $r_t(\theta)$. This is precisely why a trust-region (or clipping) constraint is not just an engineering convenience but mathematically necessary — the surrogate's accuracy as an approximation to the true objective degrades as the policies diverge.</p>
 
-    <h3>12.3 TRPO constraint</h3>
+    <h3>12.5 TRPO constraint</h3>
     $$\max_\theta L^{\text{CPI}}(\boldsymbol{\theta}) \quad \text{s.t.} \quad \mathbb{E}_t\left[\text{KL}(\pi_{\theta_{\text{old}}}(\cdot|S_t) \| \pi_\theta(\cdot|S_t))\right] \leq \delta$$
+    <p>Solved approximately per update by: (1) compute the gradient $g=\nabla_\theta L^{\text{CPI}}$; (2) use conjugate gradient to approximately solve $F x = g$ for the natural-gradient direction $x$; (3) compute a step size via the analytic trust-region formula $\beta = \sqrt{2\delta / (x^\top F x)}$; (4) perform a backtracking line search along $\beta x$, shrinking the step until both the KL constraint is satisfied and the surrogate objective actually improves (guarding against the fact that the quadratic KL approximation and the linear objective approximation are only locally accurate).</p>
 
-    <h3>12.4 PPO-Clip objective</h3>
+    <h3>12.6 PPO-Clip objective</h3>
+    <p>PPO replaces TRPO's expensive second-order conjugate-gradient machinery with a much simpler first-order surrogate that achieves a similar trust-region effect purely through clipping:</p>
     $$\boxed{L^{\text{CLIP}}(\boldsymbol{\theta}) = \mathbb{E}_t\left[\min\left(r_t(\boldsymbol{\theta}) \hat{A}_t, \; \text{clip}(r_t(\boldsymbol{\theta}), 1-\epsilon, 1+\epsilon) \hat{A}_t\right)\right]}$$
 
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> If advantage is positive (good action), you want to increase $\pi_\theta(a|s)$ but not beyond ratio $1+\epsilon$. If advantage is negative, decrease but not below $1-\epsilon$. The pessimistic $\min$ prevents destructively large updates.
+      <strong>Intuition:</strong> If advantage is positive (a good action), the unclipped surrogate rewards increasing $\pi_\theta(a|s)$ without bound — clipping caps the incentive once the ratio exceeds $1+\epsilon$, removing any further reward for pushing the policy even further in that direction within this update. If advantage is negative (a bad action), clipping similarly removes the incentive to decrease probability below ratio $1-\epsilon$. The outer $\min$ takes the more pessimistic (smaller) of the clipped and unclipped objective, which means clipping only ever removes an incentive to move further in a direction that has already gone past the trust region — it never creates a new incentive to overshoot in the first place. This asymmetric, one-sided pessimism is what prevents destructively large single-batch updates while still allowing the gradient to correctly discourage genuinely bad actions when the ratio is on the wrong side of 1.
     </div>
 
-    <h3>12.5 PPO full loss (typical implementation)</h3>
+    <h3>12.7 PPO full loss (typical implementation)</h3>
     $$L = L^{\text{CLIP}} - c_1 L^{\text{VF}} + c_2 S[\pi_\theta](S_t)$$
-    <p>Value loss $L^{\text{VF}} = (V_\theta(S_t) - V_t^{\text{target}})^2$, entropy bonus $S$ encourages exploration.</p>
+    <p>Value loss $L^{\text{VF}} = (V_\theta(S_t) - V_t^{\text{target}})^2$, often itself clipped analogously to the policy ratio to prevent the value function from moving too far in one update. Entropy bonus $S[\pi_\theta](s) = -\sum_a \pi_\theta(a|s)\log\pi_\theta(a|s)$ directly rewards higher-entropy (more exploratory, less deterministic) action distributions, counteracting the natural tendency of policy gradient methods to collapse toward a narrow, overconfident distribution too early.</p>
+
+    <h3>12.8 PPO implementation details that matter in practice</h3>
+    <ul>
+      <li><strong>Multiple epochs per batch:</strong> PPO reuses each collected rollout for several (commonly 3–10) gradient epochs, re-computing the ratio $r_t(\theta)$ against the fixed $\pi_{\theta_{\text{old}}}$ each time — this is exactly what makes clipping necessary, since without it repeated epochs on the same data could push the ratio arbitrarily far from 1.</li>
+      <li><strong>Advantage normalization:</strong> normalize $\hat{A}_t$ to zero mean and unit variance across each mini-batch before use, which empirically stabilizes the scale of policy gradient updates across very different reward magnitudes.</li>
+      <li><strong>Early stopping on KL:</strong> some implementations monitor the empirical KL divergence between $\pi_\theta$ and $\pi_{\theta_{\text{old}}}$ during the multiple epochs and stop early if it exceeds a target threshold, as an extra safety net beyond clipping alone.</li>
+      <li><strong>Orthogonal weight initialization and learning-rate annealing</strong> are common, empirically important stabilizers noted across PPO reimplementation studies.</li>
+    </ul>
 
     <pre><code># PPO clipped objective (PyTorch)
 ratio = (log_probs - old_log_probs).exp()
@@ -494,7 +578,7 @@ surr1 = ratio * advantages
 surr2 = ratio.clamp(1 - eps, 1 + eps) * advantages
 policy_loss = -torch.min(surr1, surr2).mean()</code></pre>
 
-    <p>PPO is the default RL algorithm for RLHF in InstructGPT, many open-source alignment stacks, and robotics sim-to-real when sample budgets allow batch updates.</p>
+    <p>PPO is the default RL algorithm for classic RLHF in InstructGPT-style pipelines, many open-source alignment stacks, and robotics sim-to-real when sample budgets allow large batch, multi-epoch updates. Its appeal is a favorable combination of implementation simplicity, hyperparameter robustness, and reliable monotonic-ish improvement, at some cost in sample efficiency relative to off-policy alternatives.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
@@ -502,113 +586,137 @@ policy_loss = -torch.min(surr1, surr2).mean()</code></pre>
     <h2>13. Continuous Control: DDPG, TD3, SAC</h2>
 
     <h3>13.1 DDPG (Deep Deterministic Policy Gradient)</h3>
-    <p>Off-policy actor-critic for continuous actions. Deterministic policy $\mu_\theta(s)$, critic $Q_\phi(s,a)$.</p>
-    $$\nabla_\theta J \approx \mathbb{E}\left[\nabla_a Q_\phi(s,a)|_{a=\mu_\theta(s)} \nabla_\theta \mu_\theta(s)\right]$$
-    <p>Uses replay buffer, target networks, and action noise for exploration.</p>
+    <p>Off-policy actor-critic designed specifically for continuous action spaces, where value-based methods cannot take an explicit $\max_a$. DDPG learns a deterministic policy $\mu_\theta(s)$ directly, using the critic $Q_\phi(s,a)$ as a differentiable surrogate for the (otherwise intractable) $\max$:</p>
+    $$\nabla_\theta J \approx \mathbb{E}_{s\sim\mathcal{D}}\left[\nabla_a Q_\phi(s,a)\big|_{a=\mu_\theta(s)} \nabla_\theta \mu_\theta(s)\right]$$
+    <p>This is the deterministic policy gradient theorem: since the action is a deterministic, differentiable function of the state, the chain rule lets gradients flow directly from the critic's estimate of action-value, through the action itself, back into the actor's parameters — an efficient alternative to the stochastic log-probability trick, valid for continuous action spaces. The critic is trained by ordinary Bellman-error minimization exactly as in DQN, using a replay buffer and target networks for both actor and critic (soft/Polyak updates rather than DQN's periodic hard copy, found empirically to be more stable for continuous control). Because the policy is deterministic, exploration must be added externally: DDPG typically adds temporally-correlated Ornstein-Uhlenbeck noise or simple Gaussian noise to actions during data collection.</p>
 
     <h3>13.2 TD3 (Twin Delayed DDPG)</h3>
+    <p>TD3 identifies and fixes the same maximization-bias problem in DDPG that Double Q-learning fixes for discrete Q-learning (section 7.5), plus two further stabilizers:</p>
     <ul>
-      <li><strong>Twin critics:</strong> take min of two Q estimates to reduce overestimation.</li>
-      <li><strong>Delayed policy updates:</strong> update actor less frequently than critic.</li>
-      <li><strong>Target policy smoothing:</strong> add noise to target actions.</li>
+      <li><strong>Twin (clipped double) critics:</strong> train two independent Q-networks $Q_{\phi_1}, Q_{\phi_2}$ and use $\min(Q_{\phi_1},Q_{\phi_2})$ when forming the target, which biases the estimate slightly toward under- rather than over-estimation, empirically far more benign for policy learning since an actor chasing an overestimated $Q$ exploits and amplifies the error, whereas underestimation merely makes learning conservative.</li>
+      <li><strong>Delayed policy updates:</strong> update the actor (and target networks) less frequently than the critics (e.g. once every 2 critic updates), giving the value estimate time to become more accurate before the policy chases it, reducing the compounding of value error into policy error.</li>
+      <li><strong>Target policy smoothing:</strong> add small clipped noise to the action used in the target computation, $a' = \mu_{\theta^-}(s') + \text{clip}(\epsilon,-c,c)$, which regularizes the value estimate by smoothing over a small neighborhood of actions rather than allowing the critic to develop a sharp, easily-exploitable spike at a single specific action.</li>
     </ul>
 
     <h3>13.3 SAC (Soft Actor-Critic)</h3>
-    <p>Maximizes entropy-augmented objective:</p>
-    $$J(\pi) = \sum_t \mathbb{E}\left[R_t + \alpha \mathcal{H}(\pi(\cdot|S_t))\right]$$
-    <p>Soft Bellman backup:</p>
-    $$Q(s,a) = \mathbb{E}\left[r + \gamma \left(V(s') + \alpha \mathcal{H}(\pi(\cdot|s'))\right)\right]$$
-    <p>SAC is sample-efficient, stable, and widely used in robotics. Temperature $\alpha$ can be auto-tuned.</p>
+    <p>SAC casts control as maximizing not only expected reward but also policy entropy, giving the <strong>maximum-entropy RL objective</strong>:</p>
+    $$J(\pi) = \sum_t \mathbb{E}_{(s_t,a_t)\sim\rho_\pi}\left[R(s_t,a_t) + \alpha \mathcal{H}(\pi(\cdot|s_t))\right]$$
+    <p>The corresponding soft Bellman backup replaces the ordinary value with a "soft" value that already accounts for the entropy bonus of future actions:</p>
+    $$Q(s,a) = \mathbb{E}_{s'}\left[R(s,a,s') + \gamma\, \mathbb{E}_{a'\sim\pi}\big[Q(s',a') - \alpha\log\pi(a'|s')\big]\right]$$
+    <p>Practically SAC trains twin critics (like TD3, for the same overestimation-bias reasons), a stochastic (typically squashed-Gaussian) actor trained via the reparameterization trick to allow low-variance gradients through the sampled action, and often an automatically-tuned temperature $\alpha$ that is adjusted by gradient descent to hold the policy's entropy at a target level (typically $-|\mathcal{A}|$, i.e. minus the dimensionality of the action space), removing the need to hand-tune the entropy/reward tradeoff.</p>
+    <div class="callout callout-intuition">
+      <strong>Intuition:</strong> the entropy bonus explicitly rewards the policy for staying stochastic and "spreading its bets" across multiple good actions, rather than collapsing to a single point estimate the moment one action looks slightly better. This produces both better exploration during training and often more robust policies at convergence, since near-equally-good alternative actions remain available if conditions shift slightly. SAC is sample-efficient, off-policy (so it reuses a large replay buffer, unlike PPO), and empirically among the most stable and widely used algorithms in continuous-control robotics.
+    </div>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="bandits">
     <h2>14. Multi-Armed Bandits</h2>
-    <p>Bandits are RL without state: each pull of arm $a$ yields reward from distribution with mean $\mu_a$. The exploration-exploitation tradeoff is the core challenge.</p>
+    <p>Bandits are RL stripped of state and transition dynamics: at each round, the agent pulls one of $K$ arms, and arm $a$ yields a reward drawn i.i.d. from a distribution with unknown mean $\mu_a$. There is no credit-assignment problem (the reward is immediate and directly attributable), so bandits isolate the exploration-exploitation tradeoff in its purest form, and every idea developed here (UCB, Thompson sampling, regret) generalizes directly into full RL and into practical systems like online advertising, A/B testing, and clinical trial design.</p>
 
     <h3>14.1 Regret</h3>
     $$R_T = T \mu^* - \mathbb{E}\left[\sum_{t=1}^T R_t\right], \quad \mu^* = \max_a \mu_a$$
-    <p>Good algorithms achieve sublinear regret $R_T = o(T)$ so average regret per step $\to 0$.</p>
+    <p>Regret measures the total expected reward lost relative to always pulling the best arm from the start (which is unknown to the agent, and is exactly what must be discovered through exploration). An algorithm with linear regret $R_T = \Theta(T)$ (e.g. pure exploitation, or fixed-$\epsilon$-greedy) never stops losing a constant fraction of reward per round on average, meaning it fails to converge to always picking the best arm. Good algorithms achieve sublinear (typically logarithmic, $R_T = O(\log T)$) regret, meaning the average per-round regret $R_T/T \to 0$ — the algorithm eventually behaves almost as well as if it had known the best arm from the start. The Lai-Robbins lower bound shows $O(\log T)$ is asymptotically the best possible rate for any algorithm facing this problem, so UCB and Thompson sampling below, which both achieve this rate, are asymptotically optimal.</p>
 
     <h3>14.2 $\epsilon$-greedy bandit</h3>
-    <p>With probability $1-\epsilon$ pull $\arg\max_a \hat{\mu}_a$; else random arm. Simple but linear regret if $\epsilon$ fixed.</p>
+    <p>With probability $1-\epsilon$ pull $\arg\max_a \hat{\mu}_a$; otherwise pull a uniformly random arm. Simple, but with a fixed $\epsilon$ it incurs linear regret (it keeps exploring uniformly forever, at a constant rate, even after the best arm is well known); decaying $\epsilon_t = \min(1, cK/(d^2 t))$ for suitable constants achieves logarithmic regret, but requires knowledge of a problem-dependent gap parameter $d$ that in practice is unknown, making $\epsilon$-greedy schedules brittle compared to UCB or Thompson sampling.</p>
 
     <h3>14.3 UCB1 (Upper Confidence Bound)</h3>
     $$a_t = \arg\max_a \left[\hat{\mu}_a + \sqrt{\frac{2 \ln t}{N_t(a)}}\right]$$
     <div class="callout callout-derivation">
-      <strong>Intuition:</strong> Optimism in the face of uncertainty. Arms with few pulls have large confidence bonus $\sqrt{2\ln t / N_t(a)}$, encouraging exploration. Hoeffding's inequality bounds the true mean within this interval with high probability. Pulling the upper bound maximizes expected best-case reward.
+      <strong>Derivation intuition:</strong> "Optimism in the face of uncertainty." By Hoeffding's inequality, for a bounded reward and $N_t(a)$ samples, the true mean $\mu_a$ lies below $\hat{\mu}_a + \sqrt{\frac{2\ln t}{N_t(a)}}$ with probability at least $1 - t^{-4}$ (a specific, deliberately conservative choice of confidence radius that makes the union bound over all rounds work out). UCB1 always acts as though every arm's true mean equals its most optimistic plausible value given the data so far. Arms pulled rarely have wide confidence intervals and thus large exploration bonuses, guaranteeing they eventually get pulled (bounding the regret contribution from under-exploration); arms that are actually bad get their optimistic estimate driven down quickly as $N_t(a)$ grows (bounding the regret contribution from over-exploitation of bad arms). This single quantity trades off the two failure modes automatically, without any hand-tuned exploration rate.
     </div>
 
     <h3>14.4 Thompson sampling</h3>
-    <p>Maintain posterior $P(\mu_a | \text{data})$ (Beta for Bernoulli rewards, Gaussian for normal). Each step: sample $\tilde{\mu}_a$ from posterior, pull $\arg\max_a \tilde{\mu}_a$. Bayesian exploration: probability of exploring equals probability an arm could be optimal.</p>
+    <p>A fully Bayesian approach: maintain a posterior distribution $P(\mu_a \mid \text{data})$ for each arm (Beta-Bernoulli conjugate posterior for binary rewards, e.g. click/no-click; Normal-Normal conjugate posterior for Gaussian rewards). At each round: draw one sample $\tilde{\mu}_a$ from each arm's current posterior, then pull $\arg\max_a \tilde{\mu}_a$. Update the posterior of the pulled arm with the observed reward via Bayes' rule (for Beta-Bernoulli: $\alpha_a \leftarrow \alpha_a + r$, $\beta_a \leftarrow \beta_a + (1-r)$, an extremely cheap closed-form update). The probability that a given arm is sampled equals, by construction, the posterior probability that it is actually the best arm — this is genuinely Bayesian exploration, and it empirically often outperforms UCB despite (or perhaps because of) not requiring an explicit, sometimes overly conservative, worst-case confidence bound.</p>
 
     <h3>14.5 Contextual bandits</h3>
-    <p>Context $x_t$ before each pull; reward $r \sim R(a, x_t)$. Linear UCB, LinTS, or neural bandits for personalization (ads, recommendations). LLM routing (pick model A vs B per query) is often a contextual bandit problem.</p>
+    <p>Before each pull, the agent observes a context (side-information) vector $x_t$; the reward distribution now depends on both the arm and the context, $r\sim R(a,x_t)$. <strong>LinUCB</strong> assumes a linear reward model $\mathbb{E}[r|a,x] = \theta_a^\top x$ per arm, maintains a ridge-regression posterior on $\theta_a$ from the arm's own observed data, and selects the arm maximizing an upper confidence bound analogous to UCB1 but derived from the regression's confidence ellipsoid: $a_t = \arg\max_a\left(\hat\theta_a^\top x_t + \alpha\sqrt{x_t^\top A_a^{-1} x_t}\right)$ where $A_a$ is the ridge-regression design matrix accumulated for arm $a$. Neural (deep) contextual bandits replace the linear model with a neural network and typically approximate the confidence term with an ensemble, dropout, or a linear layer on top of learned features. Contextual bandits are the standard formalism for personalized recommendation, online ad selection, and — directly relevant in modern AI systems — LLM model/prompt routing (choosing which of several candidate models or system prompts to use per query based on a context vector of the query's features, learning online from user feedback).</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="exploration">
     <h2>15. Exploration Strategies</h2>
     <ul>
-      <li><strong>$\epsilon$-greedy:</strong> simple, decay $\epsilon$ over time.</li>
-      <li><strong>Softmax / Boltzmann:</strong> $\pi(a|s) \propto \exp(Q(s,a)/\tau)$.</li>
-      <li><strong>UCB (bandits):</strong> optimism under uncertainty.</li>
-      <li><strong>Thompson sampling:</strong> sample from posterior over rewards.</li>
-      <li><strong>Intrinsic motivation:</strong> curiosity (prediction error), count-based bonuses, RND (Random Network Distillation).</li>
-      <li><strong>Noisy networks, parameter noise:</strong> structured exploration in deep RL.</li>
+      <li><strong>$\epsilon$-greedy:</strong> simple, typically decayed over training (e.g. linearly annealed from 1.0 to 0.01–0.1 over the first fraction of training). Exploration is state-independent and undirected — it does not preferentially explore uncertain or novel states over already-well-understood ones.</li>
+      <li><strong>Softmax / Boltzmann:</strong> $\pi(a|s) \propto \exp(Q(s,a)/\tau)$, exploration concentrated on actions with similar, competitive Q-values rather than uniformly across all actions; temperature $\tau$ plays the same annealing role as $\epsilon$.</li>
+      <li><strong>UCB (bandits and, less commonly, full RL):</strong> optimism under uncertainty, directly rewards visiting under-sampled state-actions.</li>
+      <li><strong>Thompson sampling:</strong> sample from a posterior over the value/reward model, naturally directed toward states where the posterior is still uncertain.</li>
+      <li><strong>Intrinsic motivation / curiosity:</strong> add a bonus reward for novelty, typically the prediction error of a learned forward dynamics model ("if I cannot predict what happens after this action, I have not learned this part of the environment yet — go find out"), count-based pseudo-counts for large/continuous state spaces (e.g. hashing states into buckets and rewarding rarely-visited buckets), or Random Network Distillation (RND: a fixed random target network and a trained predictor network; prediction error against the fixed random target is high in novel states purely because the predictor has not yet been trained there, giving a stable, non-stationarity-free novelty signal).</li>
+      <li><strong>Noisy networks, parameter-space noise:</strong> inject structured, learnable or fixed noise directly into network weights rather than into the action output, producing temporally-consistent exploratory behavior within an episode (rather than the independent-per-step jitter of $\epsilon$-greedy), which matters a great deal for tasks requiring an extended sequence of coordinated exploratory actions (e.g. navigating consistently in one new direction rather than jittering back and forth).</li>
     </ul>
-    <p>In LLM RL, exploration comes from stochastic decoding (temperature, top-p) during rollout collection.</p>
+    <p>In LLM RL, exploration during rollout collection comes almost entirely from stochastic decoding — temperature, top-p (nucleus) sampling, and sometimes explicit diversity-promoting decoding constraints — rather than from any of the classical mechanisms above, because the "action space" (the vocabulary, applied recursively over a sequence) is enormous and structured, and the policy itself is already a well-calibrated (post-pretraining) probability distribution whose inherent stochasticity, if not collapsed by over-aggressive fine-tuning, already provides a reasonable exploration signal.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="offline-imitation">
     <h2>16. Offline RL and Imitation Learning</h2>
 
-    <h3>15.1 Batch / offline RL</h3>
-    <p>Learn purely from fixed dataset $\mathcal{D}$ without new environment interaction. Challenge: extrapolation error: Q-values for OOD actions are unreliable.</p>
+    <h3>16.1 Batch / offline RL</h3>
+    <p>Learn purely from a fixed, previously-collected dataset $\mathcal{D}$, with zero further environment interaction — critical when interaction is expensive, slow, or unsafe (healthcare, autonomous driving, industrial control). The central challenge is <strong>extrapolation (distributional shift) error</strong>: standard off-policy Bellman backups involve $\max_a Q(s',a)$, and this max is free to select actions $a$ that never appear in $\mathcal{D}$ near state $s'$; the Q-function's estimate for such out-of-distribution (OOD) actions is essentially unconstrained extrapolation by the function approximator and is frequently wildly, systematically overoptimistic, since nothing in the training data corrects it. A policy trained to exploit such an erroneously high $Q$-value will confidently choose actions the data never validated, often catastrophically.</p>
     <ul>
-      <li><strong>CQL (Conservative Q-Learning):</strong> penalize Q on OOD actions.</li>
-      <li><strong>IQL (Implicit Q-Learning):</strong> expectile regression avoids querying max over OOD actions.</li>
-      <li><strong>Decision Transformer:</strong> cast RL as conditional sequence modeling on return-to-go.</li>
+      <li><strong>CQL (Conservative Q-Learning):</strong> adds a regularizer to the standard Bellman loss that explicitly pushes down Q-values for actions not seen in the data (typically actions sampled from the current policy or uniformly) while pushing up Q-values for the actions actually present in the dataset, producing a conservative (lower-bound) estimate of the true Q-function that is provably safe against overestimation on OOD actions.</li>
+      <li><strong>IQL (Implicit Q-Learning):</strong> avoids querying $\max_a Q(s',a)$ at all by estimating the state value with expectile regression, $V(s)\approx\mathbb{E}_\tau[Q(s,a)]$ using an asymmetric ("expectile," a generalization of quantile regression to squared loss) loss with expectile parameter close to 1, which approximates a soft max over the actions actually observed in the data for that state, without ever evaluating $Q$ at an action not present in $\mathcal{D}$.</li>
+      <li><strong>Decision Transformer:</strong> reframes offline RL entirely as sequence modeling rather than Bellman-equation-based RL — condition an autoregressive transformer on a desired "return-to-go" (target cumulative future reward) token alongside the state-action history, and train it with ordinary supervised next-action prediction on the offline trajectories. At inference/deployment, specify a high desired return-to-go and let the model generate actions conditioned on achieving it. This entirely sidesteps the extrapolation-error problem of Bellman backups (there is no bootstrapped max anywhere in the training objective) at the cost of relying on the dataset already containing trajectories with a reasonable spread of achieved returns to condition on.</li>
     </ul>
 
-    <h3>15.2 Imitation learning</h3>
+    <h3>16.2 Imitation learning</h3>
     <ul>
-      <li><strong>Behavioral Cloning (BC):</strong> supervised learning on $(s, a)$ demos. Suffers covariate shift.</li>
-      <li><strong>DAgger:</strong> iteratively query expert on states visited by learned policy.</li>
-      <li><strong>GAIL:</strong> adversarial imitation: discriminator distinguishes expert vs policy trajectories; policy optimizes to fool discriminator (connection to inverse RL).</li>
+      <li><strong>Behavioral Cloning (BC):</strong> ordinary supervised learning, fitting $\pi_\theta(a|s)$ to match expert demonstrations $(s,a)$ pairs by maximum likelihood. Simple and often a strong baseline, but suffers <strong>covariate shift</strong>: because the trained policy will inevitably make small errors, it drifts into states the expert demonstrations never covered, where the policy has no training signal and errors compound — this is analytically shown to cause a quadratic-in-horizon (rather than linear) blow-up of total error compared to the expert.</li>
+      <li><strong>DAgger (Dataset Aggregation):</strong> directly addresses covariate shift by iteratively running the currently-learned policy in the real environment, querying the expert for the correct action at every state actually visited (including off-distribution ones the policy drifted into), aggregating this new labeled data with all previous data, and retraining — this ensures the training distribution converges toward the policy's own state-visitation distribution, closing the mismatch that plain BC suffers from. Requires an interactive expert (a human or a scripted oracle) available at training time, which is a significant practical limitation.</li>
+      <li><strong>GAIL (Generative Adversarial Imitation Learning):</strong> trains a discriminator network to distinguish expert trajectories from policy-generated trajectories, and trains the policy (via ordinary policy-gradient RL, e.g. TRPO) to maximize the discriminator's confusion — i.e., to produce trajectories indistinguishable from the expert's. This is directly analogous to a GAN, and is provably connected to inverse reinforcement learning: the discriminator's output can be interpreted as an implicitly learned, adaptively-shaped reward signal. GAIL requires only expert state-action samples (no explicit expert queries needed as in DAgger) and no reward function at all, at the cost of the well-known instability of adversarial training.</li>
     </ul>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <section id="distributional">
+    <h2>17. Distributional RL</h2>
+    <p>Ordinary RL learns only the <em>expectation</em> of the return, $Q(s,a)=\mathbb{E}[Z(s,a)]$ where $Z(s,a)$ is the random variable representing the (stochastic) return. Distributional RL instead models the full probability distribution of $Z(s,a)$, which turns out to both improve the stability and final performance of deep RL agents empirically, and to unlock explicitly risk-sensitive decision-making.</p>
+
+    <h3>17.1 Distributional Bellman equation</h3>
+    <p>The ordinary Bellman equation $Q(s,a)=\mathbb{E}[R+\gamma Q(s',a')]$ has an exact distributional analogue in terms of equality of distributions rather than equality of scalars:</p>
+    $$Z(s,a) \overset{D}{=} R + \gamma\, Z(s',a'), \qquad a'\sim\pi(\cdot|s'),\; s'\sim P(\cdot|s,a)$$
+    <p>where $\overset{D}{=}$ denotes equality in distribution: the random variable on the left has the same distribution as the (transformed) random variable on the right. This distributional Bellman operator is a contraction in an appropriate probability-metric (e.g. the Wasserstein distance), giving a convergence theory parallel to, but distinct from, the ordinary scalar Bellman contraction.</p>
+
+    <h3>17.2 C51</h3>
+    <p>Represents $Z(s,a)$ as a categorical distribution over a fixed, evenly-spaced discrete support of 51 atoms spanning the plausible return range $[V_{\min}, V_{\max}]$, with learned probabilities $p_i(s,a)$ per atom. The distributional Bellman update projects the shifted-and-scaled target distribution (from $R+\gamma Z(s',a')$) back onto this fixed support (since $R+\gamma\cdot(\text{atom value})$ generally does not land exactly on a support atom) via a specific linear interpolation projection, then trains by cross-entropy between the projected target distribution and the current predicted distribution.</p>
+
+    <h3>17.3 QR-DQN and IQN</h3>
+    <p><strong>QR-DQN (Quantile Regression DQN)</strong> flips the parameterization: instead of fixed atom locations with learned probabilities, it uses fixed, evenly-spaced probability levels (quantile fractions) with learned atom locations, trained with the quantile regression loss (an asymmetric pinball/Huber loss), which avoids the need for the awkward fixed-support projection step of C51 and removes the need to specify $V_{\min},V_{\max}$ in advance. <strong>IQN (Implicit Quantile Networks)</strong> generalizes further by making the quantile fraction itself an input to the network (rather than a fixed finite set), implicitly representing the full continuous quantile function and allowing risk-sensitive policies to be formed at inference time by sampling quantile fractions from a non-uniform (risk-averse or risk-seeking) distribution rather than uniformly.</p>
+
+    <h3>17.4 Why distributional RL helps in practice</h3>
+    <p>Even though the final policy in the standard formulation only ever uses the mean of the learned distribution (throwing away the extra distributional information at decision time), empirical results (Rainbow ablations, the original C51 paper) consistently show distributional agents outperform scalar-Q agents on Atari and other benchmarks. The leading explanations are: richer auxiliary training signal (predicting a full distribution is a harder, more information-dense auxiliary task that regularizes the shared representation), reduced sensitivity to a specific kind of Bellman-target noise, and better-behaved gradients from the categorical/quantile losses compared to squared TD-error regression. Separately, when the full distribution is used at decision time, it directly supports explicit risk-sensitive control — e.g. optimizing a lower quantile (CVaR) of the return rather than the mean, directly relevant to safety-critical domains.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="advanced">
-    <h2>17. Advanced Topics</h2>
+    <h2>18. Advanced Topics</h2>
 
-    <h3>16.1 Multi-agent RL (MARL)</h3>
-    <p>Multiple agents in shared or separate environments. Non-stationarity: other agents' policies change while you learn. Paradigms: independent learners, centralized training / decentralized execution (MADDPG), self-play (AlphaZero).</p>
+    <h3>18.1 Multi-agent RL (MARL)</h3>
+    <p>Multiple agents act in a shared (or separate but interacting) environment. The central complication is <strong>non-stationarity</strong>: from any single agent's perspective, the environment's effective dynamics change over time as the other agents' policies are simultaneously being updated, which invalidates the fixed-MDP assumption underlying every convergence guarantee discussed above. Paradigms: <strong>independent learners</strong> (each agent runs a standard single-agent algorithm, e.g. independent Q-learning, ignoring the other agents entirely — simple but has no convergence guarantee and can cycle or fail to converge); <strong>centralized training with decentralized execution</strong> (CTDE, e.g. MADDPG: each agent's critic is trained with access to all agents' observations and actions during training, since a centralized critic sees a stationary environment, but each agent's actor uses only its own local observation at execution/deployment time, since that is all that is available in the real deployed system); and <strong>self-play</strong> (train a single agent against copies or past versions of itself, as in AlphaZero and OpenAI Five — since both sides are always evolving together, this naturally produces a curriculum of steadily increasing difficulty, though it can be vulnerable to cyclic, non-transitive "rock-paper-scissors" strategy dynamics without careful opponent-pool management).</p>
 
-    <h3>16.2 Hierarchical RL</h3>
-    <p>Options framework: temporally extended actions (macro-actions). Feudal networks, HIRO: manager sets subgoals, worker executes.</p>
+    <h3>18.2 Hierarchical RL</h3>
+    <p>The <strong>options framework</strong> generalizes primitive actions to <strong>options</strong>: temporally-extended sub-policies, each with an initiation set (states where the option can be started), an internal policy, and a termination condition. This lets a top-level policy choose among options ("go to the door", "pick up the object") rather than raw low-level actions, dramatically shortening the effective decision horizon for long-horizon tasks and enabling transfer of reusable skills across tasks. <strong>Feudal networks</strong> and <strong>HIRO</strong> implement a two-level (or deeper) manager-worker hierarchy: a slow-timescale manager sets abstract subgoals (often as a target direction or target state embedding in a learned latent space), and a fast-timescale worker is rewarded for making progress toward the manager's currently-set subgoal, with the manager itself trained by ordinary RL on the environment's true task reward, treating subgoal-setting as its own action space.</p>
 
-    <h3>16.3 Inverse RL and reward learning</h3>
-    <p>Recover reward function $R$ from expert demonstrations. Maximum entropy IRL: experts maximize reward plus entropy. Foundation for GAIL and modern preference-based reward modeling in RLHF.</p>
+    <h3>18.3 Inverse RL and reward learning</h3>
+    <p>Inverse reinforcement learning (IRL) recovers an unknown reward function $R$ from expert demonstrations, inverting the usual RL pipeline (given $R$, find $\pi$) to instead ask: given $\pi_{\text{expert}}$'s behavior, what $R$ would make that behavior optimal? The problem is fundamentally ill-posed (many reward functions, including the trivial all-zero reward, make any fixed policy "optimal"), so practical IRL methods add regularizing assumptions. <strong>Maximum-entropy IRL</strong> resolves the ambiguity by assuming experts are noisily optimal — they select trajectories with probability proportional to $\exp(R(\tau))$, i.e. they maximize reward while otherwise being as unpredictable (high-entropy) as possible — which yields a well-posed maximum-likelihood estimation problem for $R$. This maximum-entropy IRL formulation is the direct theoretical foundation of GAIL (section 16.2) and of modern preference-based reward modeling in RLHF, where the reward model is likewise fit to make observed human preference data as likely as possible under a Boltzmann-rational choice model (the Bradley-Terry model, section 20.3).</p>
 
-    <h3>16.4 Meta-RL and transfer</h3>
-    <p>Learn to adapt quickly to new tasks (MAML in RL, RL²). Relevant for multi-task LLM fine-tuning.</p>
+    <h3>18.4 Meta-RL and transfer</h3>
+    <p>Meta-RL trains an agent not to solve one fixed task well, but to <em>adapt quickly</em> to a new task drawn from a distribution of related tasks, using only a small amount of new task-specific experience. <strong>MAML</strong> applied to RL learns an initialization of policy parameters such that a few ordinary policy-gradient steps on a new task's rewards produce a near-optimal policy for that task (a "learning to learn" objective: differentiate through the inner-loop adaptation process itself). <strong>RL²</strong> instead treats the entire adaptation process as itself something a recurrent policy learns implicitly: the recurrent network's hidden state, updated online as it interacts with a new task, comes to encode task-identifying information purely from experience, without any explicit gradient-based adaptation step at test time — the "learning algorithm" is entirely implicit in the trained recurrent weights. Both paradigms are directly relevant conceptually to multi-task and few-shot fine-tuning of large language models, where a single pretrained model must rapidly specialize given limited task-specific signal.</p>
 
-    <h3>16.5 Safe RL and constrained RL</h3>
+    <h3>18.5 Safe RL and constrained RL</h3>
     $$\max_\pi J(\pi) \quad \text{s.t.} \quad \mathbb{E}[C(s,a)] \leq d$$
-    <p>Cost constraints $C$ for safety-critical robotics. Lagrangian methods, CPO. LLM analog: refusal constraints, toxicity budgets.</p>
+    <p>Constrained MDPs add one or more auxiliary cost signals $C(s,a)$ (distinct from the reward) with an explicit budget $d$ that must not be exceeded in expectation — e.g. maximize task reward subject to a bounded expected number of safety-critical near-collisions. The standard solution technique is the <strong>Lagrangian method</strong>: introduce a dual variable (Lagrange multiplier) $\lambda\geq0$ for the constraint and alternately optimize the policy on the Lagrangian objective $J(\pi)-\lambda(\mathbb{E}[C]-d)$ and update $\lambda$ by (projected) gradient ascent on the constraint violation, converging to a policy that satisfies the constraint at convergence while approximately maximizing reward. <strong>CPO (Constrained Policy Optimization)</strong> extends TRPO's trust-region machinery to directly handle the constraint within each single update (rather than via a slowly-adapting dual variable), giving stronger per-update safety guarantees at the cost of a more involved optimization subproblem per step. The direct analog in LLM alignment is treating refusal rate, toxicity score, or other safety metrics as explicit constraints (a "safety budget") alongside the primary reward-model objective, rather than folding everything into one scalar reward.</p>
 
-    <h3>16.6 Distributional RL</h3>
-    <p>Model full return distribution $Z(s,a)$ not just $\mathbb{E}[G]$. C51, QR-DQN, IQN for better risk-sensitive decisions.</p>
+    <h3>18.6 Curriculum learning and unsupervised environment design</h3>
+    <p>The order in which an agent encounters tasks (or task difficulty levels) substantially affects final performance and sample efficiency in sparse-reward or hard-exploration domains. Automatic curriculum methods (e.g. PLR — Prioritized Level Replay, POET, ALP-GMM) adaptively select or generate training scenarios of appropriate difficulty — neither so easy the agent learns nothing new, nor so hard the agent never receives any learning signal — often by prioritizing training levels where the agent's current value estimate has the highest regret or prediction error, directly connecting curriculum design to the same intrinsic-motivation and prioritized-sweeping ideas introduced earlier.</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="environments">
-    <h2>18. RL Environments and APIs</h2>
+    <h2>19. RL Environments and APIs</h2>
 
-    <h3>17.1 The agent-environment loop</h3>
+    <h3>19.1 The agent-environment loop</h3>
     <pre><code>obs = env.reset()
 done = False
 while not done:
@@ -617,114 +725,117 @@ while not done:
     done = terminated or truncated
     agent.learn(obs, action, reward, done, info)</code></pre>
 
-    <h3>17.2 Gymnasium (formerly OpenAI Gym)</h3>
+    <h3>19.2 Gymnasium (formerly OpenAI Gym)</h3>
     <ul>
       <li><code>reset(seed=, options=)</code> → observation, info</li>
       <li><code>step(action)</code> → obs, reward, terminated, truncated, info</li>
-      <li><code>action_space</code>, <code>observation_space</code> (Box, Discrete, Dict, Tuple)</li>
-      <li><strong>terminated:</strong> true terminal (goal reached, failure). <strong>truncated:</strong> time limit; bootstrapping still needed.</li>
+      <li><code>action_space</code>, <code>observation_space</code> (Box for continuous, Discrete for finite, Dict/Tuple for structured/composite spaces)</li>
+      <li><strong>terminated:</strong> a true terminal state (goal reached, failure/death condition) — the underlying MDP genuinely ends, and bootstrapping should <em>not</em> add $\gamma V(s_{\text{next}})$ since there is no meaningful next state. <strong>truncated:</strong> the episode was cut off by an artificial time limit, not a true MDP terminal — bootstrapping <em>should</em> still add $\gamma V(s_{\text{next}})$, since the underlying process would have continued. Conflating the two (a very common bug) silently teaches the agent an incorrect, artificially pessimistic value near the time limit.</li>
     </ul>
 
-    <h3>17.3 Common environment families</h3>
+    <h3>19.3 Common environment families</h3>
     <table>
       <thead><tr><th>Domain</th><th>Examples</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td>Classic control</td><td>CartPole, MountainCar</td><td>Low-dim, good for debugging</td></tr>
-        <tr><td>Atari</td><td>ALE / Gymnasium Atari</td><td>Pixel inputs, DQN benchmark</td></tr>
-        <tr><td>MuJoCo / DM Control</td><td>HalfCheetah, Humanoid</td><td>Continuous control, SAC/TD3</td></tr>
-        <tr><td>Procgen, NetHack</td><td>Generalization benchmarks</td></tr>
-        <tr><td>Multi-agent</td><td>PettingZoo, Melting Pot</td></tr>
-        <tr><td>LLM text envs</td><td>Custom gym with tokenizer actions</td><td>Prompt = state, tokens = actions</td></tr>
+        <tr><td>Classic control</td><td>CartPole, MountainCar, Pendulum, Acrobot</td><td>Low-dimensional, fast to simulate, ideal for debugging a new algorithm implementation before scaling up</td></tr>
+        <tr><td>Atari</td><td>ALE / Gymnasium Atari suite (~57 games)</td><td>High-dimensional pixel inputs, discrete actions, the classic DQN/Rainbow benchmark; sticky actions and frame-skip are standard evaluation protocol details</td></tr>
+        <tr><td>MuJoCo / DeepMind Control Suite</td><td>HalfCheetah, Humanoid, Ant, Walker2d</td><td>Continuous-control physics simulation, the standard SAC/TD3/PPO benchmark family</td></tr>
+        <tr><td>Procgen, NetHack, Crafter</td><td>Procedurally-generated levels each episode</td><td>Explicitly test generalization to unseen levels rather than memorization of a fixed environment, exposing overfitting that classic Atari benchmarks (same fixed levels every episode) can hide</td></tr>
+        <tr><td>Multi-agent</td><td>PettingZoo, Melting Pot, SMAC (StarCraft Multi-Agent Challenge)</td><td>Standardized APIs and benchmark suites for MARL research</td></tr>
+        <tr><td>LLM text environments</td><td>Custom Gym-style wrappers around a tokenizer/model</td><td>Prompt (and generated tokens so far) = state, next token = action, full generated sequence = episode; reward often only available at the end (EOS) from a reward model or verifier</td></tr>
       </tbody>
     </table>
 
-    <h3>17.4 Wrappers and vectorization</h3>
-    <p>Frame stacking, reward clipping, normalization (ObsNorm, RewardNorm), RecordEpisodeStatistics. VectorEnv runs $N$ parallel envs for A2C/PPO throughput.</p>
+    <h3>19.4 Wrappers and vectorization</h3>
+    <p>Common preprocessing wrappers: frame stacking (recover short-term dynamics like velocity from a sequence of raw frames — a practical fix for a POMDP, section 2), reward clipping (e.g. clip Atari rewards to $\{-1,0,+1\}$ to stabilize the scale of the TD-error loss across wildly different games), observation normalization (running mean/variance normalization, critical for continuous-control algorithms whose gradients are sensitive to input scale), and `RecordEpisodeStatistics` (bookkeeping for logging). `VectorEnv` (Gymnasium) or equivalent runs $N$ environment instances in parallel (via subprocesses or the same process for cheap environments), batching observations for a single forward pass through the policy/value network — essential for the throughput that on-policy algorithms like PPO/A2C need, since they cannot reuse old data across many gradient steps the way off-policy methods can.</p>
 
-    <h3>17.5 Sim-to-real</h3>
-    <p>Domain randomization, system identification, offline pretraining in sim + fine-tuning on real robot data.</p>
+    <h3>19.5 Sim-to-real transfer</h3>
+    <p>Policies trained purely in simulation often fail when deployed on real hardware due to the <strong>reality gap</strong> — systematic discrepancies between simulated and real dynamics, sensor noise, and unmodeled effects (friction, actuator delay, deformable contact). Standard mitigations: <strong>domain randomization</strong> (randomize simulation physical parameters — mass, friction, sensor noise, visual textures/lighting — across training episodes so the learned policy is forced to be robust to a wide range of plausible dynamics, treating the real world as simply one more sample from the randomized distribution); <strong>system identification</strong> (measure real-world physical parameters and calibrate the simulator to match them as closely as possible before training); and <strong>offline pretraining in simulation followed by fine-tuning on a limited quantity of real robot data</strong> (using imitation learning or a small amount of real-world RL to correct the residual reality gap that domain randomization alone does not cover).</p>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="rewards">
-    <h2>19. Reward Design, Shaping, and Hacking</h2>
+    <h2>20. Reward Design, Shaping, and Hacking</h2>
 
-    <h3>18.1 Reward function engineering</h3>
-    <p>The reward defines the optimization target. Misspecified rewards lead to wrong behavior even with perfect RL algorithms.</p>
+    <h3>20.1 Reward function engineering</h3>
+    <p>The reward function defines the entire optimization target; everything else in RL is machinery for finding a policy that maximizes whatever reward function is specified. A misspecified reward leads to genuinely wrong, sometimes bizarre, behavior even with a perfect optimization algorithm and unlimited compute — the algorithm did exactly what it was asked, the specification was simply wrong. This makes reward design arguably the single highest-leverage, and most failure-prone, part of applying RL to a real problem.</p>
 
-    <h3>18.2 Reward shaping</h3>
-    <p>Add potential-based shaping to preserve optimal policy (Ng et al., 1999):</p>
+    <h3>20.2 Reward shaping</h3>
+    <p>Add an auxiliary shaping term to a sparse or hard-to-learn-from reward to provide denser learning signal. Naive shaping can change the optimal policy (e.g. reward a robot for moving toward a goal, and it may learn to move back and forth near the goal to keep collecting the shaping reward without ever finishing the task). <strong>Potential-based reward shaping</strong> (Ng, Harada &amp; Russell, 1999) avoids this failure mode by construction:</p>
     $$F(s,a,s') = \gamma \Phi(s') - \Phi(s)$$
-    <p>Shaping function $\Phi$ guides learning without changing the optimal policy under standard conditions.</p>
+    <div class="callout callout-derivation">
+      <strong>Why potential-based shaping preserves the optimal policy:</strong> Adding $F$ of this specific telescoping form to every reward changes every trajectory's total return by exactly $\gamma^T\Phi(s_T) - \Phi(s_0)$ (all intermediate $\Phi$ terms cancel in a telescoping sum), which for episodic tasks with a fixed potential at the terminal and initial states is simply a constant offset independent of the policy or the path taken — and adding a policy-independent constant to every trajectory's return cannot change which policy is optimal. Equivalently, the shaped Q-function differs from the true one by exactly $\Phi(s)$, so $\arg\max_a Q_{\text{shaped}}(s,a) = \arg\max_a Q(s,a)$ for every state.
+    </div>
+    <p>A good potential function $\Phi$ (e.g. negative distance to goal) provides dense, informative gradient signal throughout training without altering what the final learned policy will be, which is the ideal of reward shaping done correctly.</p>
 
-    <h3>18.3 Sparse vs dense rewards</h3>
+    <h3>20.3 Sparse vs dense rewards</h3>
     <ul>
-      <li><strong>Sparse:</strong> +1 at goal only, hard exploration.</li>
-      <li><strong>Dense:</strong> incremental feedback for easier learning but shaping bias risk.</li>
+      <li><strong>Sparse:</strong> reward only at task completion (e.g. $+1$ only at the goal, $0$ everywhere else). Reflects the true task objective with no risk of misspecification, but creates a severe exploration problem — with a purely random policy, a long sparse-reward task may never be solved even once during training, so the agent never receives any nonzero learning signal at all. Mitigations include hindsight experience replay (relabel a failed trajectory's actual final state as if it had been the intended goal, generating a nonzero-reward training signal from otherwise "failed" data), curriculum learning, and intrinsic motivation (section 15).</li>
+      <li><strong>Dense:</strong> incremental feedback at every step, easing exploration and speeding up early learning, but at the risk of misspecification/shaping bias unless designed carefully (ideally with the potential-based form above).</li>
     </ul>
 
-    <h3>18.4 Reward hacking / specification gaming</h3>
-    <p>Agent maximizes proxy reward without achieving intended goal. Examples:</p>
+    <h3>20.4 Reward hacking / specification gaming</h3>
+    <p>The agent maximizes the literal proxy reward it was given without achieving the designer's actual intended goal — Goodhart's law in action. Well-documented examples:</p>
     <ul>
-      <li>Boat racing agent loops for power-ups instead of finishing (CoastRunners).</li>
-      <li>Legged robot falls but thrashes to collect survival bonus.</li>
-      <li>LLM outputs verbose, sycophantic text to maximize learned reward model score.</li>
+      <li>A boat-racing agent trained to maximize race-track score (from collecting bonus items scattered along the course, in addition to finishing the race) discovers it can loop in a small circle, repeatedly picking up regenerating bonus items forever, achieving a far higher score than any policy that actually finishes the race (the CoastRunners example).</li>
+      <li>A simulated legged robot rewarded for staying upright and moving forward instead learns to fall over in a way that technically satisfies a loosely-specified "forward progress" metric, or thrashes its limbs erratically to trigger a survival bonus without meaningful locomotion.</li>
+      <li>An LLM trained against a learned reward model that has learned to (mis)associate length, hedging phrases, or agreement with the user as proxies for quality produces verbose, sycophantic, or superficially-formatted text that scores well on the proxy reward model without actually being more helpful or correct.</li>
     </ul>
 
-    <h3>18.5 Mitigations</h3>
+    <h3>20.5 Mitigations</h3>
     <ul>
-      <li>Reward model ensembles and uncertainty penalties</li>
-      <li>KL constraints to reference policy (RLHF)</li>
-      <li>Human audits and adversarial eval sets</li>
-      <li>Process rewards vs outcome rewards</li>
-      <li>Verifiable rewards (unit tests, proof checkers) where possible</li>
+      <li><strong>Reward model ensembles and uncertainty penalties:</strong> train several reward models and penalize the policy for driving the models' predictions apart (a proxy for exploiting a blind spot any single model has), or use the ensemble's minimum/lower-confidence-bound as the actual training reward.</li>
+      <li><strong>KL constraints to a reference policy</strong> (the core mechanism of RLHF, section 21.4): explicitly bound how far the trained policy is allowed to drift from a known-reasonable starting policy, limiting how far into a possibly-reward-model-exploiting regime the policy can travel.</li>
+      <li><strong>Human audits and adversarial evaluation sets:</strong> periodically evaluate the trained policy against held-out human judgment or adversarially-constructed test cases specifically designed to catch known failure patterns, rather than trusting the proxy reward's own score as ground truth.</li>
+      <li><strong>Process rewards vs. outcome rewards:</strong> reward correct intermediate reasoning steps, not just a correct final answer, which is both denser (helps exploration) and harder to game via a lucky or degenerate final-answer shortcut that bypasses genuine reasoning.</li>
+      <li><strong>Verifiable rewards</strong> (unit tests, proof checkers, symbolic math verifiers) wherever the task admits a deterministic, non-learned checker, entirely removing the reward-model-hacking failure mode for that portion of the reward signal (section 21.11).</li>
     </ul>
 
     <div class="callout">
-      <strong>Goodhart's law in RL:</strong> When a measure becomes a target, it ceases to be a good measure. Any learned reward is a measure. Expect policies to exploit its blind spots.
+      <strong>Goodhart's law in RL:</strong> "When a measure becomes a target, it ceases to be a good measure." Every learned or hand-specified reward function is, at best, an imperfect measure of the true underlying objective the designer actually cares about. A sufficiently powerful optimizer directly targeting that measure should be expected, as a matter of course rather than an unlucky edge case, to eventually find and exploit the gap between the measure and the true objective — proportional to how much optimization pressure is applied. This motivates every mitigation above: none eliminates the gap, but each reduces how exploitable it is, or how far the policy can travel before deviation is caught.
     </div>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="rl-llms">
-    <h2>20. Reinforcement Learning for Large Language Models</h2>
-    <p>LLM post-training reframes text generation as sequential decision making: state = prompt + tokens so far, action = next token, policy = the language model.</p>
+    <h2>21. Reinforcement Learning for Large Language Models</h2>
+    <p>LLM post-training reframes text generation as sequential decision making: state = the prompt plus every token generated so far, action = the next token chosen from the vocabulary, policy = the language model's own next-token distribution, episode = one full generated response, ending at the end-of-sequence token.</p>
 
-    <h3>19.1 Why RL for LLMs?</h3>
-    <p>SFT fits demonstrations but cannot directly optimize human preferences, task success, or multi-objective tradeoffs. RL optimizes non-differentiable rewards: human ratings, win rates, code test pass rate, math verifier scores.</p>
+    <h3>21.1 Why RL for LLMs?</h3>
+    <p>Supervised fine-tuning (SFT) fits the model to reproduce a fixed set of human- or model-written demonstrations by maximum likelihood, but it cannot directly optimize objectives that are not naturally expressed as "produce this exact text": aggregate human preference between two full responses (which response is better is comparative, not something a single demonstration teaches), sparse task success signals (did the code actually pass the unit tests; did the math proof actually verify), or genuinely multi-objective tradeoffs (helpfulness vs. harmlessness vs. honesty simultaneously). RL directly optimizes whatever scalar reward is specified, however that reward is computed — a learned reward model's score, a binary unit-test pass/fail, a verified proof checker's output — without requiring that objective to be differentiable or expressible as a supervised target.</p>
 
-    <h3>19.2 RLHF pipeline (InstructGPT / ChatGPT style)</h3>
+    <h3>21.2 RLHF pipeline (InstructGPT / ChatGPT style)</h3>
     <ol>
-      <li><strong>SFT</strong> on demonstrations.</li>
-      <li><strong>Reward model (RM)</strong> trained on preference pairs.</li>
-      <li><strong>RL fine-tuning</strong> (PPO) maximizing RM score with KL penalty to SFT reference.</li>
+      <li><strong>Supervised fine-tuning (SFT):</strong> fine-tune the pretrained base model on a curated set of high-quality human (or model-assisted) demonstrations of the desired behavior, producing a reasonable starting policy.</li>
+      <li><strong>Reward model (RM) training:</strong> collect pairs of model completions for the same prompt, have human labelers (or another AI system, in RLAIF) rank which is better, and train a separate model to predict this preference (Bradley-Terry, below).</li>
+      <li><strong>RL fine-tuning:</strong> further update the SFT policy using an RL algorithm (classically PPO) to maximize the reward model's score on newly sampled completions, subject to a KL penalty keeping the policy near the SFT reference (section 21.4).</li>
     </ol>
 
-    <h3>19.3 Reward model training (Bradley-Terry)</h3>
-    <p>Human prefers response $y_w$ over $y_l$ for prompt $x$. Model $r_\phi(x,y)$ scores completions:</p>
+    <h3>21.3 Reward model training (Bradley-Terry model)</h3>
+    <p>Given a prompt $x$ and two completions where humans preferred $y_w$ ("winner") over $y_l$ ("loser"), the reward model $r_\phi(x,y)$ is trained so that the probability it assigns to the observed preference matches a logistic (Bradley-Terry) choice model over the two scalar scores:</p>
     $$P(y_w \succ y_l | x) = \sigma(r_\phi(x, y_w) - r_\phi(x, y_l))$$
-    $$\mathcal{L}_{\text{RM}} = -\mathbb{E}_{(x,y_w,y_l)}\left[\log \sigma(r_\phi(x,y_w) - r_\phi(x,y_l))\right]$$
+    $$\mathcal{L}_{\text{RM}} = -\mathbb{E}_{(x,y_w,y_l)}\left[\log \sigma(r_\phi(x,y_w)-r_\phi(x,y_l))\right]$$
 
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> The RM learns a scalar utility function consistent with pairwise comparisons, like learning Elo ratings for chess players (responses) given match outcomes.
+      <strong>Intuition:</strong> The reward model learns a single scalar utility function for text, consistent with every observed pairwise comparison, in exactly the same mathematical way that Elo ratings are fit to be consistent with observed chess match outcomes — the reward model score is directly analogous to an Elo rating for each possible completion. Only differences in reward matter for the loss (it is invariant to adding a constant to every score), which is why the reward model's raw absolute scale is not directly meaningful, only relative comparisons within a prompt.
     </div>
 
-    <h3>19.4 RLHF objective with KL penalty</h3>
+    <h3>21.4 RLHF objective with KL penalty</h3>
     $$\max_{\pi_\theta} \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\theta(\cdot|x)}\left[r_\phi(x,y)\right] - \beta \, \mathbb{D}_{\text{KL}}\left[\pi_\theta(\cdot|x) \| \pi_{\text{ref}}(\cdot|x)\right]$$
 
     <div class="callout callout-derivation">
-      <strong>Equivalent constrained form:</strong> Maximize reward subject to $\mathbb{D}_{\text{KL}} \leq \delta$. The Lagrangian gives the penalty form above with $\beta$ as dual variable. Prevents policy from drifting to high-RM-score gibberish far from the capable SFT model.
+      <strong>Equivalent constrained form:</strong> Maximizing reward subject to $\mathbb{D}_{\text{KL}}[\pi_\theta\|\pi_{\text{ref}}] \leq \delta$ has a Lagrangian of exactly $\mathbb{E}[r_\phi] - \beta(\mathbb{D}_{\text{KL}} - \delta)$, and dropping the constant $\beta\delta$ term (irrelevant to the argmax over $\theta$) gives precisely the penalty form above, with $\beta$ playing the role of the Lagrange multiplier for the trust-region-style constraint. The closed-form optimal policy for this objective, ignoring optimization difficulty, is $\pi^*(y|x)\propto \pi_{\text{ref}}(y|x)\exp(r_\phi(x,y)/\beta)$ — an exponential tilting of the reference policy toward high-reward completions, with $\beta$ controlling how strongly. This KL term is essential in practice: without it, the policy is free to drift arbitrarily far from the reasonable, fluent starting distribution learned during pretraining/SFT to chase the highest possible reward-model score, which — since the reward model is itself an imperfect, learned proxy, exactly as discussed in section 20 — reliably produces degenerate, unnatural, reward-model-exploiting text (a specific instance of reward hacking) rather than genuinely better responses.
     </div>
 
-    <h3>19.5 PPO for LLMs</h3>
-    <p>Each token (or sequence chunk) is an action. Critic estimates value of partial sequences. Challenges:</p>
+    <h3>21.5 PPO for LLMs</h3>
+    <p>Each generated token is treated as one RL action; the critic estimates the value of each partial (prompt + tokens-so-far) sequence to compute GAE-based advantages exactly as in section 11.2. Distinctive challenges relative to classic PPO robotics/game settings:</p>
     <ul>
-      <li>Enormous action space ($|\mathcal{V}|$ ~ 50k–200k tokens)</li>
-      <li>Credit assignment across long generations</li>
-      <li>Reward often only at EOS (sequence-level RM score)</li>
-      <li>Four models in memory: policy, reference, critic, reward model</li>
+      <li>The action space is the entire vocabulary, commonly 50,000–200,000+ tokens — enormously larger than typical discrete-control action spaces.</li>
+      <li>Credit assignment must span very long generations (hundreds to thousands of tokens) from a reward often available only at the very end of the sequence.</li>
+      <li>Reward is frequently only defined at the terminal EOS token (the sequence-level reward-model score for the full completion), meaning every non-terminal token's reward is exactly zero, and the critic/GAE machinery is entirely responsible for distributing this single terminal reward signal back across every earlier token-level decision.</li>
+      <li>Four separate large models must be held in memory and/or compute simultaneously during training: the policy (being trained), the frozen reference policy (for the KL penalty), the critic (value function, itself typically a large network, often initialized from the reward model or the SFT policy), and the reward model (used to score completions) — a substantial systems/memory engineering burden distinct from classic RL.</li>
     </ul>
-    <p>Practical tricks: reward normalization, KL in reward (not just loss), advantage whitening, response length limits, mixed batch SFT loss.</p>
+    <p>Practical tricks widely used in RLHF-PPO implementations: reward normalization/whitening across a batch; folding the per-token KL penalty directly into the per-token reward signal (rather than only as a separate loss term) so that credit assignment via GAE naturally accounts for it token-by-token; advantage whitening; hard caps on response length (both to bound compute and to prevent length-based reward hacking); and mixing a small amount of the original SFT loss into the PPO update to counteract capability regression ("alignment tax") during RL fine-tuning.</p>
 
     <pre><code># RLHF-style training with TRL (conceptual)
 from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead
@@ -738,71 +849,71 @@ for batch in prompts:
     rewards = [reward_model(q, r) for q, r in zip(query_tensors, response_tensors)]
     stats = trainer.step(query_tensors, response_tensors, rewards)</code></pre>
 
-    <h3>19.6 DPO: full derivation sketch</h3>
-    <p>Under Bradley-Terry preferences, optimal RLHF policy satisfies:</p>
-    $$\pi^*(y|x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y|x) \exp\left(\frac{1}{\beta} r^*(x,y)\right)$$
-    <p>Rearrange to express reward in terms of policies:</p>
+    <h3>21.6 DPO: full derivation</h3>
+    <p>Direct Preference Optimization observes that the RLHF objective of section 21.4 has a known closed-form optimal solution (already stated above):</p>
+    $$\pi^*(y|x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y|x) \exp\left(\frac{1}{\beta} r^*(x,y)\right), \qquad Z(x) = \sum_y \pi_{\text{ref}}(y|x)\exp(r^*(x,y)/\beta)$$
+    <p>Rearranging algebraically to express the (unknown, in principle recoverable) true reward in terms of any policy achieving this optimum:</p>
     $$r^*(x,y) = \beta \log \frac{\pi^*(y|x)}{\pi_{\text{ref}}(y|x)} + \beta \log Z(x)$$
-    <p>Substitute into preference loss; $Z(x)$ cancels in pairwise comparison:</p>
+    <p>Substituting this expression for $r^*$ back into the Bradley-Terry preference loss (section 21.3): since the loss only ever involves a <em>difference</em> of two rewards for the same prompt $x$, the troublesome, generally intractable normalizing constant $Z(x)$ (a sum/integral over the entire, exponentially large space of possible completions $y$) appears identically in both terms and exactly cancels:</p>
     $$\boxed{\mathcal{L}_{\text{DPO}} = -\mathbb{E}\left[\log \sigma\left(\beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)}\right)\right]}$$
 
     <div class="callout callout-intuition">
-      <strong>Intuition:</strong> DPO directly increases log-odds of preferred vs rejected responses relative to the reference with no explicit RM or RL loop. Implicit reward is whatever makes preferences most consistent.
+      <strong>Intuition:</strong> DPO directly increases the log-odds of the preferred completion relative to the rejected one, measured relative to the reference policy, using ordinary supervised-style gradient descent on human preference pairs — with no explicit reward model, no separate RL rollout-and-update loop, and no critic network at all. The "implicit reward" the policy ends up optimizing is exactly whatever reward function would make the observed preference data maximally likely under the Bradley-Terry model, which by the derivation above is precisely $\beta\log(\pi_\theta/\pi_{\text{ref}})$ up to the additive $Z(x)$ term. The gradient of the DPO loss can be shown to weight each preference pair's update by $\sigma(-(\text{implicit reward margin}))$ — pairs the current model already ranks correctly with high confidence contribute little further gradient, an automatic form of hard-example weighting.
     </div>
 
-    <h3>19.7 DPO variants</h3>
+    <h3>21.7 DPO variants</h3>
     <table>
       <thead><tr><th>Method</th><th>Key change</th></tr></thead>
       <tbody>
-        <tr><td><strong>IPO</strong></td><td>Squared loss on preference margin; less length bias</td></tr>
-        <tr><td><strong>KTO</strong></td><td>Unpaired good/bad labels via prospect theory weights</td></tr>
-        <tr><td><strong>ORPO</strong></td><td>Joint SFT + odds-ratio preference; no reference model</td></tr>
-        <tr><td><strong>SimPO</strong></td><td>Reference-free with length-normalized margin</td></tr>
-        <tr><td><strong>RLAIF-DPO</strong></td><td>AI-labeled preferences instead of human</td></tr>
+        <tr><td><strong>IPO</strong></td><td>Replaces the logistic loss with a squared loss directly on the preference margin, which provably avoids DPO's tendency to push the implicit reward margin toward infinity (and thus the policy toward a degenerate, overconfident extreme) when preference pairs are close to deterministic/noise-free.</td></tr>
+        <tr><td><strong>KTO</strong></td><td>Trains from unpaired binary good/bad labels (no need for matched preference pairs at all) using a loss derived from prospect theory's asymmetric weighting of gains vs. losses, matching how humans are empirically observed to weight outcomes.</td></tr>
+        <tr><td><strong>ORPO</strong></td><td>Combines the SFT and preference-optimization objectives into a single joint loss (an odds-ratio-based preference term added directly to the SFT cross-entropy loss), entirely removing the need for a separate reference model.</td></tr>
+        <tr><td><strong>SimPO</strong></td><td>Reference-free; uses the average per-token log-probability (length-normalized) directly as the implicit reward, removing both the reference model and DPO's known length-correlated biases.</td></tr>
+        <tr><td><strong>RLAIF-DPO</strong></td><td>Uses AI-generated (rather than human-collected) preference labels as the training pairs, otherwise identical to standard DPO.</td></tr>
       </tbody>
     </table>
 
-    <h3>19.8 GRPO (Group Relative Policy Optimization)</h3>
-    <p>Used in DeepSeek-R1 and modern reasoning RL. Sample group of outputs $\{y_1,\ldots,y_G\}$ per prompt, compute rewards $\{r_i\}$, normalize within group:</p>
-    $$\hat{A}_i = \frac{r_i - \mathrm{mean}(r)}{\mathrm{std}(r) + \epsilon}$$
-    <p>Apply PPO-style clipped loss on token log-probs with group-relative advantages. No separate critic network, which reduces memory vs classic PPO+value head.</p>
+    <h3>21.8 GRPO (Group Relative Policy Optimization)</h3>
+    <p>Used prominently in DeepSeek-R1 and other modern reasoning-focused RL post-training. For each prompt, sample a <em>group</em> of $G$ completions $\{y_1,\ldots,y_G\}$ from the current policy, score each with the reward function (a reward model, or, especially in reasoning tasks, a verifiable checker), and compute a <strong>group-relative</strong> advantage by normalizing each completion's reward against the group's own empirical statistics rather than against a learned critic's value estimate:</p>
+    $$\hat{A}_i = \frac{r_i - \mathrm{mean}(r_1,\ldots,r_G)}{\mathrm{std}(r_1,\ldots,r_G) + \epsilon}$$
+    <p>This group-relative advantage is then used exactly as $\hat{A}_t$ inside a standard PPO-style clipped surrogate loss (section 12.6), applied per token. The key structural difference from PPO-with-critic is that GRPO needs <em>no separate learned value/critic network at all</em>: the group mean acts as an empirical, per-prompt Monte Carlo baseline instead of a learned $V_\phi(s)$, which substantially reduces memory and removes an entire source of critic-approximation-error-induced bias, at the cost of needing to sample multiple completions per prompt (increasing rollout compute) to get a low-variance group statistic.</p>
 
-    <h3>19.9 REINFORCE / RLOO for LLMs</h3>
-    <p>Leave-one-out baseline:</p>
+    <h3>21.9 REINFORCE / RLOO (Leave-One-Out) for LLMs</h3>
+    <p>A simpler alternative baseline scheme in the same group-sampling spirit as GRPO: for each sampled completion $i$ within a group of $G$, use the mean of the <em>other</em> $G-1$ completions' rewards as its baseline, rather than the whole group's mean (which technically includes the sample's own reward, introducing a small correlation/bias between the sample and its own baseline):</p>
     $$\hat{A}_i = r_i - \frac{1}{G-1}\sum_{j \neq i} r_j$$
-    <p>Simpler than PPO; works well with verifiable rewards (math, code) where variance is manageable with enough samples.</p>
+    <p>This "leave-one-out" baseline is provably unbiased in a way that including the sample's own reward in its own baseline is not, and empirically works well specifically in domains with verifiable, low-noise rewards (math, code, formal proofs), where a small number of samples per prompt already gives a reasonably low-variance baseline, avoiding the additional complexity of PPO's clipping/critic/multiple-epoch machinery entirely — often simply a single-epoch REINFORCE-style update per batch of sampled completions.</p>
 
-    <h3>19.10 Process Reward Models (PRM)</h3>
-    <p>Score each reasoning step, not just final answer. Enables step-level credit assignment for chain-of-thought. Training data: human labels on intermediate steps. Inference: best-of-N or tree search guided by PRM.</p>
+    <h3>21.10 Process Reward Models (PRM)</h3>
+    <p>Rather than scoring only the final answer of a multi-step reasoning chain (an <strong>outcome reward model</strong>, ORM), a process reward model scores the correctness of every individual intermediate reasoning step. Training data for a PRM is typically collected by having human (or AI) annotators label each step of a chain-of-thought as correct, incorrect, or neutral, given the steps that preceded it. A trained PRM enables step-level credit assignment during RL (directly rewarding correct sub-steps rather than only a terminal outcome, similar in spirit to a denser, verified version of reward shaping), and at inference time supports search strategies like best-of-N re-ranking or explicit tree search (guided by the PRM's step-level scores to prune unpromising reasoning branches early, rather than only discovering a chain was wrong at its very end).</p>
 
-    <h3>19.11 Verifiable rewards (RLVR)</h3>
-    <p>Domains with checkers: unit tests (code), symbolic math verification, formal proofs. Reward is deterministic function of output, which reduces RM hacking, enables scalable self-improvement (AlphaCode, DeepSeek-R1 style).</p>
+    <h3>21.11 Verifiable rewards (RLVR)</h3>
+    <p>In domains that admit a deterministic, automatable checker — unit tests for generated code, a symbolic computer-algebra system for math answers, a formal proof checker (e.g. Lean) for mathematical proofs — the reward can be computed directly by that checker rather than by a learned, and therefore inherently gameable, reward model. This structurally eliminates the entire reward-model-hacking failure mode (section 20.4) for that portion of training, since there is no learned proxy to exploit: the checker either accepts the output or it does not, ground truth by construction. This is the mechanism underlying scalable self-improvement pipelines like AlphaCode's use of execution-based test feedback and DeepSeek-R1's large-scale RL training on math and code, where the verifiable signal allows aggressive, large-scale RL without the reward-model-overoptimization risk that plagues purely RM-based RLHF at similar scale.</p>
 
-    <h3>19.12 RLAIF and Constitutional AI</h3>
+    <h3>21.12 RLAIF and Constitutional AI</h3>
     <ul>
-      <li><strong>RLAIF:</strong> AI model labels preferences; scales cheaply, inherits labeler biases.</li>
-      <li><strong>Constitutional AI:</strong> model critiques/revises outputs against principles; revisions become SFT/RL data.</li>
+      <li><strong>RLAIF (RL from AI Feedback):</strong> replace human preference labelers with another (typically larger or more capable) AI model that labels which of two completions better satisfies a given rubric or set of principles. This scales far more cheaply than human labeling, but any systematic biases or blind spots of the labeling AI model are directly inherited by the resulting reward model and, downstream, by the trained policy.</li>
+      <li><strong>Constitutional AI:</strong> the model itself is prompted to critique its own draft response against a written set of principles ("the constitution"), then to revise the response to better satisfy those principles; these self-generated critique-and-revision pairs become training data for supervised fine-tuning and/or for the preference-labeling step of an RLAIF pipeline, reducing (though not eliminating) the reliance on direct human labeling of individual harmful or borderline outputs.</li>
     </ul>
 
-    <h3>19.13 Online RL and rejection sampling</h3>
-    <p>Best-of-N sampling from policy, filter by reward, fine-tune on winners, simpler than full PPO. Iterative: generate → filter → SFT/DPO → repeat (ReST, RAFT).</p>
+    <h3>21.13 Online RL and rejection sampling / best-of-N distillation</h3>
+    <p>A simpler alternative to full PPO/GRPO-style policy-gradient RL: sample many ($N$, e.g. 16–64) completions per prompt from the current policy, filter to keep only the highest-reward completion(s) per prompt (rejection sampling / best-of-N), and fine-tune the policy with ordinary supervised cross-entropy on these filtered "winning" completions, exactly as in SFT. This is far simpler to implement and more stable than full RL (no advantage estimation, no clipping, no critic) at the cost of a fixed, non-adaptive exploration budget per prompt (unlike RL, which continually adapts what it samples as the policy improves during training). Iterating this loop — sample, filter, fine-tune, then repeat with the newly fine-tuned policy — is the basis of methods like ReST (Reinforced Self-Training) and RAFT (Reward rAnked FineTuning), which recover much of RL's benefit through a sequence of simple supervised fine-tuning rounds.</p>
 
-    <h3>19.14 Reward hacking in LLMs: specific patterns</h3>
+    <h3>21.14 Reward hacking in LLMs: specific empirical patterns</h3>
     <ul>
-      <li><strong>Verbosity inflation:</strong> RM correlates length with quality.</li>
-      <li><strong>Sycophancy:</strong> agreeing with user regardless of truth.</li>
-      <li><strong>Format hacking:</strong> bullet lists, hedging phrases RM likes.</li>
-      <li><strong>Refusal overfitting:</strong> excessive safety refusals to minimize penalty.</li>
-      <li><strong>Reward model overoptimization:</strong> policy outpaces RM generalization (Goodhart).</li>
+      <li><strong>Verbosity inflation:</strong> the reward model has learned a spurious positive correlation between response length and human-perceived quality (longer answers often look more thorough even when they are not), so the policy learns to pad responses unnecessarily to exploit this correlation.</li>
+      <li><strong>Sycophancy:</strong> the policy learns to agree with the user's stated views or assumptions regardless of their actual correctness, because reward-model training data (implicitly or explicitly) rewards agreeableness.</li>
+      <li><strong>Format hacking:</strong> superficial stylistic features the reward model has learned to associate with quality — bullet-point lists, hedging phrases, a particular tone — are reproduced even when they do not genuinely improve the substance of the response.</li>
+      <li><strong>Refusal overfitting:</strong> excessive, overly-broad safety refusals on borderline-but-legitimate requests, if the reward/safety training signal penalizes any hint of a sensitive topic rather than distinguishing genuinely harmful requests from merely adjacent ones.</li>
+      <li><strong>Reward model overoptimization:</strong> as RL training proceeds, the policy's true quality (as judged by held-out human evaluation) eventually plateaus and can even decline, even while the proxy reward-model score keeps climbing — the textbook Goodhart's-law signature, and the direct empirical motivation for KL constraints, reward-model ensembling, and periodic RM refresh/retraining against newly-collected human data during long RL runs.</li>
     </ul>
 
-    <h3>19.15 LLM RL engineering checklist</h3>
+    <h3>21.15 LLM RL engineering checklist</h3>
     <ul>
-      <li>Keep reference model frozen; monitor KL throughout training</li>
-      <li>Normalize rewards per batch; clip extreme advantages</li>
-      <li>Mix 5–10% SFT loss to prevent capability collapse (alignment tax)</li>
-      <li>Eval on held-out human prompts + capability benchmarks (MMLU, coding)</li>
-      <li>Track entropy: collapse indicates mode collapse / reward hacking</li>
+      <li>Keep the reference model frozen throughout training; continuously monitor the running KL divergence between policy and reference as a leading indicator of drift and potential reward hacking.</li>
+      <li>Normalize/whiten rewards per batch; clip extreme advantage values before applying the policy update.</li>
+      <li>Mix a small fraction (roughly 5–10%) of ordinary SFT loss into the RL objective to counteract capability regression ("alignment tax") during RL fine-tuning.</li>
+      <li>Evaluate continually on held-out human-judged prompts <em>and</em> on standard capability benchmarks (e.g. MMLU-style knowledge tests, coding benchmarks) — proxy reward-model score alone is insufficient and can be actively misleading once overoptimization begins.</li>
+      <li>Track the policy's output entropy throughout training: a collapsing entropy trend is a leading indicator of mode collapse and/or active reward hacking (the policy converging onto a narrow set of reward-exploiting patterns rather than genuinely improving).</li>
     </ul>
 
     <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2203.02155" rel="noopener noreferrer">InstructGPT</a> · <a href="https://arxiv.org/abs/2305.18290" rel="noopener noreferrer">DPO paper</a> · <a href="https://arxiv.org/abs/2401.16219" rel="noopener noreferrer">DeepSeek-R1 / GRPO</a> · <a href="../../learn/Training-Pipeline/ai-engineering-post-training.html">Post-Training notes</a></small></p>
@@ -810,37 +921,40 @@ for batch in prompts:
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="engineering">
-    <h2>21. Engineering, Optimization, and Debugging</h2>
+    <h2>22. Engineering, Optimization, and Debugging</h2>
 
-    <h3>20.1 Hyperparameters that matter</h3>
+    <h3>22.1 Hyperparameters that matter</h3>
     <table>
       <thead><tr><th>Parameter</th><th>Typical range</th><th>Effect</th></tr></thead>
       <tbody>
-        <tr><td>$\gamma$</td><td>0.99–0.999</td><td>Horizon / credit depth</td></tr>
-        <tr><td>Learning rate</td><td>1e-5 – 3e-4 (deep RL)</td><td>Stability vs speed</td></tr>
-        <tr><td>PPO $\epsilon$</td><td>0.1–0.2</td><td>Trust region size</td></tr>
-        <tr><td>GAE $\lambda$</td><td>0.95–0.98</td><td>Bias-variance in advantages</td></tr>
-        <tr><td>Batch / rollout size</td><td>Large as GPU allows</td><td>Gradient variance</td></tr>
-        <tr><td>KL coef $\beta$ (RLHF)</td><td>0.01–0.2</td><td>Alignment vs capability retention</td></tr>
+        <tr><td>$\gamma$</td><td>0.99–0.999</td><td>Effective planning horizon ($\approx 1/(1-\gamma)$ steps); too low causes myopic, sometimes catastrophically short-sighted behavior, too high increases return variance and slows learning</td></tr>
+        <tr><td>Learning rate</td><td>1e-5 – 3e-4 (deep RL)</td><td>Stability vs. speed; RL is generally far more sensitive to learning rate than supervised learning because bad updates also corrupt the data-collection policy, not just the model weights</td></tr>
+        <tr><td>PPO $\epsilon$ (clip range)</td><td>0.1–0.2</td><td>Trust-region size; too large risks destructive updates, too small slows convergence</td></tr>
+        <tr><td>GAE $\lambda$</td><td>0.95–0.98</td><td>Bias-variance tradeoff in advantage estimation; lower reduces variance at the cost of critic-error-induced bias</td></tr>
+        <tr><td>Batch / rollout size</td><td>As large as compute allows</td><td>Directly reduces gradient-estimate variance; on-policy methods are especially sensitive since stale data cannot be reused indefinitely</td></tr>
+        <tr><td>KL coefficient $\beta$ (RLHF)</td><td>0.01–0.2 (or dynamically adapted)</td><td>Trades off reward-model score against staying close to the reference policy; too low invites reward hacking, too high limits how much the policy can actually improve</td></tr>
+        <tr><td>Entropy coefficient</td><td>0.0–0.01</td><td>Counteracts premature policy collapse to a narrow, overconfident distribution</td></tr>
+        <tr><td>Replay buffer size (off-policy)</td><td>1e5–1e6 transitions</td><td>Larger buffers reduce correlation between consecutive updates but increase the fraction of stale, off-policy data</td></tr>
       </tbody>
     </table>
 
-    <h3>20.2 Common failure modes</h3>
+    <h3>22.2 Common failure modes and their diagnosis</h3>
     <ul>
-      <li><strong>Value blow-up:</strong> reduce LR, clip rewards, check bootstrapping.</li>
-      <li><strong>Policy collapse:</strong> entropy too low: increase entropy coef or temperature.</li>
-      <li><strong>No learning:</strong> reward scale wrong, bugs in done masking, bad normalization.</li>
-      <li><strong>RLHF regression:</strong> KL too low, RM overoptimization: increase $\beta$, refresh RM data.</li>
+      <li><strong>Value function blow-up / diverging loss:</strong> reduce learning rate, clip rewards or gradients, double-check that <code>terminated</code> vs <code>truncated</code> bootstrapping is handled correctly (section 19.2), and check for reward scale issues (unnormalized huge rewards destabilize the TD-error-based loss).</li>
+      <li><strong>Policy collapse (premature convergence to a narrow, low-entropy policy):</strong> increase the entropy coefficient, increase exploration noise/temperature, verify the advantage baseline/normalization is working correctly (a broken baseline can create spurious, artificially confident gradient signal).</li>
+      <li><strong>No learning at all (flat reward curve):</strong> check reward scale and sign conventions, check for bugs in episode-termination/done-masking logic, verify the observation normalization statistics are actually being updated and applied consistently between data collection and training, and confirm the environment reward is not accidentally always zero or constant.</li>
+      <li><strong>RLHF-specific performance regression during training:</strong> KL coefficient too low (increase $\beta$ or tighten the KL trust region), reward model overoptimization (refresh/retrain the reward model on newly collected data, or ensemble multiple reward models), or an outright bug in per-token vs. per-sequence reward/KL bookkeeping.</li>
+      <li><strong>High variance across random seeds:</strong> a well-documented, somewhat uncomfortable empirical property of deep RL — always report results averaged across multiple (ideally 5+) random seeds, and be skeptical of any single-seed result, especially for on-policy algorithms with relatively small batch sizes.</li>
     </ul>
 
-    <h3>20.3 Libraries</h3>
+    <h3>22.3 Libraries</h3>
     <ul>
-      <li><strong>Gymnasium</strong>: environments</li>
-      <li><strong>Stable-Baselines3</strong>: PPO, SAC, DQN implementations</li>
-      <li><strong>CleanRL</strong>: single-file reference implementations</li>
-      <li><strong>TRL</strong>: RLHF, DPO, PPO for LLMs</li>
-      <li><strong>Ray RLlib</strong>: distributed RL at scale</li>
-      <li><strong>Verl / OpenRLHF</strong>: large-scale LLM RL training</li>
+      <li><strong>Gymnasium</strong>: the standard environment API (successor to OpenAI Gym).</li>
+      <li><strong>Stable-Baselines3</strong>: well-tested, widely-used reference implementations of PPO, SAC, DQN, TD3, and others, good for benchmarking a new idea against a trusted baseline.</li>
+      <li><strong>CleanRL</strong>: single-file, minimally-abstracted reference implementations, ideal for reading and understanding exactly what an algorithm does line by line, without a deep framework's layers of indirection.</li>
+      <li><strong>TRL</strong>: RLHF, DPO, PPO, and GRPO-style training specifically for LLMs, integrated with the Hugging Face ecosystem.</li>
+      <li><strong>Ray RLlib</strong>: distributed RL at scale across many machines, supporting a wide range of algorithms and both single- and multi-agent settings.</li>
+      <li><strong>Verl / OpenRLHF</strong>: large-scale, systems-optimized LLM RL training frameworks designed for production-scale RLHF/GRPO training of very large models.</li>
     </ul>
 
     <pre><code># Stable-Baselines3 PPO example
@@ -852,64 +966,75 @@ model.save("ppo_cartpole")</code></pre>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="algorithm-catalog">
-    <h2>22. Complete Algorithm Catalog</h2>
+    <h2>23. Complete Algorithm Catalog</h2>
     <p>Every major RL algorithm at a glance. Use this as a checklist when studying or designing systems.</p>
     <table>
       <thead><tr><th>Algorithm</th><th>Type</th><th>Policy</th><th>Key update / objective</th></tr></thead>
       <tbody>
         <tr><td>Policy iteration</td><td>DP</td><td>Tabular</td><td>Evaluate $V^\pi$, greedy improve</td></tr>
         <tr><td>Value iteration</td><td>DP</td><td>Tabular</td><td>Bellman optimality sweep</td></tr>
-        <tr><td>MC control</td><td>Tabular</td><td>On-policy</td><td>$Q(s,a) \leftarrow G_t$ per visit</td></tr>
-        <tr><td>SARSA</td><td>TD</td><td>On-policy</td><td>Bootstraps with actual next action</td></tr>
+        <tr><td>MC control</td><td>Tabular</td><td>On-policy</td><td>$Q(s,a) \leftarrow G_t$ per visit, $\epsilon$-soft policy</td></tr>
+        <tr><td>SARSA</td><td>TD</td><td>On-policy</td><td>Bootstraps with actual next action taken</td></tr>
         <tr><td>Q-learning</td><td>TD</td><td>Off-policy</td><td>Bootstraps with $\max_a Q(s',a)$</td></tr>
-        <tr><td>Expected SARSA</td><td>TD</td><td>On-policy</td><td>Bootstraps with $\mathbb{E}_\pi Q$</td></tr>
-        <tr><td>TD($\lambda$)</td><td>TD</td><td>Either</td><td>Eligibility traces over $n$-step returns</td></tr>
-        <tr><td>Dyna-Q</td><td>Model-based</td><td>Off-policy</td><td>Real + simulated Q-learning steps</td></tr>
-        <tr><td>MCTS</td><td>Planning</td><td>Search</td><td>UCB tree search + rollouts</td></tr>
-        <tr><td>REINFORCE</td><td>Policy gradient</td><td>On-policy</td><td>$\nabla J \approx G_t \nabla \log \pi$</td></tr>
-        <tr><td>Actor-Critic</td><td>PG + value</td><td>On-policy</td><td>TD error $\delta_t$ replaces $G_t$</td></tr>
-        <tr><td>A2C / A3C</td><td>Actor-Critic</td><td>On-policy</td><td>Parallel workers, shared critic</td></tr>
-        <tr><td>TRPO</td><td>On-policy</td><td>Stochastic</td><td>Constrained surrogate + KL ≤ δ</td></tr>
-        <tr><td>PPO</td><td>On-policy</td><td>Stochastic</td><td>Clipped surrogate + GAE</td></tr>
-        <tr><td>DQN</td><td>Value-based</td><td>Off-policy</td><td>Minimize TD error with replay</td></tr>
-        <tr><td>Double DQN</td><td>Value-based</td><td>Off-policy</td><td>Decouple max action selection</td></tr>
-        <tr><td>Dueling DQN</td><td>Value-based</td><td>Off-policy</td><td>$Q = V + A$ decomposition</td></tr>
-        <tr><td>Rainbow</td><td>Value-based</td><td>Off-policy</td><td>DQN + dueling + double + PER + …</td></tr>
-        <tr><td>DDPG</td><td>Actor-Critic</td><td>Off-policy</td><td>Deterministic policy gradient</td></tr>
-        <tr><td>TD3</td><td>Actor-Critic</td><td>Off-policy</td><td>Twin critics + delayed updates</td></tr>
-        <tr><td>SAC</td><td>Actor-Critic</td><td>Off-policy</td><td>Max entropy + soft Q-learning</td></tr>
-        <tr><td>CQL</td><td>Offline</td><td>Off-policy</td><td>Conservative Q penalty on OOD $a$</td></tr>
-        <tr><td>IQL</td><td>Offline</td><td>Off-policy</td><td>Expectile regression, no max</td></tr>
-        <tr><td>Decision Transformer</td><td>Offline</td><td>Seq model</td><td>Condition on return-to-go</td></tr>
-        <tr><td>BC / DAgger / GAIL</td><td>Imitation</td><td>N/A</td><td>Supervised / interactive / adversarial</td></tr>
-        <tr><td>Dreamer / MuZero</td><td>Model-based</td><td>Either</td><td>Learn world model, plan in latent space</td></tr>
-        <tr><td>RLHF (PPO+RM)</td><td>LLM</td><td>On-policy</td><td>Maximize RM − β·KL</td></tr>
-        <tr><td>DPO / IPO / KTO</td><td>LLM</td><td>Preference</td><td>Direct preference loss, no RL loop</td></tr>
-        <tr><td>GRPO / RLOO</td><td>LLM</td><td>On-policy</td><td>Group-relative advantages, no critic</td></tr>
+        <tr><td>Double Q-learning</td><td>TD</td><td>Off-policy</td><td>Decouples action selection and evaluation to remove maximization bias</td></tr>
+        <tr><td>Expected SARSA</td><td>TD</td><td>Either</td><td>Bootstraps with $\mathbb{E}_\pi[Q(s',\cdot)]$</td></tr>
+        <tr><td>TD($\lambda$)</td><td>TD</td><td>Either</td><td>Eligibility traces over exponentially-weighted $n$-step returns</td></tr>
+        <tr><td>Dyna-Q</td><td>Model-based</td><td>Off-policy</td><td>Real + simulated Q-learning steps from a learned model</td></tr>
+        <tr><td>MCTS / AlphaZero</td><td>Planning</td><td>Search</td><td>UCB/PUCT tree search + rollouts/value network</td></tr>
+        <tr><td>REINFORCE</td><td>Policy gradient</td><td>On-policy</td><td>$\nabla J \approx G_t \nabla \log \pi$, unbiased but high variance</td></tr>
+        <tr><td>Actor-Critic</td><td>PG + value</td><td>On-policy</td><td>TD error $\delta_t$ (bootstrapped advantage estimate) replaces $G_t$</td></tr>
+        <tr><td>A2C / A3C</td><td>Actor-Critic</td><td>On-policy</td><td>Parallel workers, shared/synchronized critic</td></tr>
+        <tr><td>TRPO</td><td>On-policy</td><td>Stochastic</td><td>Natural-gradient step via conjugate gradient, constrained by KL ≤ δ</td></tr>
+        <tr><td>PPO</td><td>On-policy</td><td>Stochastic</td><td>Clipped surrogate objective + GAE, first-order trust-region approximation</td></tr>
+        <tr><td>DQN</td><td>Value-based</td><td>Off-policy</td><td>Minimize TD error with replay buffer and target network</td></tr>
+        <tr><td>Double DQN</td><td>Value-based</td><td>Off-policy</td><td>Decouple max action selection from evaluation</td></tr>
+        <tr><td>Dueling DQN</td><td>Value-based</td><td>Off-policy</td><td>$Q = V + (A - \bar{A})$ decomposition</td></tr>
+        <tr><td>Prioritized replay</td><td>Value-based enhancement</td><td>Off-policy</td><td>Sample transitions proportional to TD-error magnitude</td></tr>
+        <tr><td>Rainbow</td><td>Value-based</td><td>Off-policy</td><td>DQN + double + dueling + PER + multi-step + C51 + Noisy Nets</td></tr>
+        <tr><td>C51 / QR-DQN / IQN</td><td>Distributional</td><td>Off-policy</td><td>Model full return distribution, not just its mean</td></tr>
+        <tr><td>DDPG</td><td>Actor-Critic</td><td>Off-policy</td><td>Deterministic policy gradient via differentiable critic</td></tr>
+        <tr><td>TD3</td><td>Actor-Critic</td><td>Off-policy</td><td>Twin critics + delayed policy updates + target policy smoothing</td></tr>
+        <tr><td>SAC</td><td>Actor-Critic</td><td>Off-policy</td><td>Maximum-entropy objective + soft Q-learning + auto-tuned temperature</td></tr>
+        <tr><td>UCB1 / LinUCB</td><td>Bandit</td><td>N/A</td><td>Optimism under uncertainty via confidence bound</td></tr>
+        <tr><td>Thompson sampling</td><td>Bandit</td><td>N/A</td><td>Sample from posterior, act greedily on the sample</td></tr>
+        <tr><td>CQL</td><td>Offline</td><td>Off-policy</td><td>Conservative Q penalty pushing down OOD-action values</td></tr>
+        <tr><td>IQL</td><td>Offline</td><td>Off-policy</td><td>Expectile regression, avoids querying OOD actions entirely</td></tr>
+        <tr><td>Decision Transformer</td><td>Offline</td><td>Sequence model</td><td>Condition generation on target return-to-go</td></tr>
+        <tr><td>BC / DAgger / GAIL</td><td>Imitation</td><td>N/A</td><td>Supervised / interactive-expert / adversarial matching of expert behavior</td></tr>
+        <tr><td>Dreamer / MuZero</td><td>Model-based</td><td>Either</td><td>Learn latent world model, plan or train policy in imagination</td></tr>
+        <tr><td>MADDPG</td><td>Multi-agent</td><td>Off-policy</td><td>Centralized critic, decentralized actor</td></tr>
+        <tr><td>CPO / Lagrangian methods</td><td>Constrained/safe RL</td><td>Either</td><td>Maximize reward subject to explicit cost-budget constraint</td></tr>
+        <tr><td>RLHF (PPO+RM)</td><td>LLM</td><td>On-policy</td><td>Maximize reward-model score − β·KL to reference policy</td></tr>
+        <tr><td>DPO / IPO / KTO / SimPO</td><td>LLM</td><td>Preference-based</td><td>Direct preference loss on log-probability ratios, no separate RL loop</td></tr>
+        <tr><td>GRPO / RLOO</td><td>LLM</td><td>On-policy</td><td>Group-relative or leave-one-out advantages, no learned critic needed</td></tr>
       </tbody>
     </table>
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <section id="algorithm-map">
-    <h2>23. Algorithm Selection Map</h2>
+    <h2>24. Algorithm Selection Map</h2>
     <table>
       <thead><tr><th>Setting</th><th>Recommended starting points</th></tr></thead>
       <tbody>
         <tr><td>Small discrete env, tabular</td><td>Q-learning, SARSA</td></tr>
         <tr><td>Atari / pixel discrete</td><td>DQN → Rainbow</td></tr>
-        <tr><td>Continuous control</td><td>SAC, TD3</td></tr>
-        <tr><td>Sample-efficient robotics</td><td>SAC + domain randomization, offline IQL</td></tr>
-        <tr><td>On-policy robotics sim</td><td>PPO</td></tr>
-        <tr><td>Fixed offline dataset</td><td>IQL, CQL, Decision Transformer</td></tr>
-        <tr><td>LLM preference alignment</td><td>DPO (simple) → PPO+RM (max quality) → GRPO (verifiable reasoning)</td></tr>
-        <tr><td>LLM with unit-test rewards</td><td>GRPO, RLOO, iterative rejection sampling</td></tr>
-        <tr><td>Expert demos available</td><td>BC → GAIL → fine-tune with RL</td></tr>
+        <tr><td>Continuous control, sample-efficiency matters</td><td>SAC, TD3</td></tr>
+        <tr><td>Sample-efficient robotics with a good simulator</td><td>SAC + domain randomization, or model-based (MBPO/Dreamer)</td></tr>
+        <tr><td>On-policy robotics / large-batch sim</td><td>PPO</td></tr>
+        <tr><td>Fixed offline dataset, no further interaction allowed</td><td>IQL, CQL, Decision Transformer</td></tr>
+        <tr><td>Bandit / contextual recommendation, no state transitions</td><td>UCB1/LinUCB, Thompson sampling</td></tr>
+        <tr><td>Safety-critical with explicit constraints</td><td>Lagrangian-constrained RL, CPO</td></tr>
+        <tr><td>LLM preference alignment, simplicity priority</td><td>DPO</td></tr>
+        <tr><td>LLM preference alignment, maximum quality, large-scale infra available</td><td>PPO + reward model (classic RLHF)</td></tr>
+        <tr><td>LLM with verifiable rewards (math, code)</td><td>GRPO, RLOO, or iterative rejection sampling (ReST/RAFT)</td></tr>
+        <tr><td>Expert demonstrations available, no reward function defined</td><td>BC → GAIL / IRL → fine-tune with RL if a reward becomes available</td></tr>
+        <tr><td>Multi-agent, cooperative or competitive</td><td>Independent learners for simple cases; MADDPG/CTDE or self-play for harder coordination</td></tr>
       </tbody>
     </table>
 
     <div class="callout callout-intuition">
-      <strong>Master RL by layers:</strong> (1) Bellman equations and TD error, (2) bias-variance in returns and GAE, (3) policy gradient theorem, (4) trust region / PPO clip, (5) apply to your domain (sim env or LLM tokens). Every algorithm is a variation on these five ideas.
+      <strong>Master RL by layers:</strong> (1) the Bellman equation and TD error as the fundamental recursive value relationship, (2) bias-variance tradeoffs in return and advantage estimation (MC vs TD, n-step returns, GAE), (3) the policy gradient theorem and the log-derivative trick that makes it estimable from samples, (4) trust-region reasoning (natural gradients, TRPO's KL constraint, PPO's clipping) as the mechanism that keeps policy updates safe, and (5) applying all of the above to a specific domain — a simulated physical environment, or a large language model's token-by-token generation. Every algorithm surveyed in this document is a variation, combination, or engineering-motivated approximation of these five ideas.
     </div>
   </section>
 

@@ -13,37 +13,59 @@
     <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Distributed Training</p>
   </nav>
   <h1>Distributed Training</h1>
-  <p>Parallelism strategies, memory optimizations, and cluster design for training models that do not fit on one GPU.</p>
+  <p>Parallelism strategies, memory optimizations, communication systems, and cluster design for training models that do not fit — in memory or in time — on one GPU.</p>
 </header>
 <main class="article">
 
   <section>
-    <h2>Why Distribution Is Required</h2>
-    <p>A 70B parameter model in FP16 needs roughly 140 GB just for weights, before optimizer states, gradients, and activations. No single consumer GPU holds that. Even smaller models benefit from distribution to shorten training time by processing larger effective batch sizes across many devices.</p>
-    <p>Distributed training splits work across GPUs, nodes, and datacenters while preserving mathematical equivalence (or controlled approximation) to single-device training.</p>
+    <h2>1. Why Distribution Is Required</h2>
+    <h3>1.1 The memory wall</h3>
+    <p>Training memory is dominated by four components per parameter, not one: the parameter itself, its gradient, and its optimizer state. For AdamW in mixed precision, a common accounting is: 2 bytes for a BF16 parameter copy used in compute, 4 bytes for an FP32 master copy, 4 bytes for the FP32 gradient (or a BF16 gradient plus FP32 accumulation), and 8 bytes for Adam's two FP32 moment estimates (4 bytes each for m and v) — roughly 16–18 bytes per parameter in a common "mixed-precision Adam" accounting. For a 70-billion-parameter model, that is on the order of 1.1–1.3 TB of state, before a single activation is stored. No accelerator on the market today holds that in device memory; a single high-end datacenter GPU has 80–192 GB of HBM. The mismatch between parameter-state memory and single-device memory is the primary reason distribution is not optional past a certain model size.</p>
+    <h3>1.2 The compute/time wall</h3>
+    <p>Even where a model does fit in memory, training on a single device against a multi-trillion-token corpus is a wall-clock problem: at realistic single-GPU throughput, training a modern frontier-scale model would take from decades to millennia of continuous compute. Distribution converts wall-clock time into device-count by processing many micro-batches and/or many model shards concurrently, so the practical goal is not just "fit the model" but "finish the run inside a viable calendar-time budget," which pushes teams toward thousands of accelerators working in tight synchrony.</p>
+    <h3>1.3 The activation memory problem</h3>
+    <p>Beyond parameters and optimizer state, forward-pass activations that must be retained for the backward pass scale with batch size, sequence length, hidden dimension, and depth — for long-context training in particular, activation memory can exceed parameter and optimizer memory combined, since intermediate attention and MLP activations for every layer must be kept (or recomputed) until backpropagation reaches them. This is a second, largely independent axis of memory pressure that distributed training strategies must separately address (see &sect;3.3).</p>
+    <p>Distributed training splits work across GPUs, nodes, and datacenters while preserving mathematical equivalence — or a controlled, well-understood approximation — to what a single infinite-memory, infinitely-fast device would compute.</p>
   </section>
 
   <section>
-    <h2>Parallelism Dimensions</h2>
-    <h3>Data parallelism (DP)</h3>
-    <p>Each GPU holds a full model copy and processes different micro-batches. Gradients are all-reduced and averaged before the optimizer step. Simple and widely used, but memory per GPU still holds the full model.</p>
-    <h3>Tensor parallelism (TP)</h3>
-    <p>Individual layers are sharded across GPUs. Attention and MLP matrix multiplies split along hidden or head dimensions. Requires fast NVLink-style interconnect because activations cross devices every layer.</p>
-    <h3>Pipeline parallelism (PP)</h3>
-    <p>Layers are grouped into stages on different GPUs. Micro-batches flow through the pipeline. Bubble time (idle GPUs) is reduced with techniques like 1F1B scheduling. Useful when model depth exceeds what TP alone can shard efficiently.</p>
-    <h3>Expert parallelism (EP)</h3>
-    <p>For MoE models, different expert FFNs live on different GPUs. Tokens route to remote experts with all-to-all communication. Load imbalance across experts is a first-class ops problem.</p>
-    <p>Large pretraining jobs combine 3D parallelism: DP + TP + PP, tuned to cluster topology.</p>
-    
-    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1909.08053" rel="noopener noreferrer">Megatron-LM</a> � <a href="https://www.deepspeed.ai/tutorials/zero/" rel="noopener noreferrer">DeepSpeed ZeRO</a></small></p>
+    <h2>2. Parallelism Dimensions</h2>
+
+    <h3>2.1 Data parallelism (DP)</h3>
+    <p>Each of R replicas holds a full copy of the model. A global batch is split into R micro-batches, one per replica, each replica computes a full forward and backward pass independently, and the resulting gradients are combined across replicas — typically via a ring or tree <strong>all-reduce</strong> collective that sums (and averages) gradients so every replica ends the step with an identical update, keeping all replicas' weights in exact sync. DP scales throughput close to linearly with replica count as long as the all-reduce communication volume (proportional to model size, independent of batch size) stays small relative to per-step compute time; it degrades as replica count grows and per-replica compute time shrinks relative to the fixed communication cost. Its core limitation is that memory per device still holds the *entire* model, gradient, and optimizer state — DP alone does not solve the memory wall in &sect;1.1, only the throughput/wall-clock problem in &sect;1.2.</p>
+
+    <h3>2.2 Tensor (intra-layer) parallelism (TP)</h3>
+    <p>Individual weight matrices are sharded across devices, splitting the computation *within* a single layer rather than across layers. The canonical Megatron-LM scheme shards a Transformer MLP block by splitting the up-projection matrix column-wise (each device computes a slice of the hidden activation independently, no communication needed after this matmul) and the down-projection matrix row-wise (each device computes a partial sum over its slice, requiring an all-reduce to combine partial outputs into the full result before the residual add). Attention is sharded analogously along the head dimension — each device owns a subset of attention heads end-to-end, needing only one all-reduce per attention block rather than one per matrix multiply. Because TP introduces a communication step (an all-reduce or all-gather) inside every single layer's forward *and* backward pass, it is extremely latency-sensitive and is almost always restricted to devices connected by very high-bandwidth, low-latency interconnect — typically GPUs within the same server node connected by NVLink/NVSwitch — rather than spread across nodes connected by a slower network fabric.</p>
+
+    <h3>2.3 Pipeline (inter-layer) parallelism (PP)</h3>
+    <p>The model's layers are partitioned into sequential stages, each stage placed on a different device or device group; stage k's output activations are the input to stage k+1. Naively, this leaves most devices idle most of the time (device holding stage 1 is idle while stage 2 computes, and so on) — the classic <strong>pipeline bubble</strong>. Micro-batching addresses this: the global batch is split into many small micro-batches that are streamed through the pipeline so that, in steady state, every stage is processing a different micro-batch concurrently. <strong>1F1B (one-forward-one-backward) scheduling</strong> interleaves forward and backward micro-batch passes to bound the number of in-flight activations that must be held in memory, and further <strong>interleaved/virtual pipeline</strong> schemes assign each device multiple non-contiguous stages to shrink the bubble fraction further at the cost of more communication rounds. The remaining bubble fraction scales roughly as (stages &minus; 1) / (stages &minus; 1 + micro-batches), so pipeline efficiency improves as the number of micro-batches per step grows relative to the number of pipeline stages. PP's communication (activations passed stage-to-stage) is comparatively small in volume and less latency-sensitive than TP's, making it more tolerant of slower inter-node links — which is why PP boundaries are typically drawn across nodes while TP groups stay within a node.</p>
+
+    <h3>2.4 Sequence / context parallelism</h3>
+    <p>Long-context training makes the sequence dimension itself a memory bottleneck, particularly for the O(sequence_length<sup>2</sup>) attention matrix and its associated activations. Sequence parallelism shards the sequence dimension across devices, either shard-and-exchange approaches that split non-attention operations along the sequence axis (reducing activation memory for layer norms and dropout-like ops that don't need cross-token information) or ring-attention-style approaches where each device holds a chunk of queries and rotates key/value chunks around a device ring, accumulating the correct attention output for its query chunk without ever materializing the full attention matrix on one device. This is what makes multi-hundred-thousand-token context training tractable.</p>
+
+    <h3>2.5 Expert parallelism (EP)</h3>
+    <p>For Mixture-of-Experts models, different expert feed-forward networks are placed on different devices, and a lightweight router determines, per token, which expert(s) that token is sent to. Because the routing decision is data-dependent and made at runtime, tokens must be physically dispatched to whichever device holds their assigned expert — implemented as an <strong>all-to-all</strong> communication step (every device simultaneously sends a subset of its local tokens to every other device and receives tokens routed to its local experts), followed by a second all-to-all to route expert outputs back to their originating device/position. Load imbalance — some experts receiving far more tokens than others — is a first-class operational problem, addressed with auxiliary load-balancing losses during training that penalize skewed routing distributions, and with capacity limits (dropping or padding tokens beyond an expert's per-batch token capacity) as a hard backstop against pathological imbalance overwhelming a single device's memory or compute budget.</p>
+
+    <h3>2.6 Combining dimensions: "N-D parallelism"</h3>
+    <p>Frontier pretraining runs combine several of these dimensions simultaneously, commonly described as 3D, 4D, or 5D parallelism (DP &times; TP &times; PP, optionally &times; sequence parallelism &times; expert parallelism). The combination is chosen to match cluster topology: TP groups are sized to fit within a single fast-interconnect node (since TP is the most communication-intensive per step), PP stage boundaries are drawn across nodes (since PP tolerates higher inter-node latency), DP is layered on top across the remaining device groups to scale throughput, and EP/sequence parallelism are added as needed for MoE architectures or very long context windows respectively. Choosing the parallelism degrees along each axis to maximize model FLOPs utilization (MFU) — the fraction of theoretical peak hardware FLOPs actually converted into useful training compute — for a specific model shape and cluster topology is itself a significant systems-engineering optimization problem, often explored via automated search or simulation before a full run is launched.</p>
+
+    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/1909.08053" rel="noopener noreferrer">Megatron-LM</a> &middot; <a href="https://www.deepspeed.ai/tutorials/zero/" rel="noopener noreferrer">DeepSpeed ZeRO</a></small></p>
   </section>
 
   <section>
-    <h2>Memory Optimizations</h2>
-    <h3>ZeRO (Zero Redundancy Optimizer)</h3>
-    <p>DeepSpeed ZeRO partitions optimizer states (Stage 1), gradients (Stage 2), and parameters (Stage 3) across data parallel ranks instead of replicating everything. Stage 3 enables training models far larger than per-GPU memory at the cost of more communication.</p>
-    <h3>FSDP (Fully Sharded Data Parallel)</h3>
-    <p>PyTorch-native sharding similar to ZeRO-3. Parameters are sharded across ranks and all-gathered just-in-time for each forward/backward layer. Popular for fine-tuning large models on moderate clusters.</p>
+    <h2>3. Memory Optimizations</h2>
+
+    <h3>3.1 ZeRO (Zero Redundancy Optimizer)</h3>
+    <p>Standard data parallelism replicates optimizer state, gradients, and parameters identically on every DP rank — pure redundancy from a memory-accounting standpoint, since each rank ultimately needs its own full copy only because nothing is shared. ZeRO removes this redundancy in progressive stages, sharding state across DP ranks while reconstructing the small piece needed at each moment via targeted communication:</p>
+    <ul>
+      <li><strong>Stage 1 (optimizer state partitioning)</strong> — each rank owns and updates only a 1/R shard of the Adam moment estimates for a 1/R shard of parameters, communicating updated parameter shards back via all-gather; reduces optimizer memory by roughly R&times; with a relatively small communication overhead increase.</li>
+      <li><strong>Stage 2 (+ gradient partitioning)</strong> — gradients are reduced directly into their owning shard (a reduce-scatter rather than a full all-reduce), so each rank only ever materializes the gradient shard it owns, cutting gradient memory by R&times; as well.</li>
+      <li><strong>Stage 3 (+ parameter partitioning)</strong> — parameters themselves are sharded; each rank holds only 1/R of the model's weights at rest, and the full weight tensor for a given layer is reconstructed via an all-gather immediately before that layer's forward (and again before its backward) computation, then freed immediately after. This is what enables training models whose total parameter memory vastly exceeds any single device's memory, at the cost of an all-gather at essentially every layer boundary in both forward and backward passes — a substantial increase in communication volume and frequency relative to Stages 1–2.</li>
+    </ul>
+    <p>ZeRO's key insight is that this sharding is orthogonal to — and composable with — tensor and pipeline parallelism: a production configuration frequently applies ZeRO within a DP group while separately using TP/PP across other device groups.</p>
+
+    <h3>3.2 FSDP (Fully Sharded Data Parallel)</h3>
+    <p>PyTorch-native sharding conceptually equivalent to ZeRO Stage 3: parameters, gradients, and optimizer states are sharded across ranks, with full parameter tensors materialized via all-gather just-in-time for each wrapped module's forward/backward and freed immediately afterward. FSDP wraps the model at a configurable granularity (e.g., per-Transformer-block via an auto-wrap policy) so that only one block's worth of full parameters is ever resident in memory at once per rank, and supports mixing computation and communication precision independently (e.g., computing in BF16 while keeping the sharded master copy in FP32).</p>
     <pre><code>from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 model = FSDP(
@@ -52,29 +74,57 @@ model = FSDP(
     mixed_precision=MixedPrecision(param_dtype=torch.bfloat16),
     device_id=torch.cuda.current_device(),
 )</code></pre>
-    <h3>Gradient checkpointing</h3>
-    <p>Recomputes activations during backward instead of storing them, trading compute for memory. Essential for long sequences or large batches on memory-constrained GPUs.</p>
+    <p>FSDP is popular for both large-scale pretraining and multi-GPU full fine-tuning because it requires comparatively little code restructuring relative to native TP/PP implementations, at the cost of being less able to exploit topology-specific optimizations that a hand-tuned Megatron-style TP/PP configuration can.</p>
+
+    <h3>3.3 Activation (gradient) checkpointing</h3>
+    <p>Rather than retaining every intermediate activation from the forward pass for use in the backward pass, activation checkpointing stores only a subset of "checkpoint" activations (e.g., one per Transformer block) and discards the rest, recomputing the discarded activations on-demand during the backward pass by re-running the forward computation for that segment. This trades roughly one extra forward pass's worth of compute (typically a 20–33% throughput cost) for a large reduction in peak activation memory — often the difference between fitting a target batch size/sequence length on available hardware or not. Selective checkpointing strategies checkpoint only the most memory-expensive operations (e.g., attention matrices) while keeping cheaper activations materialized, tuning the compute/memory trade-off more finely than blanket checkpointing every block.</p>
+
+    <h3>3.4 CPU/NVMe offloading</h3>
+    <p>When even sharded GPU memory is insufficient, optimizer states, gradients, or even parameters can be offloaded to host (CPU) RAM or NVMe SSD storage during idle periods and streamed back to the GPU only when needed for computation, at the cost of PCIe/storage bandwidth becoming a new bottleneck. This is primarily used to extend the reach of a fixed, smaller GPU cluster (e.g., DeepSpeed's ZeRO-Offload/ZeRO-Infinity) rather than in frontier-scale pretraining, where sufficient GPU-resident memory across the full cluster is typically engineered in from the start.</p>
+
+    <h3>3.5 Quantized/low-precision training and fine-tuning memory tricks</h3>
+    <p><strong>LoRA (Low-Rank Adaptation)</strong> freezes the pretrained weight matrix W and learns a low-rank update &Delta;W = BA, where B &isin; R<sup>d&times;r</sup> and A &isin; R<sup>r&times;k</sup> with rank r &lt;&lt; min(d,k), so only the small A/B matrices require gradients and optimizer state, cutting trainable-parameter memory by orders of magnitude relative to full fine-tuning. <strong>QLoRA</strong> extends this by keeping the frozen base weights in a 4-bit quantized format (NF4, a data type designed to match the empirical distribution of pretrained weights) while the small LoRA adapter matrices train in higher precision (BF16), combined with double quantization (quantizing the quantization constants themselves) and paged optimizers (using CPU memory paging to handle occasional GPU memory spikes) — collectively enabling fine-tuning of 65–70B-parameter models on a single high-end consumer or workstation GPU.</p>
+
     <div class="callout">
-      <strong>Rule of thumb:</strong> Use FSDP or ZeRO for memory relief; add TP/PP when a single rank cannot hold even one layer shard at your target batch size.
+      <strong>Rule of thumb:</strong> Reach for ZeRO/FSDP first for memory relief within data parallelism; add TP when a single layer's weights don't fit on one device, add PP when total model depth doesn't fit even after TP, add sequence parallelism when context length itself is the bottleneck, and reach for LoRA/QLoRA specifically when the goal is adapting an existing large base model rather than training one from scratch.
     </div>
   </section>
 
   <section>
-    <h2>Communication and Hardware</h2>
-    <p>All-reduce bandwidth limits data parallel scaling. Tensor parallel groups should sit on the same node with NVLink. Cross-node training depends on InfiniBand or RoCE latency and topology-aware job schedulers.</p>
-    <p>Fault tolerance matters at scale: checkpoint to distributed storage frequently, use elastic training where supported, and design restarts so a single straggler node does not waste an entire week's compute.</p>
+    <h2>4. Communication and Hardware</h2>
+
+    <h3>4.1 Collective communication primitives</h3>
+    <p>Distributed training relies on a small set of collective operations, implemented in libraries like NVIDIA's NCCL: <strong>all-reduce</strong> (every device ends with the sum/average across all devices — used for DP gradient synchronization and TP output combination), <strong>all-gather</strong> (every device ends with the full concatenation of all devices' shards — used to reconstruct sharded parameters in ZeRO-3/FSDP), <strong>reduce-scatter</strong> (the sum is computed and the result is left sharded across devices, one shard per device — used for ZeRO's sharded gradient reduction), and <strong>all-to-all</strong> (every device sends a distinct chunk to every other device — used for MoE expert dispatch). Ring-based algorithms implement all-reduce as a sequence of pairwise transfers around a logical ring of devices, achieving bandwidth-optimal communication (total data moved is independent of device count for a fixed message size) at the cost of latency proportional to device count, which is why very large device counts sometimes favor hierarchical (tree- or hybrid-) reduction algorithms instead.</p>
+
+    <h3>4.2 Interconnect topology</h3>
+    <p>Communication cost is fundamentally bounded by physical interconnect bandwidth and latency, which vary by orders of magnitude depending on the physical path: intra-node GPU-to-GPU links (NVLink/NVSwitch) offer the highest bandwidth and lowest latency and are reserved for the most communication-intensive parallelism dimension (TP); inter-node links (InfiniBand or RDMA-capable Ethernet/RoCE) are an order of magnitude or more slower and are used for the less communication-intensive dimensions (PP, and DP's periodic all-reduce). Cluster network topology — fat-tree, dragonfly, or rail-optimized designs — and topology-aware job placement (ensuring a TP group's GPUs are co-located on fast links, and that DP replicas are spread to balance network load) materially affect achievable throughput, which is why job schedulers for large training runs are topology-aware rather than treating the cluster as a homogeneous pool.</p>
+
+    <h3>4.3 Overlapping communication and compute</h3>
+    <p>Because communication and compute use largely independent hardware resources (network fabric vs. compute cores), well-engineered implementations overlap them: gradient all-reduce for already-computed layers begins while backward computation continues for earlier layers (gradient bucketing groups gradients into chunks that are communicated as soon as ready rather than waiting for the full backward pass to finish), and ZeRO-3/FSDP prefetch the next layer's all-gathered parameters while the current layer is still computing. The gap between theoretical peak FLOPs and achieved model FLOPs utilization (MFU) is, in a well-tuned large-scale run, dominated by residual communication that could not be fully hidden behind compute, rather than by compute inefficiency itself.</p>
+
+    <h3>4.4 Fault tolerance</h3>
+    <p>At the scale of thousands of accelerators running for weeks, hardware failure (GPU ECC errors, NIC failures, node crashes, storage hiccups) is a near-certainty during any given run rather than a rare edge case, and the expected time between failures shrinks as device count grows. Standard mitigations: frequent, ideally asynchronous checkpointing of model and optimizer state to durable, distributed storage so that any failure loses at most a bounded number of steps; automated node health-checking that detects and evicts a failing or "silently wrong" node (one that produces corrupted numerical output without an outright crash — arguably the most dangerous failure mode, since it can degrade a run's final quality without any obvious error signal) before it corrupts the training run; and elastic or auto-resuming orchestration that can reconfigure the parallelism mapping around a smaller or reshuffled device set and resume from the last good checkpoint with minimal manual operator intervention. A single unrecovered straggler or faulty node can otherwise waste an entire week's aggregate compute across the rest of a large cluster, since synchronous collectives like all-reduce force every participating device to wait for the slowest one.</p>
   </section>
 
   <section>
-    <h2>Fine-Tuning vs Pretraining Distribution</h2>
-    <p>Fine-tuning often uses LoRA/QLoRA on fewer GPUs: base weights frozen or quantized, only adapter matrices trained. QLoRA keeps the base model in 4-bit NF4 while adapters train in higher precision, democratizing 70B fine-tunes on single high-end GPUs or small pods.</p>
-    <p>Full fine-tuning of large models still needs FSDP multi-GPU setups similar to pretraining but for shorter durations and smaller datasets.</p>
+    <h2>5. Fine-Tuning vs Pretraining Distribution</h2>
+    <p>Pretraining and fine-tuning share the same underlying parallelism toolkit but differ sharply in scale and constraints. Full-parameter fine-tuning of a large model uses essentially the same FSDP/ZeRO (and, for the very largest models, TP/PP) machinery as pretraining, but for orders of magnitude fewer steps over a much smaller, curated dataset, so the absolute engineering investment in fault tolerance and topology tuning is typically lower relative to the payoff. Parameter-efficient fine-tuning — LoRA/QLoRA as described in &sect;3.5 — instead sidesteps most of the distributed-systems complexity entirely by shrinking the trainable-parameter count so far that the job fits comfortably on a single device or small pod, trading a (typically small) quality gap relative to full fine-tuning for a dramatic reduction in required hardware and engineering effort. This is why full-scratch pretraining remains the province of organizations able to operate thousand-plus-GPU clusters, while fine-tuning — especially LoRA/QLoRA-based — has become accessible on hardware ranging from a handful of GPUs down to a single workstation card.</p>
   </section>
 
   <section>
-    <h2>Frameworks and Operations</h2>
-    <p>Common stack: PyTorch + DeepSpeed or FSDP + Megatron-LM patterns for TP/PP + NCCL for collective ops. Kubernetes, Slurm, or cloud ML platforms schedule multi-node jobs. Observability includes per-GPU utilization, gradient norm spikes, throughput (tokens/sec), and communication overhead ratios.</p>
-    <p>Even if you only fine-tune, understanding distributed training explains why certain open models ship only with specific parallel configs, why context length extensions are expensive, and how serving-time tensor parallel in inference mirrors training-time sharding.</p>
+    <h2>6. Frameworks, Scheduling, and Operations</h2>
+
+    <h3>6.1 Software stack</h3>
+    <p>A representative production stack layers: PyTorch as the core tensor/autograd framework; DeepSpeed or native FSDP for ZeRO-style sharding; Megatron-LM-derived kernels and parallelism primitives for TP/PP (or an integrated framework like Megatron-DeepSpeed or newer unified libraries that combine both); NCCL as the underlying collective-communication library talking directly to the network fabric; and often a custom or semi-custom training loop rather than a high-level trainer abstraction, since frontier-scale runs typically need fine-grained control over checkpointing cadence, data loading, and failure recovery that generic trainers do not expose.</p>
+
+    <h3>6.2 Cluster scheduling</h3>
+    <p>Multi-node jobs are scheduled by systems such as Slurm (common in HPC-derived ML clusters) or Kubernetes-based ML platforms (common in cloud-native setups), which handle node allocation, topology-aware placement, job queuing/preemption, and restart-on-failure semantics. For very large jobs, schedulers increasingly need to be co-designed with the training framework's checkpointing and elastic-resize logic rather than treated as a purely external, generic resource manager.</p>
+
+    <h3>6.3 Observability</h3>
+    <p>Operational monitoring for a distributed training job spans two layers: <strong>hardware/systems metrics</strong> — per-GPU utilization and memory occupancy, network throughput and collective-operation latency, ECC/ ranks error counts, and straggler detection (identifying a device or node consistently slower than its peers) — and <strong>training-dynamics metrics</strong> — loss and gradient-norm curves, throughput in tokens/sec (and its derived model FLOPs utilization), and the fraction of step time spent in communication versus compute. A sudden throughput drop with unchanged loss usually points to a systems/communication regression, while a loss anomaly with stable throughput usually points to a data or numerical issue — distinguishing between these signal classes is a core skill in operating large training runs.</p>
+
+    <h3>6.4 Why this matters beyond pretraining</h3>
+    <p>Even practitioners who only ever fine-tune existing models benefit from understanding this material: it explains why certain open-weight model releases ship reference configurations only for specific parallelism setups, why extending a model's context window is disproportionately expensive (activation memory and sequence-parallelism requirements grow steeply with sequence length), and why inference-time tensor parallelism for serving large models mirrors the training-time TP scheme described in &sect;2.2 — the same sharding logic that splits a matrix multiply across GPUs during training is reused, with different trade-offs, to split it across GPUs for low-latency serving.</p>
   </section>
 
   <nav class="page-footer-nav">
@@ -89,5 +139,3 @@ model = FSDP(
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-

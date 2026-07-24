@@ -13,73 +13,250 @@
     <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; Pretraining</p>
   </nav>
   <h1>Pretraining</h1>
-  <p>Building base model capability from raw corpora through next-token prediction at scale.</p>
+  <p>Building base model capability from raw corpora through next-token prediction at scale — architecture, data, optimization, distributed systems, and scaling laws in full technical depth.</p>
 </header>
 <main class="article">
 
   <section>
-    <h2>Objective and Outcome</h2>
-    <p>Pretraining teaches a model general language understanding by predicting the next token in a sequence. Given tokens t<sub>1</sub>...t<sub>n</sub>, the model learns P(t<sub>n+1</sub> | t<sub>1</sub>...t<sub>n</sub>). Minimizing cross-entropy over trillions of tokens produces a base model that encodes grammar, facts, reasoning patterns, and world knowledge implicitly in its weights.</p>
-    <p>The base model is not yet a helpful assistant. It completes text rather than following instructions. Downstream fine-tuning and alignment reshape behavior, but pretraining sets the ceiling for knowledge breadth and reasoning capacity.</p>
+    <h2>1. Objective and Mathematical Formulation</h2>
+    <p>Pretraining fits an autoregressive language model to a next-token prediction objective. Given a token sequence t<sub>1</sub>, t<sub>2</sub>, ..., t<sub>n</sub> drawn from a corpus, the model parameterizes a conditional distribution P<sub>&theta;</sub>(t<sub>i</sub> | t<sub>1</sub>...t<sub>i-1</sub>) and is trained to maximize the likelihood of the true continuation. The loss minimized is the average cross-entropy over the sequence:</p>
+    <pre><code>L(&theta;) = -(1/N) &sum;_{i=1}^{N} log P_&theta;(t_i | t_1 ... t_{i-1})</code></pre>
+    <p>This is equivalent to minimizing the Kullback-Leibler divergence between the empirical data distribution and the model's distribution, and it is reported in practice as <strong>perplexity</strong>, PPL = exp(L), the exponential of the average cross-entropy in nats (or 2<sup>L</sup> if bits). Lower perplexity means the model assigns higher probability mass to the true next token on average. Perplexity is corpus-dependent and not directly comparable across tokenizers or domains, which is a common evaluation pitfall.</p>
+    <p>Because every token in a sequence supplies a training signal (teacher forcing), a single forward pass produces N loss terms per sequence of length N, which is what makes next-token prediction so sample-efficient compared to objectives that only supervise a final output. This density of supervision, combined with the near-unlimited availability of unlabeled text, is the central reason self-supervised pretraining scales better than any purely supervised alternative.</p>
+    <p>Pretraining is distinct from post-training in the objective, not just the data: pretraining has no notion of "correct answer" or "preference" — it purely models the statistics of the training distribution. This means a well-trained base model is a compressed simulator of its training corpus, not an agent aligned to a goal. All the instruction-following, refusal, and persona behavior seen in a deployed assistant is layered on afterward via supervised fine-tuning (SFT), reinforcement learning from human feedback (RLHF), or similar post-training procedures; pretraining sets the ceiling on world knowledge, linguistic competence, and latent reasoning circuitry that those later stages can only elicit and shape, not create from nothing.</p>
   </section>
 
   <section>
-    <h2>Data Pipeline</h2>
-    <p>Pretraining data is the dominant quality lever. Typical sources include web crawls, books, academic papers, code repositories, and licensed datasets. The pipeline usually involves:</p>
+    <h2>2. Tokenization</h2>
+    <p>Text must be converted to discrete integer IDs before it enters the model. The tokenizer is fixed before pretraining begins because the embedding matrix and output (unembedding) matrix are indexed by vocabulary ID; changing the tokenizer after training requires retraining these layers, at minimum, and often the full model.</p>
+    <h3>2.1 Subword algorithms</h3>
     <ul>
-      <li><strong>Crawling and ingestion</strong> at web scale</li>
-      <li><strong>Deduplication</strong> (exact and fuzzy) to avoid memorization and wasted compute</li>
-      <li><strong>Quality filtering</strong> via heuristics, classifiers, and perplexity thresholds</li>
-      <li><strong>PII and toxic content removal</strong> for safety and compliance</li>
-      <li><strong>Domain mixing</strong> with tuned sampling ratios (e.g., more code for coding models)</li>
+      <li><strong>Byte-Pair Encoding (BPE)</strong> — starts from individual bytes or characters and iteratively merges the most frequent adjacent pair into a new symbol, repeating until a target vocabulary size is reached. GPT-family models use byte-level BPE, which guarantees every possible input (including binary/unicode edge cases) is representable with no unknown-token fallback.</li>
+      <li><strong>WordPiece</strong> — similar iterative merging, but the merge criterion maximizes the training-data likelihood increase rather than raw frequency. Used in BERT.</li>
+      <li><strong>Unigram Language Model tokenization</strong> — starts from a large candidate subword inventory and prunes it by iteratively removing pieces that least reduce a unigram-likelihood objective, producing a probabilistic segmentation. Used by SentencePiece/ALBERT/T5-style tokenizers.</li>
     </ul>
-    <div class="callout">
-      <strong>Data quality over quantity:</strong> A smaller, cleaner corpus can outperform a larger noisy crawl. Teams increasingly invest in curators, synthetic augmentation, and re-filtering as models scale.
-    </div>
-    
-    <p class="refer-link"><small>Refer: <a href="https://arxiv.org/abs/2107.06499" rel="noopener noreferrer">The Pile dataset paper</a></small></p>
-  </section>
-
-  <section>
-    <h2>Training Configuration</h2>
-    <h3>Hyperparameters that matter</h3>
+    <h3>2.2 Vocabulary size trade-offs</h3>
+    <p>Larger vocabularies (100k–250k tokens) shorten average sequence length per unit of text, which reduces the number of forward passes needed to cover a fixed amount of information and improves compression, especially for multilingual and code corpora. The cost is a larger embedding and unembedding matrix (parameters scale as vocab_size &times; d_model for each), more memory for the softmax over the vocabulary, and sparser gradient updates per rare token. Smaller vocabularies (30k–50k) do the opposite: cheaper output layer, but longer sequences for the same text, which increases compute for a fixed context window in tokens.</p>
+    <h3>2.3 Practical considerations</h3>
     <ul>
-      <li><strong>Learning rate schedule</strong> - warmup then cosine or linear decay</li>
-      <li><strong>Batch size</strong> - often maximized within memory, sometimes with gradient accumulation</li>
-      <li><strong>Sequence length</strong> - context window baked in at pretrain time (or extended later)</li>
-      <li><strong>Precision</strong> - mixed FP16/BF16 training with loss scaling where needed</li>
-      <li><strong>Tokenizer</strong> - fixed before training; changing it requires retraining embeddings</li>
+      <li><strong>Fertility</strong> — average tokens produced per word or per byte; measured per-language, since a tokenizer trained mostly on English text has high fertility (many tokens per word) for morphologically rich or non-Latin-script languages, directly increasing their effective training and inference cost.</li>
+      <li><strong>Digit and number tokenization</strong> — splitting numbers inconsistently (e.g., "1234" as one token in some contexts, "12"+"34" in others) degrades arithmetic performance; many modern tokenizers force single-digit tokenization to make arithmetic more learnable.</li>
+      <li><strong>Special tokens</strong> — beginning/end-of-sequence, padding, and document-boundary tokens must be reserved in the vocabulary and consistently inserted so the model learns document boundaries rather than treating concatenated documents as one continuous stream.</li>
+      <li><strong>Byte fallback</strong> — ensures no input is ever truly "unknown"; any string decomposes to raw bytes as a last resort.</li>
     </ul>
-    <p>Training runs for a defined number of tokens seen per parameter (Chinchilla-optimal ratios are a common reference point). Checkpointing, validation loss tracking, and divergence detection are critical on multi-week runs.</p>
-    <pre><code># Hugging Face Trainer � typical pretraining knobs
-training_args = TrainingArguments(
-    output_dir="./checkpoints",
-    per_device_train_batch_size=4,
-    gradient_accumulation_steps=8,
-    learning_rate=3e-4,
-    warmup_ratio=0.01,
-    lr_scheduler_type="cosine",
-    bf16=True,
-    max_steps=100_000,
-    save_steps=1000,
-    logging_steps=10,
-)</code></pre>
   </section>
 
   <section>
-    <h2>Scaling Laws and Compute Planning</h2>
-    <p>Loss improves as a power law with model size, data, and compute until hitting diminishing returns. Planning a pretrain run means estimating FLOPs, GPU count, network bandwidth, storage for checkpoints, and failure recovery time. A single node failure on a thousand-GPU job must not corrupt the entire run.</p>
-    <p>Most product teams do not pretrain from scratch. They fine-tune open base models. Pretraining knowledge still matters for evaluating base checkpoints, understanding data contamination in benchmarks, and deciding when custom pretraining is worth the cost.</p>
+    <h2>3. Model Architecture</h2>
+    <p>Nearly all modern pretrained language models are decoder-only Transformers using causal (autoregressive) self-attention, but the specific sub-layer choices vary and materially affect training stability, throughput, and downstream quality.</p>
+
+    <h3>3.1 Causal self-attention</h3>
+    <p>For each layer, input representations X &isin; R<sup>n&times;d</sup> are projected into queries Q, keys K, and values V. Attention weights are computed as:</p>
+    <pre><code>Attention(Q, K, V) = softmax( (Q K^T) / sqrt(d_k) + M ) V</code></pre>
+    <p>where M is a causal mask (upper-triangular set to -&infin;) that prevents position i from attending to positions j &gt; i, preserving the autoregressive property required for next-token prediction. Multi-head attention runs h parallel attention computations with independently learned projections of size d_k = d_model / h, then concatenates and linearly projects the result, allowing different heads to specialize in different relational patterns (syntax, coreference, positional offsets, induction).</p>
+
+    <h3>3.2 Attention variants for efficiency</h3>
+    <ul>
+      <li><strong>Multi-Head Attention (MHA)</strong> — the original formulation; every head has its own K and V projections. Highest quality, highest KV-cache memory at inference.</li>
+      <li><strong>Multi-Query Attention (MQA)</strong> — all heads share a single K and V projection while keeping separate Q projections, drastically shrinking the key/value cache and speeding up autoregressive decoding at some quality cost.</li>
+      <li><strong>Grouped-Query Attention (GQA)</strong> — a middle ground where heads are partitioned into groups that each share one K/V pair, recovering most of MHA's quality while keeping most of MQA's inference-memory savings; widely adopted in current large open models.</li>
+      <li><strong>FlashAttention</strong> — not an architectural change but an IO-aware exact-attention kernel that tiles the softmax computation to avoid materializing the full n&times;n attention matrix in high-bandwidth memory, giving large wall-clock speedups and lower memory footprint without changing the mathematical result.</li>
+    </ul>
+
+    <h3>3.3 Positional information</h3>
+    <ul>
+      <li><strong>Learned absolute position embeddings</strong> — a lookup table added to token embeddings; simple but does not extrapolate well beyond the trained context length.</li>
+      <li><strong>Sinusoidal position embeddings</strong> — fixed, non-learned functions of position, offering some extrapolation but weaker empirical performance than learned relative schemes.</li>
+      <li><strong>Rotary Position Embedding (RoPE)</strong> — rotates query and key vectors in 2D subspaces by an angle proportional to token position, so the dot product between two rotated vectors depends only on their relative offset. This gives strong relative-position modeling and is the dominant choice in current large models (LLaMA, Mistral, Qwen, and others). Context-length extension methods (position interpolation, NTK-aware scaling, YaRN) work by rescaling RoPE's frequency base to stretch its effective range without retraining from scratch.</li>
+      <li><strong>ALiBi</strong> — adds a fixed linear penalty to attention scores proportional to the distance between positions, biasing attention toward nearby tokens and enabling reasonable length extrapolation without any position embedding parameters.</li>
+    </ul>
+
+    <h3>3.4 Normalization</h3>
+    <p>Transformers normalize activations to stabilize gradient scale across depth. <strong>LayerNorm</strong> normalizes each activation vector to zero mean and unit variance, then applies a learned scale and shift. <strong>RMSNorm</strong> simplifies this by normalizing only by the root-mean-square (dropping mean-centering), which is cheaper and empirically matches or exceeds LayerNorm for large Transformers. Placement matters as much as the formula:</p>
+    <ul>
+      <li><strong>Post-norm</strong> (original Transformer) applies normalization after the residual addition; it is harder to train stably at depth without careful warmup.</li>
+      <li><strong>Pre-norm</strong> applies normalization inside each sub-block before attention/MLP, so the residual stream itself stays unnormalized; this is far more stable at large depth and is the near-universal choice for large-scale pretraining, at the cost of slightly weaker representational "sharpening" than post-norm in some analyses.</li>
+    </ul>
+
+    <h3>3.5 Feed-forward sub-layer and activation functions</h3>
+    <p>Each Transformer block includes a position-wise MLP, typically expanding d_model to 4&times; (or ~2.67&times; for gated variants) and projecting back down. Activation choice affects both quality and compute:</p>
+    <ul>
+      <li><strong>ReLU / GeLU</strong> — GeLU (Gaussian Error Linear Unit) is a smooth approximation of ReLU weighted by the standard normal CDF and was standard in GPT-2/BERT-era models.</li>
+      <li><strong>SwiGLU / GeGLU (gated linear units)</strong> — split the up-projection into two paths, one passed through a nonlinearity (Swish/GeLU) and multiplied elementwise with the other (linear) path, then projected down. This gating consistently improves loss-per-FLOP over plain GeLU MLPs and is used by LLaMA, PaLM, and most current frontier open models, at the cost of an extra weight matrix (three matrices instead of two for the same effective hidden width).</li>
+    </ul>
+
+    <h3>3.6 Mixture-of-Experts (MoE)</h3>
+    <p>Sparse MoE layers replace a single dense MLP with a bank of E expert MLPs and a lightweight router that selects the top-k experts (commonly k=1 or k=2) per token. Only the selected experts execute for that token, so the number of active (compute) parameters per token can be far smaller than the total parameter count — decoupling "knowledge capacity" (total parameters) from "compute cost" (active parameters). Key engineering challenges are load balancing (auxiliary losses that penalize routing collapse onto a few experts), routing instability during early training, and the all-to-all communication cost of dispatching tokens to experts across devices in a distributed setup. MoE models can match the quality of a dense model with far fewer FLOPs per token, or exceed a dense model's quality at matched FLOPs by using far more total parameters.</p>
+
+    <h3>3.7 KV cache and inference-time architecture consequences</h3>
+    <p>Although this is technically an inference concern, architectural choices at pretraining time (number of KV heads, head dimension, number of layers) directly determine the size of the key/value cache during autoregressive decoding, which scales as 2 &times; layers &times; kv_heads &times; head_dim &times; sequence_length &times; batch_size &times; bytes_per_element. This is why GQA/MQA are chosen at pretraining time rather than patched in afterward.</p>
   </section>
 
   <section>
-    <h2>Stability and Failure Modes</h2>
-    <p>Large training runs can diverge (loss spikes), underflow in low precision, or develop repetitive generation (mode collapse in sampling). Mitigations include gradient clipping, careful initialization, z-loss regularization, and monitoring activation norms per layer. Data bugs (e.g., leaked eval sets, duplicated epochs) show up as suspiciously good benchmark scores later.</p>
+    <h2>4. Data Pipeline</h2>
+    <p>Data quality and composition are the dominant lever on downstream model quality, often more impactful than architectural tweaks at fixed compute. A production-grade pretraining pipeline includes the following stages, typically run at petabyte scale on distributed compute (Spark, Ray, or custom MapReduce-style systems).</p>
+
+    <h3>4.1 Sourcing</h3>
+    <ul>
+      <li><strong>Web crawls</strong> — Common Crawl and proprietary crawlers provide the largest volume but the lowest average quality; requires the heaviest filtering.</li>
+      <li><strong>Curated high-quality text</strong> — books, Wikipedia, academic papers (arXiv, PubMed), reference/encyclopedic sources — smaller in volume but disproportionately valuable per token.</li>
+      <li><strong>Code</strong> — GitHub and package registries; boosts not only coding ability but also general logical/step-by-step reasoning transfer into natural language tasks.</li>
+      <li><strong>Licensed and proprietary data</strong> — publisher agreements, forums, structured datasets acquired for training rights.</li>
+      <li><strong>Synthetic data</strong> — text generated by existing models (rephrasing, textbook-style rewrites, distillation from a stronger model, or programmatically generated reasoning chains), increasingly used to raise the density of high-quality signal beyond what naturally occurring text provides, with the risk of compounding a source model's biases or errors if not carefully filtered and diversified.</li>
+    </ul>
+
+    <h3>4.2 Text extraction and cleaning</h3>
+    <p>Raw crawl data is HTML/PDF/markup that must be converted to clean text: boilerplate removal (navigation, ads, cookie banners), language identification and filtering, encoding normalization, and removal of malformed or non-linguistic content (e.g., minified JS embedded in a page).</p>
+
+    <h3>4.3 Deduplication</h3>
+    <ul>
+      <li><strong>Exact deduplication</strong> — hash-based removal of byte-identical documents or chunks.</li>
+      <li><strong>Fuzzy/near-duplicate deduplication</strong> — MinHash + Locality-Sensitive Hashing (LSH) estimates Jaccard similarity between documents efficiently at web scale and removes near-duplicates (e.g., syndicated news articles, boilerplate templates, mirrored pages).</li>
+      <li><strong>Substring deduplication</strong> — suffix-array-based methods (as used in some large corpus-cleaning pipelines) remove long repeated substrings even when they occur inside otherwise-distinct documents, which is important because verbatim-repeated spans are strongly associated with memorization.</li>
+    </ul>
+    <p>Deduplication matters because repeated content wastes compute (the model re-learns the same signal) and increases verbatim memorization risk, which is both a privacy/copyright concern and a source of contamination when repeated spans overlap with evaluation benchmarks.</p>
+
+    <h3>4.4 Quality filtering</h3>
+    <ul>
+      <li><strong>Heuristic filters</strong> — minimum/maximum document length, punctuation ratio, symbol-to-word ratio, repeated-line ratio, stop-word presence — cheap rules that remove obviously degenerate text (link farms, keyword-stuffed pages, corrupted extraction output).</li>
+      <li><strong>Perplexity filtering</strong> — score candidate documents with a small reference language model (often trained on known-high-quality text like Wikipedia) and discard documents with unusually high perplexity, as a proxy for "not fluent, well-formed text."</li>
+      <li><strong>Classifier-based filtering</strong> — train a lightweight classifier (e.g., logistic regression or a small fastText/BERT model) to distinguish curated high-quality reference text from generic web text, then score and threshold the full crawl. This is the technique behind quality-filtered subsets of large open datasets.</li>
+    </ul>
+
+    <h3>4.5 Safety and compliance filtering</h3>
+    <ul>
+      <li><strong>PII removal/redaction</strong> — regex and model-based detectors for emails, phone numbers, government IDs, credit card numbers, etc., either removed or replaced with placeholder tokens.</li>
+      <li><strong>Toxic/harmful content filtering</strong> — classifiers targeting hate speech, extremist content, and other categories a given training program excludes; thresholds are a policy decision, not purely a technical one, and over-aggressive filtering can itself introduce topic and dialect biases.</li>
+      <li><strong>CSAM and known-illegal-content removal</strong> — hash-matching against known illegal-content databases and dedicated classifiers is a non-negotiable, industry-standard step before any web-scale corpus is used.</li>
+      <li><strong>Opt-out/robots and licensing compliance</strong> — respecting crawl directives and licensing terms where applicable.</li>
+    </ul>
+
+    <h3>4.6 Domain mixing and data weighting</h3>
+    <p>The final training mixture is not simply "all filtered data concatenated" — teams tune sampling ratios across domains (web, books, code, academic, dialogue, multilingual) because naive proportional-to-availability mixing over-represents low-value web text and under-represents scarce high-value sources like code or academic writing. Techniques include manually tuned static ratios validated by small-scale ablation runs, and more automated approaches (e.g., DoReMi-style methods) that learn domain weights by optimizing worst-case or average loss across a reference set of domains. Upweighting (repeating) a high-quality but small domain for multiple epochs is common and, up to a few epochs, has been shown empirically not to strongly harm generalization, in contrast to the older assumption that any repetition is harmful.</p>
+
+    <h3>4.7 Decontamination</h3>
+    <p>Benchmark contamination — evaluation-set text leaking into the training corpus — silently inflates reported benchmark scores without reflecting real capability. Pipelines run n-gram overlap search (typically 13-gram or longer exact matches) between the training corpus and the full suite of intended evaluation benchmarks, removing or flagging matching documents. This must be re-run whenever new benchmarks are adopted, and is complicated by benchmark answers propagating into web text (blogs discussing benchmark questions, leaderboard writeups quoting test items) well after the benchmark's official release.</p>
+
+    <h3>4.8 Document packing and sequence construction</h3>
+    <p>Because documents vary widely in length while the model consumes fixed-length training sequences, documents are typically concatenated with an explicit end-of-document token and packed into fixed-length blocks (e.g., 4096 or 8192 tokens) to maximize GPU utilization, rather than padding every sequence to the same length individually. Attention masking or position-ID resets at document boundaries can optionally prevent cross-document attention leakage within a packed sequence, trading a small amount of implementation complexity for cleaner document-boundary semantics.</p>
   </section>
 
   <section>
-    <h2>From Base Model to Product</h2>
-    <p>After pretraining, the checkpoint is evaluated on perplexity and downstream benchmarks, then passed to supervised fine-tuning for instruction following and post-training for alignment. Understanding pretraining helps you interpret why a base model hallucinates confidently, why code performance correlates with code token fraction, and why extending context may require continued pretraining or specialized long-context fine-tuning.</p>
+    <h2>5. Training Configuration and Optimization</h2>
+
+    <h3>5.1 Optimizer</h3>
+    <p><strong>AdamW</strong> (Adam with decoupled weight decay) is the near-universal optimizer for large language model pretraining. It maintains per-parameter first-moment (mean) and second-moment (variance) estimates of the gradient:</p>
+    <pre><code>m_t = &beta;1 m_{t-1} + (1-&beta;1) g_t
+v_t = &beta;2 v_{t-1} + (1-&beta;2) g_t^2
+&theta;_t = &theta;_{t-1} - &eta; ( m_t_hat / (sqrt(v_t_hat) + &epsilon;) + &lambda; &theta;_{t-1} )</code></pre>
+    <p>Typical settings for large-scale runs: &beta;1 &asymp; 0.9, &beta;2 &asymp; 0.95 (lower than the default 0.999, which improves stability for LLM training by making the optimizer more responsive to recent gradient statistics), &epsilon; &asymp; 1e-8 to 1e-5, and weight decay &lambda; &asymp; 0.1 applied only to matrix (non-bias, non-norm) parameters. AdamW's memory footprint (two extra states per parameter, in FP32) is itself a major systems constraint at scale — for a model with P parameters, optimizer state alone requires roughly 8P bytes in naive FP32 Adam, which is why memory-efficient variants (8-bit Adam, Adafactor's factored second moments, or sharded optimizer states) are used at the largest scales.</p>
+
+    <h3>5.2 Learning rate schedule</h3>
+    <p>A short linear (or sometimes exponential) <strong>warmup</strong> phase (hundreds to a few thousand steps) ramps the learning rate from near zero to its peak value, preventing early large, poorly-conditioned gradients from destabilizing training before the Adam moment estimates have "burned in." After warmup, the rate decays — most commonly following a <strong>cosine schedule</strong> down to some fraction (often 10%) of the peak by the end of training, though linear decay and, increasingly, warmup-stable-decay schedules (a long constant plateau followed by a short decay, which allows flexible training-length extension without re-deriving the whole schedule) are also used. Peak learning rate itself typically scales down as model size increases, following rough empirical rules of thumb refined per model family.</p>
+
+    <h3>5.3 Batch size</h3>
+    <p>Batch size (in tokens) is chosen close to the largest size that keeps training stable and matches the "critical batch size" — beyond this point, larger batches yield diminishing returns in loss-per-token processed even though they improve hardware utilization. Many large runs use <strong>batch size warmup</strong>, ramping from a small batch to the target batch over the first portion of training, which has been observed to further stabilize early optimization. Achieving very large effective batch sizes across many devices without exceeding per-device memory is done via <strong>gradient accumulation</strong> — running several forward/backward passes with smaller micro-batches and summing gradients before a single optimizer step.</p>
+
+    <h3>5.4 Regularization and stabilization</h3>
+    <ul>
+      <li><strong>Weight decay</strong> — L2-style shrinkage decoupled from the gradient update (per AdamW), acting as a mild regularizer and, at LLM scale, also empirically improving optimization dynamics rather than purely preventing overfitting (overfitting in the classical sense is rare when data vastly exceeds parameter count).</li>
+      <li><strong>Gradient clipping</strong> — global-norm clipping (commonly to a norm of 1.0) prevents any single anomalous batch or bad data shard from producing a destabilizing update; a spike in the pre-clip gradient norm is also a key diagnostic signal for data or numerical issues.</li>
+      <li><strong>Dropout</strong> — rarely used in modern large-scale pretraining (0 dropout is now common) because with data far exceeding parameters, overfitting is not the binding constraint, and dropout reduces effective training signal per step.</li>
+      <li><strong>Z-loss</strong> — an auxiliary loss term that penalizes the log-sum-exp of the final logits from drifting too far from zero, which stabilizes softmax/cross-entropy computation in low precision and reduces the incidence of loss spikes tied to logit magnitude blow-up.</li>
+      <li><strong>Initialization scaling</strong> — output projection weights of each residual sub-block are commonly scaled by a factor depending on depth (e.g., 1/sqrt(2 &middot; num_layers)) so that the variance contributed by each residual branch does not compound uncontrollably as depth grows — a key ingredient for training very deep pre-norm Transformers stably.</li>
+    </ul>
+
+    <h3>5.5 Mixed precision and numerics</h3>
+    <p>Training in full FP32 throughout is prohibitively slow and memory-heavy at scale, so large runs use mixed precision:</p>
+    <ul>
+      <li><strong>FP16</strong> — halves memory and roughly doubles throughput on tensor cores, but has a narrow dynamic range, requiring loss scaling (multiplying the loss by a large constant before backward, then unscaling gradients) to avoid gradient underflow.</li>
+      <li><strong>BF16</strong> — same exponent range as FP32 (so no loss scaling is needed) but reduced mantissa precision; this is the dominant choice for large-model pretraining today because it avoids FP16's stability pitfalls while retaining most of the speed/memory benefit.</li>
+      <li><strong>FP8 and lower-precision training</strong> — an active frontier for the largest runs, using per-tensor or per-block dynamic scaling to keep values in FP8's narrow representable range, offering further throughput gains at the cost of tighter numerical tolerances and more careful kernel engineering.</li>
+      <li>Master weights and optimizer states are typically kept in FP32 (or a compensated lower-precision scheme) even when compute is done in BF16/FP16/FP8, since accumulating many small updates in low precision causes updates to be silently dropped (the update is smaller than the representable precision step at that magnitude).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>6. Distributed Training and Infrastructure</h2>
+    <p>A frontier pretraining run does not fit on a single accelerator, either in parameter memory, optimizer-state memory, or compute time, so multiple forms of parallelism are combined.</p>
+
+    <h3>6.1 Data parallelism</h3>
+    <p>The simplest form: an identical model replica is placed on each device, each replica processes a different micro-batch, and gradients are averaged across replicas (via all-reduce) before every optimizer step. This scales throughput near-linearly with device count until communication bandwidth becomes the bottleneck, but naive data parallelism requires each device to hold a full copy of parameters, gradients, and optimizer state, which becomes infeasible for models with tens or hundreds of billions of parameters.</p>
+
+    <h3>6.2 Tensor (model) parallelism</h3>
+    <p>Individual weight matrices are sharded across devices — e.g., splitting an MLP's up-projection column-wise and its down-projection row-wise across GPUs, with an all-reduce combining partial results. This parallelizes within a single layer's computation and is essential when a layer's weights alone exceed a single device's memory, but requires high-bandwidth, low-latency interconnect (e.g., NVLink within a server node) because it introduces communication inside every layer's forward and backward pass.</p>
+
+    <h3>6.3 Pipeline parallelism</h3>
+    <p>The model's layers are partitioned into sequential stages placed on different devices (or groups of devices), and micro-batches are streamed through the pipeline so multiple stages are active concurrently. This reduces per-device memory (only a subset of layers resides on each device) but introduces "pipeline bubbles" — idle time while the pipeline fills and drains — mitigated by interleaved scheduling strategies (e.g., 1F1B — one-forward-one-backward — scheduling) that keep more of the pipeline busy at the cost of implementation complexity.</p>
+
+    <h3>6.4 Sequence/context parallelism</h3>
+    <p>For very long context windows, even a single sequence's activations (particularly the attention matrix) can exceed device memory; sequence parallelism shards the sequence dimension itself across devices, with specialized communication patterns (e.g., ring-attention style exchanges of KV blocks) to compute exact attention over the full sequence collectively.</p>
+
+    <h3>6.5 ZeRO / Fully Sharded Data Parallel (FSDP)</h3>
+    <p>ZeRO (Zero Redundancy Optimizer) and FSDP eliminate data parallelism's redundant memory by sharding optimizer states, gradients, and optionally parameters themselves across data-parallel ranks, reconstructing the needed full tensors on-the-fly via all-gather just before they're used and freeing them immediately after:</p>
+    <ul>
+      <li><strong>ZeRO Stage 1</strong> — shards optimizer states only.</li>
+      <li><strong>ZeRO Stage 2</strong> — additionally shards gradients.</li>
+      <li><strong>ZeRO Stage 3 / full FSDP</strong> — additionally shards parameters themselves, so no device ever holds the full model, at the cost of more frequent communication (all-gather at every layer's forward and backward).</li>
+    </ul>
+    <p>In practice, frontier training runs combine several of these strategies simultaneously — commonly referred to as "3D" or "4D parallelism" (data + tensor + pipeline + sequence/expert parallelism) — with the specific combination tuned to the cluster's interconnect topology (favoring tensor parallelism within a fast-interconnect node, and data/pipeline parallelism across slower inter-node links).</p>
+
+    <h3>6.6 Checkpointing and fault tolerance</h3>
+    <p>Multi-week jobs across thousands of accelerators experience hardware failures (GPU ECC errors, node network drops, storage hiccups) as a statistical certainty rather than an edge case. Mitigations include: frequent, asynchronous checkpointing of model and optimizer state to persistent storage so a failure loses at most a bounded number of steps; automated health-checking and straggler/faulty-node detection that can evict and replace a bad node mid-job; and elastic or automatically-resuming training orchestration so a job restarts from the last good checkpoint without manual intervention. A single corrupted node silently producing wrong gradients (rather than crashing outright) is a particularly dangerous failure mode, since it can degrade the run without an obvious error signal — motivating numerical health checks (NaN/Inf detection, gradient-norm anomaly detection) at every step.</p>
+
+    <h3>6.7 Activation memory management</h3>
+    <p>Beyond parameters and optimizer state, intermediate activations needed for the backward pass consume substantial memory, especially at long context lengths. <strong>Activation checkpointing</strong> (gradient checkpointing) discards most intermediate activations during the forward pass and recomputes them during backward, trading extra compute (roughly one additional forward pass) for a large memory reduction, and is standard practice for large-context, large-model training.</p>
+  </section>
+
+  <section>
+    <h2>7. Scaling Laws and Compute-Optimal Training</h2>
+    <p>Empirical scaling laws describe how pretraining loss falls as a smooth, predictable power-law function of model size N (parameters), dataset size D (tokens), and compute C, over many orders of magnitude — enabling teams to extrapolate from small, cheap experiments to plan large, expensive runs before committing the full budget.</p>
+
+    <h3>7.1 The Kaplan et al. scaling laws</h3>
+    <p>Early large-scale scaling studies found that test loss follows separate power laws in N, D, and C when the other factors are not the bottleneck, of the rough form L(N) &asymp; (N<sub>c</sub>/N)<sup>&alpha;</sup>, and similarly for D and C, with exponents empirically around 0.05–0.095 depending on the factor and setup. A key early-era conclusion drawn from these laws was that, at a fixed compute budget, it was more efficient to train very large models on comparatively fewer tokens than to fully "use up" available data on a smaller model — which shaped a generation of models trained on relatively few tokens per parameter.</p>
+
+    <h3>7.2 Chinchilla / compute-optimal scaling</h3>
+    <p>Subsequent work (the "Chinchilla" study) revisited this with a more careful experimental protocol — sweeping model size and token count independently at many fixed compute budgets (an "IsoFLOP" analysis) rather than extrapolating a single fixed-token-count curve — and found that many earlier large models were significantly <strong>undertrained relative to their parameter count</strong>. The compute-optimal finding is that model size and training tokens should scale roughly in tandem: doubling the compute budget should roughly double both parameters and training tokens, rather than overwhelmingly favoring parameters. This produced the widely cited compute-optimal rule of thumb of training on roughly 20 tokens per parameter for compute-optimal loss at a given budget — e.g., a 70-billion-parameter compute-optimal model would be trained on roughly 1.4 trillion tokens.</p>
+
+    <h3>7.3 Beyond "compute-optimal": inference-aware training</h3>
+    <p>Compute-optimal scaling minimizes training loss for a fixed training compute budget, but it does not account for the far larger cumulative cost of serving a model at inference across millions of users over its deployment lifetime. Because a smaller model trained on many more tokens than the "compute-optimal" point continues to improve in quality — just at a diminishing, sub-compute-optimal rate of return per additional training FLOP — and because a smaller model is cheaper per token at inference, many production model families deliberately train well past the Chinchilla-optimal token count ("overtraining" relative to pure training-compute efficiency) to minimize total lifecycle cost. This is why publicly released open models are often trained on several trillion to tens of trillions of tokens even at parameter counts where the classic compute-optimal count would suggest far fewer.</p>
+
+    <h3>7.4 Data-constrained scaling</h3>
+    <p>When abundant unique high-quality data is not available, "data-constrained" scaling studies analyze the returns to repeating (multi-epoching) a fixed corpus versus training a smaller model, finding that a modest number of repeated epochs (roughly up to four, in the studies commonly cited) captures most of the benefit of fresh unique data, with returns degrading substantially at larger repeat counts — an important consideration as frontier labs approach the limits of readily available high-quality natural text and increasingly supplement with synthetic and multimodal data.</p>
+
+    <h3>7.5 Using scaling laws in practice</h3>
+    <p>Teams fit scaling curves from a grid of smaller training runs (varying N and D at fixed architecture family and fixed hyperparameter-scaling rules) and extrapolate the fitted power law to predict the loss, and often the downstream benchmark performance, of a target large run before committing the budget — used both to choose the model-size/token-count point for a given compute budget and to sanity-check that a large run's observed loss curve is tracking the predicted trajectory (a divergence from the predicted curve is itself a diagnostic signal of a data or implementation problem).</p>
+  </section>
+
+  <section>
+    <h2>8. Stability and Failure Modes</h2>
+    <h3>8.1 Loss spikes and divergence</h3>
+    <p>Sudden, large increases in training loss ("spikes") occur more frequently as model scale and depth increase, and if uncorrected can permanently destabilize training (the model may not recover, or may recover but at a permanently degraded loss trajectory). Root causes include: an anomalous data batch (e.g., an unusually repetitive or degenerate document), interaction between the Adam optimizer's second-moment estimate and a sudden large gradient, and numerical precision issues in low-precision training. Mitigations include gradient clipping, z-loss regularization, more conservative learning rates or additional warmup, and — for the most severe/reproducible spikes — simply skipping or down-weighting the offending batch and resuming from the last checkpoint before the spike.</p>
+    <h3>8.2 Precision-related failures</h3>
+    <p>FP16's narrow exponent range makes it prone to gradient underflow (very small gradients flush to zero, silently halting learning for affected parameters) without properly tuned dynamic loss scaling. Even in BF16, the reduced mantissa can cause updates smaller than the representable precision step to be silently dropped when accumulated directly in BF16, which is why master weights and optimizer accumulation are usually kept at higher precision.</p>
+    <h3>8.3 Data-induced failure modes</h3>
+    <p>Leaked evaluation data inflates benchmark scores in a way that is easy to miss until an unusually strong result on a specific benchmark, relative to correlated benchmarks, prompts an audit. Duplicated content trains the model to over-memorize specific spans, both wasting compute and increasing verbatim-regurgitation risk. Corrupted or mis-encoded text (e.g., garbled Unicode from a bad extraction step) that slips past filtering can silently degrade fluency in affected languages or scripts.</p>
+    <h3>8.4 Mode collapse and repetition</h3>
+    <p>Distinct from training loss instability, degenerate repetition (the model getting stuck generating the same token or phrase in a loop) is primarily a sampling/decoding phenomenon at inference time rather than a training failure per se, though it is exacerbated by training issues such as insufficiently diverse data or excessive exposure to templated/boilerplate text that was not adequately filtered.</p>
+    <h3>8.5 Monitoring</h3>
+    <p>Production pretraining runs continuously track: training and held-out validation loss curves (compared against the scaling-law-predicted trajectory), gradient norm (pre- and post-clip), parameter and activation norms per layer (to catch a specific layer diverging before it manifests as an overall loss spike), learning-rate and optimizer-state statistics, hardware health metrics (GPU utilization, ECC error counts, network throughput), and periodic downstream-benchmark evaluation on held-out checkpoints to catch quality regressions that pure loss tracking would miss (loss and downstream task performance can decouple, especially as models grow).</p>
+  </section>
+
+  <section>
+    <h2>9. Evaluating a Pretrained Base Model</h2>
+    <h3>9.1 Intrinsic evaluation</h3>
+    <p>Held-out perplexity/cross-entropy loss on a representative, decontaminated validation split is the most direct measure of how well the model has fit the target distribution, and is the metric scaling laws are typically fit against. It is comparable across checkpoints of the same tokenizer and data distribution but not meaningfully comparable across models using different tokenizers or evaluation corpora.</p>
+    <h3>9.2 Downstream/extrinsic evaluation</h3>
+    <p>Because a base model has not been instruction-tuned, it is typically evaluated via <strong>few-shot prompting</strong> (a handful of input-output examples prepended to the prompt) rather than zero-shot instructions, on benchmark suites spanning knowledge (closed-book QA), reasoning (multi-step arithmetic and logic benchmarks), reading comprehension, and code generation. Results are sensitive to prompt formatting, number of few-shot examples, and answer-extraction methodology, which is why cross-paper benchmark comparisons must be treated cautiously unless the evaluation harness is identical.</p>
+    <h3>9.3 Contamination auditing</h3>
+    <p>Beyond the pretraining-time decontamination pass described earlier, released benchmark scores are typically accompanied (in rigorous releases) by an explicit contamination analysis quantifying n-gram overlap between the training corpus and each benchmark, since undetected contamination is one of the most common causes of inflated, non-reproducible reported capability.</p>
+    <h3>9.4 Behavioral and safety-relevant probing</h3>
+    <p>Even prior to any alignment post-training, base-model checkpoints are commonly probed for factual reliability patterns (confident hallucination on obscure entities), memorization/regurgitation of training text (via targeted extraction attacks that check whether specific known training documents can be reproduced verbatim), and bias patterns across demographic and topical axes — all of which inform both data-pipeline iteration for the next training run and the design of the post-training stage that follows.</p>
+  </section>
+
+  <section>
+    <h2>10. From Base Model to Product</h2>
+    <p>The pretrained checkpoint is a raw text-completion engine: prompted with a question, it is as likely to continue with a related but unhelpful continuation (e.g., a list of similar questions, as would appear on a web page) as with a direct answer. Converting it into a deployable assistant requires post-training, most commonly a pipeline of: <strong>supervised fine-tuning (SFT)</strong> on curated instruction-response pairs to establish the assistant "shape" of interaction; <strong>preference-based alignment</strong> (RLHF, or direct preference optimization variants) to shape style, helpfulness, and refusal behavior according to human or model-based preference judgments; and often further specialized stages (tool-use training, long-context fine-tuning, safety-specific fine-tuning) layered on top. Because pretraining sets the ceiling on latent capability, weaknesses introduced at the pretraining stage — gaps in domain coverage, tokenizer inefficiencies for a target language, insufficient code representation, contamination-inflated apparent capability — cannot be fully corrected by post-training, which motivates the very large engineering investment described in the sections above going into the pretraining stage itself.</p>
   </section>
 
   <nav class="page-footer-nav">
@@ -94,5 +271,3 @@ training_args = TrainingArguments(
   <script src="../../../assets/search.js" defer></script>
 </body>
 </html>
-
-
