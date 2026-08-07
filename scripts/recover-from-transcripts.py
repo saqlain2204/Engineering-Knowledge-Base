@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
-td = Path(r"C:\Users\saqla\.cursor\projects\D-Saqlain-Open-Source-Interview-Preparations\agent-transcripts")
+td = root / "agent-transcripts"
 em = "\u2014"
 
 # 1) Restore from Write tool calls
