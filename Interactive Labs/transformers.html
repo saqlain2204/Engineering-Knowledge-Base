@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformer Lab — build a model by hand</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0A0E13;
+  --panel:#11161D;
+  --panel-2:#161D26;
+  --line:#232C37;
+  --ink:#E7EDF2;
+  --muted:#7C8A99;
+  --dim:#4B5A68;
+  --cyan:#5EEAD4;
+  --amber:#F5A623;
+  --coral:#FF6B6B;
+  --violet:#B5A0FF;
+  --mono:'JetBrains Mono', monospace;
+  --sans:'IBM Plex Sans', sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:radial-gradient(circle at top, #111823 0%, #0A0E13 40%, #070A0E 100%);color:var(--ink);font-family:var(--sans);}
+body{-webkit-font-smoothing:antialiased;}
+::selection{background:var(--cyan);color:#000;}
+a{color:var(--cyan);}
+::-webkit-scrollbar{width:9px;height:9px;}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+
+.app{display:grid;grid-template-columns:252px 1fr;min-height:100vh;}
+@media (max-width:880px){.app{grid-template-columns:1fr;}}
+
+/* SIDEBAR */
+.side{background:linear-gradient(180deg,#0D1218,#0A0E13);border-right:1px solid var(--line);padding:22px 14px 22px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+@media (max-width:880px){.side{position:relative;height:auto;}}
+.brand{padding:4px 10px 18px;border-bottom:1px solid var(--line);margin-bottom:14px;}
+.brand .tag{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--cyan);text-transform:uppercase;}
+.brand h1{font-size:19px;margin:6px 0 4px;letter-spacing:-.01em;}
+.brand p{font-size:12px;color:var(--muted);margin:0;line-height:1.5;}
+
+.navsection{margin-bottom:6px;}
+.navlabel{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;padding:14px 10px 6px;}
+.navbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;color:var(--muted);padding:9px 10px;border-radius:8px;cursor:pointer;font-family:var(--sans);font-size:13.5px;position:relative;}
+.navbtn .num{font-family:var(--mono);font-size:10.5px;color:var(--dim);width:16px;flex:none;}
+.navbtn:hover{background:var(--panel-2);color:var(--ink);}
+.navbtn.active{background:var(--panel-2);color:var(--cyan);}
+.navbtn.active .num{color:var(--cyan);}
+.navbtn.active::before{content:'';position:absolute;left:-14px;top:8px;bottom:8px;width:2px;background:var(--cyan);border-radius:2px;}
+
+/* MAIN */
+.main{padding:34px 40px 90px;max-width:980px;}
+@media (max-width:880px){.main{padding:24px 18px 70px;}}
+.section{display:none;animation:fadein .25s ease;}
+.section.active{display:block;}
+@keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+.eyebrow{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;}
+h2.title{font-size:28px;margin:0 0 10px;letter-spacing:-.015em;}
+p.lede{color:var(--muted);font-size:15px;line-height:1.65;max-width:720px;margin-bottom:26px;}
+h3{font-size:15px;margin:28px 0 10px;color:var(--ink);letter-spacing:-.005em;}
+h3 .n{color:var(--cyan);font-family:var(--mono);margin-right:6px;}
+p{line-height:1.65;font-size:14px;color:#C3CCD4;}
+.note{background:var(--panel);border:1px solid var(--line);border-left:2px solid var(--cyan);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--muted);margin:14px 0;line-height:1.6;}
+.note b{color:var(--ink);}
+.warn{border-left-color:var(--amber);}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin:16px 0;}
+.panel-title{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media (max-width:700px){.grid2{grid-template-columns:1fr;}}
+
+textarea, input[type=text]{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:13.5px;resize:vertical;}
+textarea:focus,input:focus{outline:none;border-color:var(--cyan);}
+
+.ctrl{margin:12px 0;}
+.ctrl label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono);}
+.ctrl label .val{color:var(--cyan);}
+input[type=range]{width:100%;-webkit-appearance:none;height:4px;background:var(--line);border-radius:2px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--cyan);cursor:pointer;box-shadow:0 0 8px rgba(94,234,212,.5);}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--cyan);border:none;cursor:pointer;}
+
+.btn{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);padding:9px 16px;border-radius:7px;cursor:pointer;letter-spacing:.03em;transition:.15s;}
+.btn:hover{border-color:var(--cyan);color:var(--cyan);}
+.btn.primary{background:var(--cyan);color:#08201C;border-color:var(--cyan);font-weight:600;}
+.btn.primary:hover{background:#7FF3E1;color:#08201C;}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:4px 10px;color:var(--muted);cursor:pointer;}
+.pill.on{border-color:var(--cyan);color:var(--cyan);}
+.tokrow{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;}
+.tok{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:5px 9px;color:var(--ink);cursor:default;transition:.15s;}
+.tok b{color:var(--dim);font-weight:400;font-size:10px;margin-left:4px;}
+.tok.hl{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 0 1px var(--cyan) inset;}
+.tok.pulse{animation:pulse .5s ease;}
+.tok.special{border-style:dashed;border-color:rgba(245,166,35,.7);color:#FFD79A;background:rgba(245,166,35,.08);}
+.tok.special b{color:#C99538;}
+@keyframes pulse{0%{transform:scale(1);}40%{transform:scale(1.12);border-color:var(--cyan);}100%{transform:scale(1);}}
+
+.readout{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto;white-space:pre;}
+.readout .hi{color:var(--cyan);}
+.readout .am{color:var(--amber);}
+
+svg text{font-family:var(--mono);}
+.diag-box{fill:var(--panel-2);stroke:var(--line);stroke-width:1;}
+.diag-box.hot{stroke:var(--cyan);}
+.diag-label{fill:var(--ink);font-size:11px;}
+.diag-sub{fill:var(--muted);font-size:9.5px;}
+.flowline{stroke:var(--dim);stroke-width:1.8;fill:none;marker-end:url(#arrowSoft);stroke-linecap:round;stroke-linejoin:round;}
+.flowline.hot{stroke:var(--cyan);marker-end:url(#arrowHot);}
+.flowline.thin{stroke-width:1.2;}
+.flowline.soft{stroke:#556474;opacity:.85;}
+
+.barchart{display:flex;align-items:flex-end;gap:3px;height:120px;padding:6px 0;}
+.bar{flex:1;background:linear-gradient(180deg,var(--cyan),#1c8577);border-radius:3px 3px 0 0;min-width:4px;position:relative;transition:height .25s ease;}
+.bar.neg{background:linear-gradient(0deg,var(--coral),#7a2e2e);}
+.bar-lbl{font-family:var(--mono);font-size:9px;color:var(--dim);text-align:center;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+table.cmp{width:100%;border-collapse:collapse;font-size:13px;margin:14px 0;}
+table.cmp th, table.cmp td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top;}
+table.cmp th{background:var(--panel-2);font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+table.cmp td{color:#C3CCD4;line-height:1.5;}
+
+.stepper{display:flex;gap:6px;margin:14px 0;flex-wrap:wrap;}
+.stepdot{width:28px;height:28px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;}
+.stepdot.on{border-color:var(--cyan);color:var(--cyan);}
+
+.quiz-q{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0;}
+.quiz-q .qtext{font-size:14.5px;margin-bottom:12px;color:var(--ink);}
+.qopt{display:block;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);color:#C3CCD4;padding:9px 12px;border-radius:8px;margin-bottom:7px;cursor:pointer;font-size:13px;}
+.qopt:hover{border-color:var(--muted);}
+.qopt.correct{border-color:var(--cyan);color:var(--cyan);background:rgba(94,234,212,.08);}
+.qopt.wrong{border-color:var(--coral);color:var(--coral);background:rgba(255,107,107,.08);}
+.qexp{font-size:12.5px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);display:none;}
+.scorebar{position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:5;font-family:var(--mono);font-size:12px;color:var(--muted);}
+
+.progress-hero{display:flex;gap:0;margin:24px 0 8px;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+.phase{flex:1;padding:14px 16px;border-right:1px solid var(--line);cursor:pointer;}
+.phase:last-child{border-right:none;}
+.phase:hover{background:var(--panel-2);}
+.phase .pn{font-family:var(--mono);font-size:10px;color:var(--dim);}
+.phase .pt{font-size:13.5px;margin-top:3px;}
+.phase.p1 .pn{color:var(--cyan);} .phase.p2 .pn{color:var(--amber);} .phase.p3 .pn{color:var(--violet);}
+
+.matrix{display:inline-grid;gap:2px;font-family:var(--mono);font-size:10px;}
+.mcell{width:30px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:3px;color:#0A0E13;}
+
+kbd{font-family:var(--mono);background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:11px;color:var(--cyan);}
+
+.footer-nav{display:flex;justify-content:space-between;margin-top:44px;padding-top:20px;border-top:1px solid var(--line);}
+
+.flowviz{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0;}
+.flowstage{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;transition:.2s;}
+.flowstage.on{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 10px rgba(94,234,212,.15);}
+.flowarrow{color:var(--dim);font-family:var(--mono);}
+
+.flow-arch{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:stretch;margin-top:14px;}
+@media (max-width:900px){.flow-arch{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.arch-node{background:linear-gradient(180deg,var(--panel-2),rgba(22,29,38,.8));border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;position:relative;overflow:hidden;min-height:102px;}
+.arch-node::before{content:'';position:absolute;inset:auto -24px -34px auto;width:88px;height:88px;border-radius:50%;background:radial-gradient(circle, rgba(94,234,212,.18), transparent 70%);pointer-events:none;}
+.arch-node.hot{border-color:rgba(94,234,212,.5);box-shadow:0 0 0 1px rgba(94,234,212,.08) inset;}
+.arch-node .kicker{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;}
+.arch-node .name{font-size:14px;line-height:1.35;margin-bottom:8px;}
+.arch-node .desc{font-size:12px;color:var(--muted);line-height:1.55;}
+.arch-arrow{display:flex;align-items:center;justify-content:center;color:var(--dim);font-family:var(--mono);font-size:14px;}
+.arch-arrow span{display:inline-block;transform:translateY(-1px);}
+.arch-stack-wrap{overflow-x:auto;margin-top:12px;padding-bottom:4px;}
+.arch-stack{display:flex;gap:10px;min-width:100%;align-items:stretch;}
+.arch-layer{flex:0 0 182px;background:linear-gradient(180deg,var(--panel-2),rgba(22,29,38,.84));border:1px solid var(--line);border-radius:14px;padding:12px 12px 10px;position:relative;overflow:hidden;}
+.arch-layer.hot{border-color:rgba(94,234,212,.55);box-shadow:0 0 0 1px rgba(94,234,212,.09) inset;}
+.arch-layer .layer-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.arch-layer .layer-num{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);}
+.arch-layer .layer-tag{font-family:var(--mono);font-size:10px;color:var(--dim);}
+.arch-step{background:#0F141A;border:1px solid var(--line);border-radius:10px;padding:8px 8px 7px;margin:7px 0;position:relative;}
+.arch-step.hot{border-color:rgba(94,234,212,.55);}
+.arch-step .stitle{font-size:12px;line-height:1.25;margin-bottom:4px;}
+.arch-step .ssub{font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.35;}
+.arch-step .arrow{position:absolute;right:-13px;top:50%;transform:translateY(-50%);color:var(--cyan);font-family:var(--mono);font-size:14px;}
+.arch-block-rail{display:flex;align-items:stretch;gap:10px;margin-top:10px;}
+.arch-block-rail .rail-arrow{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;color:var(--dim);padding:0 2px;}
+.arch-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.chip{display:inline-flex;align-items:center;gap:6px;background:rgba(22,29,38,.9);border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+.chip strong{color:var(--ink);font-weight:600;}
+.mini-chart{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;}
+.mini-chart .title{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
+.meter{height:10px;background:#0F141A;border:1px solid var(--line);border-radius:999px;overflow:hidden;}
+.meter-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--cyan),#2F9F92);width:50%;transition:width .25s ease;}
+.meter-fill.amber{background:linear-gradient(90deg,var(--amber),#DA8B0E);} 
+.meter-fill.coral{background:linear-gradient(90deg,var(--coral),#B74444);} 
+.pulse-soft{animation:pulse-soft 1.15s ease-in-out infinite;}
+@keyframes pulse-soft{0%,100%{transform:translateY(0);box-shadow:0 0 0 1px rgba(94,234,212,.06) inset;}50%{transform:translateY(-1px);box-shadow:0 0 16px rgba(94,234,212,.12);}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- SIDEBAR -->
+<div class="side">
+  <div class="brand">
+    <div class="tag">Interactive Lab</div>
+    <h1>Transformer Lab</h1>
+    <p>Every stage of a language model, simulated live from whatever you type. Nothing here is pretrained — the weights are random, so you're watching the <i>mechanism</i>, not a smart model.</p>
+  </div>
+
+  <div class="navsection">
+    <div class="navlabel">Pretraining · Architecture</div>
+    <button class="navbtn" data-s="s-intro"><span class="num">00</span>Roadmap</button>
+    <button class="navbtn" data-s="s-token"><span class="num">01</span>Tokenizer</button>
+    <button class="navbtn" data-s="s-embed"><span class="num">02</span>Embeddings</button>
+    <button class="navbtn" data-s="s-pos"><span class="num">03</span>Positional encoding</button>
+    <button class="navbtn" data-s="s-attn"><span class="num">04</span>Self-attention</button>
+    <button class="navbtn" data-s="s-block"><span class="num">05</span>Add, norm &amp; feed-forward</button>
+    <button class="navbtn" data-s="s-stack"><span class="num">06</span>Stacking layers</button>
+    <button class="navbtn" data-s="s-out"><span class="num">07</span>Output &amp; sampling</button>
+  </div>
+  <div class="navsection">
+    <div class="navlabel">Training</div>
+    <button class="navbtn" data-s="s-pretrain"><span class="num">08</span>Pretraining</button>
+  </div>
+  <div class="navsection">
+    <div class="navlabel">Post-training</div>
+    <button class="navbtn" data-s="s-post"><span class="num">09</span>SFT, RLHF, DPO, GRPO</button>
+  </div>
+  <div class="navsection">
+    <div class="navlabel">Check yourself</div>
+    <button class="navbtn" data-s="s-quiz"><span class="num">10</span>Quiz</button>
+  </div>
+  <div class="navsection">
+    <div class="navlabel">Full pass</div>
+    <button class="navbtn" data-s="s-full"><span class="num">11</span>Full transformer</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+<!-- 00 INTRO -->
+<section class="section active" id="s-intro">
+  <div class="eyebrow">Start here</div>
+  <h2 class="title">How a language model gets made</h2>
+  <p class="lede">Three phases turn raw text into something you can chat with. This lab lets you drive every one of them by hand, on your own input, in the browser. Click a phase to jump straight there.</p>
+
+  <div class="progress-hero">
+    <div class="phase p1" data-jump="s-token">
+      <div class="pn">Phase 1</div>
+      <div class="pt">Architecture — how one forward pass works: tokens → attention → predictions</div>
+    </div>
+    <div class="phase p2" data-jump="s-pretrain">
+      <div class="pn">Phase 2</div>
+      <div class="pt">Pretraining — predict the next token, over and over, on huge amounts of text</div>
+    </div>
+    <div class="phase p3" data-jump="s-post">
+      <div class="pn">Phase 3</div>
+      <div class="pt">Post-training — SFT, RLHF, DPO, GRPO: turning a text-predictor into an assistant</div>
+    </div>
+  </div>
+
+  <h3><span class="n">Why</span>simulate instead of just explaining</h3>
+  <p>The words "attention" and "reinforcement learning" stay abstract until you've watched a number change because <i>you</i> changed something. Every panel in this lab does a real computation — real softmax, real dot products, real cross-entropy — just at a toy scale (8 dimensions instead of 12,288) so you can see every value at once instead of drowning in a 175-billion-parameter matrix.</p>
+
+  <div class="note">Type your own sentence in the Tokenizer section and it will flow through every downstream section automatically — embeddings, attention, the output distribution, all recomputed live. Come back to <b>00</b> any time from the sidebar.</div>
+
+  <h3><span class="n">What you'll be able to answer afterward</span></h3>
+  <ul style="color:#C3CCD4;font-size:14px;line-height:1.9;">
+    <li>What actually happens, numerically, when a sentence goes into a transformer</li>
+    <li>Why attention is "queries, keys and values" and not just one vector</li>
+    <li>Why we need positional encoding at all when attention itself is order-blind</li>
+    <li>What a residual connection and layer norm are protecting against</li>
+    <li>Why pretraining is "just" next-token prediction, and why that's enough to learn a lot</li>
+    <li>What SFT, RLHF (reward model + PPO), DPO and GRPO each optimize, and why teams pick one over another</li>
+  </ul>
+</section>
+
+<!-- 01 TOKENIZER -->
+<section class="section" id="s-token">
+  <div class="eyebrow">01 · Architecture</div>
+  <h2 class="title">Tokenizer</h2>
+  <p class="lede">Models don't read letters or words — they read a fixed vocabulary of <i>tokens</i>, learned by finding the most common repeated chunks of text. This is a real byte-pair-encoding (BPE) loop, trained live on whatever you type.</p>
+
+  <div class="panel">
+    <div class="panel-title">Input text</div>
+    <textarea id="txtInput" rows="2" spellcheck="false">the cat sat on the mat, and the cat sat again</textarea>
+    <div class="ctrl">
+      <label>BPE merges learned <span class="val" id="mergeVal">8</span></label>
+      <input type="range" id="mergeSlider" min="0" max="40" value="8">
+    </div>
+    <div class="btnrow">
+      <button class="btn primary" id="btnRunBPE">Train tokenizer on this text</button>
+      <button class="btn" data-sample="the cat sat on the mat, and the cat sat again">sample: cats</button>
+      <button class="btn" data-sample="she sells seashells by the seashore, seashells she sells">sample: seashells</button>
+    </div>
+    <div class="grid2" style="margin-top:14px;">
+      <div class="mini-chart">
+        <div class="title">Special tokens</div>
+        <div class="chip"><strong>&lt;bos&gt;</strong> begins every sequence</div>
+        <div class="chip"><strong>&lt;eos&gt;</strong> ends every sequence</div>
+        <div class="chip"><strong>&lt;unk&gt;</strong> catches unseen symbols</div>
+      </div>
+      <div class="mini-chart">
+        <div class="title">Unknown probe</div>
+        <input type="text" id="unkProbe" value="🙂 transformer ✓" spellcheck="false">
+        <div class="readout" id="unkProbeOut" style="margin-top:8px;white-space:pre-wrap;">— run the tokenizer —</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Merge steps (most frequent adjacent pair wins each round) <span id="mergeCount"></span></div>
+    <div class="readout" id="mergeLog">— run the tokenizer —</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Resulting tokens <span id="tokCount"></span></div>
+    <div class="tokrow" id="tokRow"></div>
+    <div class="note">Fewer merges → tokens closer to raw characters (large "vocabulary" of possible sequences, but each token carries little meaning). More merges → tokens closer to whole words (smaller sequences, each token carries more meaning). Real tokenizers like GPT's run ~50,000 merges over hundreds of billions of characters; try dragging the slider to 0 and to 40 to feel both ends of that spectrum.</div>
+  </div>
+
+  <div class="footer-nav"><span></span><button class="btn" data-jump="s-embed">Next: Embeddings →</button></div>
+</section>
+
+<!-- 02 EMBEDDINGS -->
+<section class="section" id="s-embed">
+  <div class="eyebrow">02 · Architecture</div>
+  <h2 class="title">Token embeddings</h2>
+  <p class="lede">Each token in the vocabulary owns one learned vector — its "meaning" as a list of numbers. Real models use ~4,000–12,000 numbers per token; here we use 8 so you can see every one. These particular numbers are <b>random</b> (untrained) — pretraining is exactly the process that tunes them into something meaningful.</p>
+
+  <div class="panel">
+    <div class="panel-title">Embedding table lookup</div>
+    <div class="tokrow" id="embedTokRow"></div>
+    <div id="embedCharts"></div>
+  </div>
+
+  <div class="note">Notice every occurrence of the same token (e.g. "the") pulls the exact same vector from the table — the embedding table has one row per <i>vocabulary entry</i>, not per position in your sentence. What makes "the" at position 1 different from "the" at position 7 is entirely the job of the next section.</div>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-token">← Tokenizer</button><button class="btn" data-jump="s-pos">Next: Positional encoding →</button></div>
+</section>
+
+<!-- 03 POSITIONAL ENCODING -->
+<section class="section" id="s-pos">
+  <div class="eyebrow">03 · Architecture</div>
+  <h2 class="title">Positional encoding</h2>
+  <p class="lede">Self-attention (next section) looks at every token at once with no sense of order — "cat sat on mat" and "mat on sat cat" would look identical to it. So before attention runs, we add a wave-pattern vector for each position that lets the model tell position 1 from position 7.</p>
+
+  <div class="panel">
+    <div class="panel-title">Formula</div>
+    <div class="readout">PE(pos, 2i)   = sin( pos / 10000^(2i/d) )
+PE(pos, 2i+1) = cos( pos / 10000^(2i/d) )</div>
+    <p style="margin-top:10px;">Each dimension <span class="hi" style="color:var(--cyan)">i</span> oscillates at a different frequency — low dimensions wiggle fast (distinguish neighboring positions), high dimensions wiggle slow (distinguish far-apart positions). Added together across all 8 dimensions, every position ends up with a unique fingerprint.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Live heatmap for your sentence <span id="posSeqLen"></span></div>
+    <div id="posHeatmap"></div>
+    <div class="note">Rows = token position, columns = embedding dimension. Scan down any single column and you'll see a clean sine or cosine wave — scan across a row and you get that position's unique code, which gets <i>added</i> directly onto the token embedding.</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Embedding + position, added together (first token)</div>
+    <div id="posAddDemo"></div>
+  </div>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-embed">← Embeddings</button><button class="btn" data-jump="s-attn">Next: Self-attention →</button></div>
+</section>
+
+<!-- 04 ATTENTION -->
+<section class="section" id="s-attn">
+  <div class="eyebrow">04 · Architecture</div>
+  <h2 class="title">Self-attention</h2>
+  <p class="lede">This is the mechanism that lets a token gather context from every other token. Each position emits a <b>query</b> ("what am I looking for?"), and every position (including itself) offers a <b>key</b> ("what do I contain?") and a <b>value</b> ("what do I actually give you if you attend to me?").</p>
+
+  <div class="panel">
+    <div class="panel-title">1. Project into Q, K, V</div>
+    <div class="readout">Q = X · W_Q      K = X · W_K      V = X · W_V
+X : (seq_len × d_model)     W_* : (d_model × d_k)  — one fixed random matrix per head</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">2. Score every pair, scale, softmax</div>
+    <div class="readout">scores = (Q · Kᵀ) / √d_k          attention_weights = softmax(scores, per row)</div>
+    <p>Dividing by √d_k keeps the dot products from growing huge as dimensions increase — without it, softmax saturates and gradients vanish. Softmax turns each row into a probability distribution: "how much should this token attend to every other token."</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Heads <span id="headCountLbl"></span></div>
+    <div class="ctrl">
+      <label>Number of attention heads <span class="val" id="headVal">2</span></label>
+      <input type="range" id="headSlider" min="1" max="4" value="2">
+    </div>
+    <p style="font-size:13px;">Each head learns its own W_Q/W_K/W_V, so it can specialize — one head might track "which noun does this adjective describe," another "what's the previous verb." Their outputs get concatenated and mixed back down with one more matrix, W_O.</p>
+    <div id="headHeatmaps"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Click a token to see who it attends to</div>
+    <div class="tokrow" id="attnTokRow"></div>
+    <div id="attnDetail"></div>
+  </div>
+
+  <div class="note">Try it: type a sentence with a clear pronoun, like <i>"the trophy didn't fit in the suitcase because it was too big"</i>, then click "it." Even with random, untrained weights the pattern is meaningless right now — but this is precisely the computation a trained model uses to correctly link "it" back to "trophy."</div>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-pos">← Positional encoding</button><button class="btn" data-jump="s-block">Next: Add, norm &amp; FFN →</button></div>
+</section>
+
+<!-- 05 BLOCK -->
+<section class="section" id="s-block">
+  <div class="eyebrow">05 · Architecture</div>
+  <h2 class="title">Residual connections, layer norm &amp; feed-forward</h2>
+  <p class="lede">Attention's output doesn't replace the token's representation — it's <i>added</i> to it. Then two more ingredients finish the "transformer block": normalization to keep numbers stable, and a small per-token neural net to add nonlinear processing.</p>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Residual (skip) connection</div>
+      <div class="readout">X' = X + Attention(X)</div>
+      <p>Without this "+X", stacking many layers would make gradients vanish or representations drift arbitrarily far from the input. The residual path is a direct, always-available shortcut for information (and gradient) to flow through every one of the network's layers unchanged if that's the best option.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Layer normalization</div>
+      <div class="readout">LN(x) = γ · (x − μ) / √(σ² + ε) + β</div>
+      <p>Re-centers and re-scales each token's vector to mean 0, variance 1 (then lets the model learn a new scale γ and shift β). Keeps values from exploding or shrinking as they pass through dozens of layers.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Feed-forward network (applied to every position independently)</div>
+    <div class="readout">FFN(x) = W2 · GELU(W1 · x + b1) + b2
+d_model → d_ff (usually 4×) → d_model</div>
+    <p>Attention is the only place information moves <i>between</i> positions. The feed-forward network is where most of a transformer's parameters live, and it does per-token computation — think of attention as "gather the right context" and the FFN as "now think about it."</p>
+    <div class="ctrl">
+      <label>FFN hidden width multiplier <span class="val" id="ffnMulVal">4×</span></label>
+      <input type="range" id="ffnMulSlider" min="1" max="8" value="4">
+    </div>
+    <div id="ffnDemo"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Full block, in order</div>
+    <div id="blockDiagram"></div>
+  </div>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-attn">← Self-attention</button><button class="btn" data-jump="s-stack">Next: Stacking layers →</button></div>
+</section>
+
+<!-- 06 STACK -->
+<section class="section" id="s-stack">
+  <div class="eyebrow">06 · Architecture</div>
+  <h2 class="title">Stacking blocks into a model</h2>
+  <p class="lede">One block gathers context and thinks about it once. A real model chains dozens of them, each refining the representation further — early layers tend to pick up on syntax and local patterns, later layers on more abstract, task-relevant meaning.</p>
+
+  <div class="panel">
+    <div class="panel-title">Depth</div>
+    <div class="ctrl">
+      <label>Number of stacked layers (L) <span class="val" id="layerVal">12</span></label>
+      <input type="range" id="layerSlider" min="1" max="96" value="12">
+    </div>
+    <div class="ctrl">
+      <label>Model width, d_model <span class="val" id="widthVal">768</span></label>
+      <input type="range" id="widthSlider" min="64" max="12288" step="64" value="768">
+    </div>
+    <div id="stackStats"></div>
+    <div id="stackDiagram"></div>
+  </div>
+
+  <div class="note">Rough approximation: <b>params ≈ 12 · L · d_model²</b> (each block's attention + FFN projections dominate). This is the formula behind why GPT-3–scale models (96 layers, d_model 12,288) land near 175B parameters — try setting the sliders to those values.</div>
+
+  <h3><span class="n">Depth vs. width</span>tradeoff</h3>
+  <table class="cmp">
+    <tr><th>Going deeper (more layers)</th><th>Going wider (bigger d_model)</th></tr>
+    <tr><td>More sequential refinement steps; better at multi-step composition</td><td>More capacity per step; more room to represent nuance at once</td></tr>
+    <tr><td>Harder to train — needs residuals/normalization to avoid vanishing signal</td><td>Quadratic parameter cost in d_model; attention cost grows too</td></tr>
+    <tr><td>Slower at inference (strictly sequential through layers)</td><td>More parallelizable per layer on modern hardware</td></tr>
+  </table>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-block">← Add, norm &amp; FFN</button><button class="btn" data-jump="s-out">Next: Output &amp; sampling →</button></div>
+</section>
+
+<!-- 07 OUTPUT -->
+<section class="section" id="s-out">
+  <div class="eyebrow">07 · Architecture</div>
+  <h2 class="title">Output layer &amp; sampling</h2>
+  <p class="lede">After the last block, the final position's vector is projected onto every token in the vocabulary, producing one score (logit) per token. Softmax turns those into probabilities. How you turn probabilities into an actual next token is a design choice — try the controls below.</p>
+
+  <div class="panel">
+    <div class="panel-title">Next-token distribution over your session's vocabulary</div>
+    <div class="ctrl">
+      <label>Temperature <span class="val" id="tempVal">1.0</span></label>
+      <input type="range" id="tempSlider" min="0.1" max="2.5" step="0.05" value="1.0">
+    </div>
+    <div class="ctrl">
+      <label>Top-k (0 = off) <span class="val" id="topkVal">0</span></label>
+      <input type="range" id="topkSlider" min="0" max="20" value="0">
+    </div>
+    <div class="ctrl">
+      <label>Top-p / nucleus (1.0 = off) <span class="val" id="toppVal">1.0</span></label>
+      <input type="range" id="toppSlider" min="0.1" max="1.0" step="0.05" value="1.0">
+    </div>
+    <div id="outChart"></div>
+    <div class="btnrow">
+      <button class="btn primary" id="btnSample">Sample next token</button>
+      <button class="btn" id="btnGreedy">Greedy (argmax)</button>
+      <button class="btn" id="btnReset">Reset generation</button>
+    </div>
+    <div class="readout" id="genOut" style="margin-top:12px;">— generated tokens appear here —</div>
+  </div>
+
+  <table class="cmp">
+    <tr><th>Temperature</th><td>Divides logits before softmax. Low (→0) sharpens the distribution toward the top choice (deterministic, repetitive); high (&gt;1) flattens it (more random, more diverse, more mistakes).</td></tr>
+    <tr><th>Top-k</th><td>Zero out every token outside the k highest-probability options, then renormalize. Hard cutoff on how many candidates are even eligible.</td></tr>
+    <tr><th>Top-p (nucleus)</th><td>Keep the smallest set of top tokens whose probabilities sum to p, then renormalize. Adapts the candidate pool size to how confident the model is.</td></tr>
+  </table>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-stack">← Stacking layers</button><button class="btn" data-jump="s-pretrain">Next: Pretraining →</button></div>
+</section>
+
+<!-- 08 PRETRAIN -->
+<section class="section" id="s-pretrain">
+  <div class="eyebrow">08 · Training</div>
+  <h2 class="title">Pretraining</h2>
+  <p class="lede">Every mechanism above starts with <i>random</i> weights. Pretraining is the process that tunes billions of numbers so the forward pass you just explored actually produces sensible text.</p>
+
+  <h3><span class="n">The objective</span>next-token prediction</h3>
+  <p>Take huge amounts of raw text. For every position in every document, hide what comes next and ask the model to predict it from everything before. Compare the model's predicted distribution to the actual next token using <b>cross-entropy loss</b>, and nudge every weight slightly in the direction that would have made the correct token more likely.</p>
+  <div class="readout">loss = −log( P(correct_next_token) )
+averaged over every token position in the batch</div>
+  <p>That's it — no labels, no human annotation, just "predict what comes next." It works because doing this well at scale forces the model to implicitly learn grammar, facts, reasoning patterns, and style, since all of those help predict text.</p>
+
+  <div class="panel">
+    <div class="panel-title">Simulated training run</div>
+    <div class="ctrl">
+      <label>Model size (relative) <span class="val" id="modelSizeVal">medium</span></label>
+      <input type="range" id="modelSizeSlider" min="1" max="3" value="2">
+    </div>
+    <div class="ctrl">
+      <label>Training data size (relative) <span class="val" id="dataSizeVal">medium</span></label>
+      <input type="range" id="dataSizeSlider" min="1" max="3" value="2">
+    </div>
+    <div class="ctrl">
+      <label>Learning rate <span class="val" id="lrVal">3e-4</span></label>
+      <input type="range" id="lrSlider" min="1" max="9" value="4">
+    </div>
+    <div id="lossChart"></div>
+    <div id="lossReadout" class="readout"></div>
+  </div>
+
+  <div class="note warn"><b>What this simulation shows:</b> train loss (cyan) falls smoothly as steps increase — a real, expected curve shape from scaling laws. Validation loss (amber) tracks it closely when data is plentiful relative to model size, but visibly diverges (overfitting — the model starts memorizing instead of generalizing) when you push model size up and data size down. This is illustrative, not a real training run.</div>
+
+  <h3><span class="n">Scaling laws</span>the empirical headline</h3>
+  <p>Loss falls predictably as a power law in three resources: model parameters (N), training tokens (D), and compute (C). Given a fixed compute budget, there is a roughly optimal split between "make the model bigger" and "train on more data" (this is the intuition behind results like Chinchilla) — over-invest in either alone and you leave loss on the table.</p>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-out">← Output &amp; sampling</button><button class="btn" data-jump="s-post">Next: Post-training →</button></div>
+</section>
+
+<!-- 09 POST-TRAINING -->
+<section class="section" id="s-post">
+  <div class="eyebrow">09 · Post-training</div>
+  <h2 class="title">From text-predictor to assistant</h2>
+  <p class="lede">A pretrained model is very good at continuing text, but it isn't automatically a good assistant — asked a question, it might continue with more questions (that's what usually follows a question in web text). Post-training reshapes its behavior.</p>
+
+  <div class="stepper" id="postSteps">
+    <div class="stepdot on" data-p="sft">SFT</div>
+    <div class="stepdot" data-p="rlhf">RLHF</div>
+    <div class="stepdot" data-p="dpo">DPO</div>
+    <div class="stepdot" data-p="grpo">GRPO</div>
+  </div>
+
+  <div class="panel" id="postPanel"></div>
+
+  <h3><span class="n">Side-by-side</span></h3>
+  <table class="cmp">
+    <tr><th>Method</th><th>Needs a separate reward model?</th><th>Needs on-policy rollouts?</th><th>Relative compute / complexity</th><th>Typical use</th></tr>
+    <tr><td><b>SFT</b></td><td>No</td><td>No</td><td>Low — same recipe as pretraining, on curated data</td><td>Teach the response format &amp; baseline behavior</td></tr>
+    <tr><td><b>RLHF (PPO)</b></td><td>Yes — trained on human preference pairs</td><td>Yes — generate, score, update, repeat</td><td>High — 3-4 models in memory (policy, reference, reward, critic)</td><td>General alignment; strong but expensive, unstable to tune</td></tr>
+    <tr><td><b>DPO</b></td><td>No — preference pairs used directly in the loss</td><td>No — trains offline on a static preference dataset</td><td>Low-Medium — one model, one loss function</td><td>Cheaper, more stable alternative to RLHF for preference alignment</td></tr>
+    <tr><td><b>GRPO</b></td><td>No critic network — reward can come from a rule/verifier or model</td><td>Yes — samples a <i>group</i> of completions per prompt</td><td>Medium — no critic to train, but needs group sampling</td><td>Reasoning/math/code tasks with checkable rewards</td></tr>
+  </table>
+
+  <div class="footer-nav"><button class="btn" data-jump="s-pretrain">← Pretraining</button><button class="btn" data-jump="s-quiz">Next: Quiz →</button></div>
+</section>
+
+<!-- 10 QUIZ -->
+<section class="section" id="s-quiz">
+  <div class="eyebrow">10 · Check yourself</div>
+  <h2 class="title">Quiz</h2>
+  <p class="lede">Fifteen questions spanning everything above. Click an answer to check it.</p>
+  <div class="scorebar">Score: <span id="quizScore">0</span> / <span id="quizTotal">0</span></div>
+  <div id="quizWrap"></div>
+</section>
+
+<!-- 11 FULL TRANSFORMER -->
+<section class="section" id="s-full">
+  <div class="eyebrow">11 · Full pass</div>
+  <h2 class="title">Full transformer architecture</h2>
+  <p class="lede">This is the whole route in one view: your text is tokenized, embedded, given position, passed through stacked blocks, projected to logits, and sampled back into new text. Change the prompt or generation controls here and the rest of the lab updates with it.</p>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-title">Prompt in, continuation out</div>
+      <textarea id="archInput" rows="3" spellcheck="false">the trophy didn't fit in the suitcase because it was too big</textarea>
+      <div class="ctrl">
+        <label>Preview temperature <span class="val" id="archTempVal">1.00</span></label>
+        <input type="range" id="archTemp" min="0.1" max="2.5" step="0.05" value="1.0">
+      </div>
+      <div class="ctrl">
+        <label>Preview top-p <span class="val" id="archTopPVal">1.00</span></label>
+        <input type="range" id="archTopP" min="0.1" max="1.0" step="0.05" value="1.0">
+      </div>
+      <div class="ctrl">
+        <label>Preview tokens to add <span class="val" id="archStepsVal">4</span></label>
+        <input type="range" id="archSteps" min="1" max="8" value="4">
+      </div>
+      <div class="btnrow">
+        <button class="btn primary" id="btnArchRun">Run full pass</button>
+        <button class="btn" id="btnArchStep">Generate 1 token</button>
+        <button class="btn" id="btnArchAuto">Generate preview</button>
+      </div>
+      <div class="mini-chart">
+        <div class="title">Live state</div>
+        <div class="chip"><strong>tokens</strong> <span id="archTokCount">0</span></div>
+        <div class="chip"><strong>vocab</strong> <span id="archVocabCount">0</span></div>
+        <div class="chip"><strong>specials</strong> BOS / EOS / UNK active</div>
+        <div class="meter" style="margin-top:10px;"><div class="meter-fill" id="archMeter" style="width:0%;"></div></div>
+      </div>
+      <div class="readout" id="archTrace" style="margin-top:12px;white-space:pre-wrap;">— run the full pass —</div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Architecture map</div>
+      <div id="fullArchDiagram"></div>
+      <div class="mini-chart">
+        <div class="title">What just changed</div>
+        <div id="fullArchNotes" class="readout" style="white-space:pre-wrap;">Prompt changes update tokenization, embeddings, attention, and the output distribution in one pass.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+</div>
+
+<svg width="0" height="0"><defs><marker id="arrowSoft" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 Z" fill="#4B5A68"/></marker><marker id="arrowHot" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 Z" fill="#5EEAD4"/></marker></defs></svg>
+
+<script>
+/* ===================== UTILITIES ===================== */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function seededRand(seed){const r=mulberry32(seed);return r;}
+function randnFrom(rand){let u=0,v=0;while(u===0)u=rand();while(v===0)v=rand();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function vecFor(token,dim,salt){const r=seededRand(hashStr(token+'|'+salt));const v=[];for(let i=0;i<dim;i++)v.push(randnFrom(r)*0.6);return v;}
+function matFor(rows,cols,seed){const r=seededRand(seed);const m=[];for(let i=0;i<rows;i++){const row=[];for(let j=0;j<cols;j++)row.push(randnFrom(r)*0.5);m.push(row);}return m;}
+function matmul(A,B){const n=A.length,k=A[0].length,m=B[0].length;const out=[];for(let i=0;i<n;i++){const row=[];for(let j=0;j<m;j++){let s=0;for(let t=0;t<k;t++)s+=A[i][t]*B[t][j];row.push(s);}out.push(row);}return out;}
+function transpose(A){const n=A.length,m=A[0].length;const out=[];for(let j=0;j<m;j++){const row=[];for(let i=0;i<n;i++)row.push(A[i][j]);out.push(row);}return out;}
+function addMat(A,B){return A.map((row,i)=>row.map((v,j)=>v+B[i][j]));}
+function scaleMat(A,s){return A.map(row=>row.map(v=>v*s));}
+function softmaxRow(row,temp){temp=temp||1;const scaled=row.map(v=>v/temp);const mx=Math.max(...scaled);const ex=scaled.map(v=>Math.exp(v-mx));const sum=ex.reduce((a,b)=>a+b,0);return ex.map(v=>v/sum);}
+function softmaxRows(M,temp){return M.map(r=>softmaxRow(r,temp));}
+function layerNormRow(row){const mean=row.reduce((a,b)=>a+b,0)/row.length;const variance=row.reduce((a,b)=>a+(b-mean)*(b-mean),0)/row.length;return row.map(v=>(v-mean)/Math.sqrt(variance+1e-5));}
+function gelu(x){return 0.5*x*(1+Math.tanh(Math.sqrt(2/Math.PI)*(x+0.044715*Math.pow(x,3))));}
+function heatColor(t){ // t in [0,1] -> teal scale
+  const r=Math.round(17+t*(94-17));
+  const g=Math.round(22+t*(234-22));
+  const b=Math.round(29+t*(212-29));
+  return `rgb(${r},${g},${b})`;
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/ /g,'·');}
+const SPECIAL_TOKENS={bos:'<bos>',eos:'<eos>',unk:'<unk>'};
+function isPrintableAscii(ch){const code=ch.charCodeAt(0);return code>=32&&code<=126;}
+function seedTokensFromText(text){
+  const seq=[SPECIAL_TOKENS.bos];
+  for(const ch of text){
+    if(ch===' ') seq.push('Ġ');
+    else if(isPrintableAscii(ch)) seq.push(ch);
+    else seq.push(SPECIAL_TOKENS.unk);
+  }
+  seq.push(SPECIAL_TOKENS.eos);
+  return seq;
+}
+function mergeableToken(token){return token!==SPECIAL_TOKENS.bos&&token!==SPECIAL_TOKENS.eos&&token!==SPECIAL_TOKENS.unk;}
+function specialTokenClass(token){return token===SPECIAL_TOKENS.bos||token===SPECIAL_TOKENS.eos||token===SPECIAL_TOKENS.unk?'special':'';}
+function labelToken(token){return token===SPECIAL_TOKENS.bos?'BOS':token===SPECIAL_TOKENS.eos?'EOS':token===SPECIAL_TOKENS.unk?'UNK':token;}
+function svgMarkerDefs(){return '<defs><marker id="arrowSoft" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 Z" fill="#4B5A68"/></marker><marker id="arrowHot" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 Z" fill="#5EEAD4"/></marker></defs>';}
+function svgBox(x,y,w,h,main,sub,hot,extra){
+  return '<rect x="'+x+'" y="'+y+'" class="diag-box'+(hot?' hot':'')+'" width="'+w+'" height="'+h+'" rx="10"/>'+
+    '<text x="'+(x+w/2)+'" y="'+(y+22)+'" text-anchor="middle" class="diag-label">'+main+'</text>'+
+    (sub?'<text x="'+(x+w/2)+'" y="'+(y+38)+'" text-anchor="middle" class="diag-sub">'+sub+'</text>':'')+
+    (extra||'');
+}
+function svgLine(x1,y1,x2,y2,hot,dashed,thin){
+  return '<path class="flowline'+(hot?' hot':'')+(thin?' thin':'')+'" d="M'+x1+','+y1+' L'+x2+','+y2+'"'+(dashed?' style="stroke-dasharray:4,3;"':'')+'/>';
+}
+
+/* ===================== NAV ===================== */
+const navBtns=document.querySelectorAll('.navbtn');
+function showSection(id){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  navBtns.forEach(b=>b.classList.toggle('active',b.dataset.s===id));
+  if(id==='s-full') renderFullArchDiagram();
+  window.scrollTo({top:0,behavior:'instant'});
+}
+navBtns.forEach(b=>b.addEventListener('click',()=>showSection(b.dataset.s)));
+document.querySelectorAll('[data-jump]').forEach(el=>el.addEventListener('click',()=>showSection(el.dataset.jump)));
+
+/* ===================== SHARED STATE ===================== */
+const D_MODEL=8;
+let state={ text:'', merges:[], tokens:[], vocab:[], vocabIndex:{}, embMat:null, posMat:null, X:null, headsN:2, genTokens:[], probeText:'🙂 transformer ✓', probeTokens:[], specialStats:null, blockTrace:null };
+
+/* ===================== 01 TOKENIZER (real BPE) ===================== */
+function trainBPE(text, numMerges){
+  let seq=seedTokensFromText(text); // Ġ marks spaces, and BOS/EOS wrap every sample
+  const merges=[];
+  for(let m=0;m<numMerges;m++){
+    const counts={};
+    for(let i=0;i<seq.length-1;i++){
+      if(!mergeableToken(seq[i]) || !mergeableToken(seq[i+1])) continue;
+      const pair=seq[i]+'\u0001'+seq[i+1];
+      counts[pair]=(counts[pair]||0)+1;
+    }
+    let best=null,bestCount=1;
+    for(const p in counts){ if(counts[p]>bestCount){bestCount=counts[p];best=p;} }
+    if(!best) break;
+    const parts=best.split('\u0001');
+    const a=parts[0], b=parts[1];
+    if(!mergeableToken(a) || !mergeableToken(b)) break;
+    merges.push([a,b]);
+    const next=[];
+    let i=0;
+    while(i<seq.length){
+      if(i<seq.length-1 && seq[i]===a && seq[i+1]===b){ next.push(a+b); i+=2; }
+      else { next.push(seq[i]); i+=1; }
+    }
+    seq=next;
+  }
+  return {merges:merges,tokens:seq};
+}
+
+function runTokenizer(){
+  const text=document.getElementById('txtInput').value || ' ';
+  const numMerges=parseInt(document.getElementById('mergeSlider').value);
+  const bpe=trainBPE(text,numMerges);
+  const merges=bpe.merges, tokens=bpe.tokens;
+  state.text=text; state.merges=merges; state.tokens=tokens;
+  const uniq=[...new Set(tokens)];
+  state.vocab=uniq;
+  state.vocabIndex={}; uniq.forEach((t,i)=>state.vocabIndex[t]=i);
+
+  document.getElementById('mergeCount').textContent='('+merges.length+' learned)';
+  const log=merges.map((m,i)=>String(i+1).padStart(2,'0')+'.  "'+esc(m[0])+'" + "'+esc(m[1])+'"  ->  "'+esc(m[0]+m[1])+'"').join('\n');
+  document.getElementById('mergeLog').textContent = merges.length? log : '(0 merges — tokens are raw characters)';
+
+  document.getElementById('tokCount').textContent='('+tokens.length+' tokens, '+uniq.length+' unique)';
+  document.getElementById('tokRow').innerHTML = tokens.map((t,i)=>'<span class="tok pulse '+specialTokenClass(t)+'">'+esc(labelToken(t))+'<b>#'+state.vocabIndex[t]+'</b></span>').join('');
+
+  buildEmbeddings();
+  buildPositions();
+  runAttention();
+  buildFFNDemo();
+  renderUnknownProbe();
+  document.getElementById('genOut').textContent='— generated tokens appear here —';
+  state.genTokens=[];
+}
+document.getElementById('btnRunBPE').addEventListener('click',runTokenizer);
+document.getElementById('mergeSlider').addEventListener('input',function(e){document.getElementById('mergeVal').textContent=e.target.value;runTokenizer();});
+document.querySelectorAll('[data-sample]').forEach(b=>b.addEventListener('click',function(){document.getElementById('txtInput').value=b.dataset.sample;runTokenizer();}));
+document.getElementById('unkProbe').addEventListener('input',renderUnknownProbe);
+
+/* ===================== 02 EMBEDDINGS ===================== */
+function buildEmbeddings(){
+  const toks=state.tokens;
+  document.getElementById('embedTokRow').innerHTML = toks.map((t,i)=>'<span class="tok '+specialTokenClass(t)+'" id="etok'+i+'">'+esc(labelToken(t))+'</span>').join('');
+  const embMat=toks.map(t=>vecFor(t,D_MODEL,'emb'));
+  state.embMat=embMat;
+  const wrap=document.getElementById('embedCharts');
+  wrap.innerHTML='';
+  toks.forEach((t,i)=>{
+    const vec=embMat[i];
+    const maxAbs=Math.max.apply(null,vec.map(Math.abs).concat([0.01]));
+    const div=document.createElement('div');
+    div.style.margin='14px 0';
+    div.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;">"'+esc(labelToken(t))+'" &rarr; ['+vec.map(v=>v.toFixed(2)).join(', ')+']</div>';
+    const bc=document.createElement('div'); bc.className='barchart'; bc.style.height='60px';
+    vec.forEach(v=>{
+      const b=document.createElement('div');
+      const h=Math.max(4,Math.abs(v)/maxAbs*50);
+      b.className='bar'+(v<0?' neg':''); b.style.height=h+'px';
+      bc.appendChild(b);
+    });
+    div.appendChild(bc);
+    wrap.appendChild(div);
+  });
+}
+
+/* ===================== 03 POSITIONAL ===================== */
+function posEncoding(seqLen,dim){
+  const M=[];
+  for(let pos=0;pos<seqLen;pos++){
+    const row=[];
+    for(let i=0;i<dim;i++){
+      const k=Math.floor(i/2);
+      const angle=pos/Math.pow(10000,(2*k)/dim);
+      row.push(i%2===0?Math.sin(angle):Math.cos(angle));
+    }
+    M.push(row);
+  }
+  return M;
+}
+function buildPositions(){
+  const toks=state.tokens;
+  const posMat=posEncoding(toks.length,D_MODEL);
+  state.posMat=posMat;
+  document.getElementById('posSeqLen').textContent='('+toks.length+' positions x '+D_MODEL+' dims)';
+  const cont=document.getElementById('posHeatmap');
+  let html='<div style="overflow-x:auto;"><div class="matrix" style="grid-template-columns:44px repeat('+D_MODEL+',30px);">';
+  html+='<div></div>'+Array.from({length:D_MODEL},function(_,j){return '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-align:center;">d'+j+'</div>';}).join('');
+  posMat.forEach((row,i)=>{
+    html+='<div style="font-family:var(--mono);font-size:9px;color:var(--dim);display:flex;align-items:center;">"'+esc(toks[i]).slice(0,5)+'"</div>';
+    row.forEach(v=>{
+      const t=(v+1)/2;
+      html+='<div class="mcell" style="background:'+heatColor(t)+';">'+v.toFixed(1)+'</div>';
+    });
+  });
+  html+='</div></div>';
+  cont.innerHTML=html;
+
+  // add demo
+  const emb0=state.embMat[0], pos0=posMat[0];
+  const sum0=emb0.map((v,i)=>v+pos0[i]);
+  document.getElementById('posAddDemo').innerHTML=
+    '<div class="readout">embedding("'+esc(state.tokens[0])+'")  = ['+emb0.map(v=>v.toFixed(2)).join(', ')+']\n'+
+    '+ position(0)             = ['+pos0.map(v=>v.toFixed(2)).join(', ')+']\n'+
+    '-------------------------------------------------------------\n'+
+    '= input to layer 1        = ['+sum0.map(v=>v.toFixed(2)).join(', ')+']</div>';
+
+  state.X = state.embMat.map((row,i)=>row.map((v,j)=>v+posMat[i][j]));
+}
+
+/* ===================== 04 ATTENTION ===================== */
+function attentionForHead(X,headSalt,dk){
+  const n=X.length, dModel=X[0].length;
+  const Wq=matFor(dModel,dk,hashStr('Wq'+headSalt));
+  const Wk=matFor(dModel,dk,hashStr('Wk'+headSalt));
+  const Wv=matFor(dModel,dk,hashStr('Wv'+headSalt));
+  const Q=matmul(X,Wq), K=matmul(X,Wk), V=matmul(X,Wv);
+  const scores=matmul(Q,transpose(K)).map(row=>row.map(v=>v/Math.sqrt(dk)));
+  const weights=softmaxRows(scores);
+  const out=matmul(weights,V);
+  return {Q:Q,K:K,V:V,weights:weights,out:out};
+}
+
+function renderHeatmapMatrix(weights,tokens,size){
+  size=size||26;
+  let html='<div style="overflow-x:auto;"><div class="matrix" style="grid-template-columns:60px repeat('+tokens.length+','+size+'px);">';
+  html+='<div></div>'+tokens.map(function(t){return '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-align:center;overflow:hidden;">'+esc(t).slice(0,4)+'</div>';}).join('');
+  weights.forEach((row,i)=>{
+    html+='<div style="font-family:var(--mono);font-size:9px;color:var(--dim);display:flex;align-items:center;">'+esc(tokens[i]).slice(0,7)+'</div>';
+    row.forEach(v=>{
+      html+='<div class="mcell" style="width:'+size+'px;height:'+(size-6)+'px;background:'+heatColor(v)+';font-size:8.5px;">'+(v*100).toFixed(0)+'</div>';
+    });
+  });
+  html+='</div></div>';
+  return html;
+}
+
+function runAttention(){
+  const heads=state.headsN;
+  const dk=Math.max(2,Math.floor(D_MODEL/heads));
+  const results=[];
+  for(let h=0;h<heads;h++) results.push(attentionForHead(state.X,'h'+h,dk));
+  state.attnResults=results;
+
+  document.getElementById('headCountLbl').textContent='(each head shown separately)';
+  const cont=document.getElementById('headHeatmaps');
+  cont.innerHTML='';
+  results.forEach((r,h)=>{
+    const box=document.createElement('div');
+    box.style.margin='16px 0';
+    box.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--cyan);margin-bottom:6px;">head '+h+'</div>'+renderHeatmapMatrix(r.weights,state.tokens);
+    cont.appendChild(box);
+  });
+
+  document.getElementById('attnTokRow').innerHTML = state.tokens.map((t,i)=>'<span class="tok '+specialTokenClass(t)+'" data-i="'+i+'">'+esc(labelToken(t))+'</span>').join('');
+  document.querySelectorAll('#attnTokRow .tok').forEach(function(el){el.addEventListener('click',function(){
+    document.querySelectorAll('#attnTokRow .tok').forEach(function(e){e.classList.remove('hl');});
+    el.classList.add('hl');
+    showAttnDetail(parseInt(el.dataset.i));
+  });});
+  if(state.tokens.length) showAttnDetail(0);
+}
+
+function showAttnDetail(idx){
+  const toks=state.tokens;
+  let html='';
+  state.attnResults.forEach((r,h)=>{
+    const row=r.weights[idx];
+    const maxV=Math.max.apply(null,row);
+    html+='<div style="margin:10px 0;"><div style="font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-bottom:5px;">head '+h+' — "'+esc(toks[idx])+'" attends to:</div>'+
+    '<div class="barchart" style="height:70px;">';
+    row.forEach((v,j)=>{
+      html+='<div style="flex:1;text-align:center;"><div class="bar" style="height:'+Math.max(4,v/maxV*60)+'px;'+(j===idx?'box-shadow:0 0 0 1px var(--amber) inset;':'')+'"></div><div class="bar-lbl">'+esc(toks[j]).slice(0,4)+'</div></div>';
+    });
+    html+='</div></div>';
+  });
+  document.getElementById('attnDetail').innerHTML=html;
+}
+
+function renderUnknownProbe(){
+  const probe=document.getElementById('unkProbe').value || '';
+  const probeTokens=seedTokensFromText(probe);
+  state.probeText=probe;
+  state.probeTokens=probeTokens;
+  document.getElementById('unkProbeOut').textContent='encoded: '+probeTokens.map(labelToken).join(' ');
+}
+document.getElementById('headSlider').addEventListener('input',function(e){
+  state.headsN=parseInt(e.target.value);
+  document.getElementById('headVal').textContent=state.headsN;
+  runAttention();
+  buildFFNDemo();
+});
+
+/* ===================== 05 FFN / BLOCK ===================== */
+function buildFFNDemo(){
+  if(!state.attnResults) return;
+  const mul=parseInt(document.getElementById('ffnMulSlider').value);
+  document.getElementById('ffnMulVal').textContent=mul+'x';
+  // residual after attention (concat heads' outputs, mix back down with W_O)
+  const heads=state.attnResults;
+  const n=state.X.length;
+  const concatOut=[]; for(let i=0;i<n;i++){let row=[]; heads.forEach(function(h){row=row.concat(h.out[i]);}); concatOut.push(row);}
+  const Wo=matFor(concatOut[0].length,D_MODEL,hashStr('Wo'+state.headsN));
+  const attnOut=matmul(concatOut,Wo);
+  const resid1=addMat(state.X,attnOut);
+  const norm1=resid1.map(layerNormRow);
+
+  const dff=D_MODEL*mul;
+  const W1=matFor(D_MODEL,dff,hashStr('W1'+mul));
+  const W2=matFor(dff,D_MODEL,hashStr('W2'+mul));
+  const hidden=matmul(norm1,W1).map(row=>row.map(gelu));
+  const ffnOut=matmul(hidden,W2);
+  const resid2=addMat(norm1,ffnOut);
+  const norm2=resid2.map(layerNormRow);
+  state.blockOut=norm2;
+
+  const i0=0;
+  const cont=document.getElementById('ffnDemo');
+  cont.innerHTML='<div class="readout">token "'+esc(state.tokens[i0])+'" through the block:\n'+
+'input (X)                  = ['+state.X[i0].map(v=>v.toFixed(2)).join(', ')+']\n'+
+'+ attention output          = ['+attnOut[i0].map(v=>v.toFixed(2)).join(', ')+']\n'+
+'after LayerNorm             = ['+norm1[i0].map(v=>v.toFixed(2)).join(', ')+']\n'+
+'FFN hidden (d_ff='+dff+')   dims, GELU\'d, projected back down\n'+
+'+ FFN output                = ['+ffnOut[i0].map(v=>v.toFixed(2)).join(', ')+']\n'+
+'after LayerNorm (block out) = ['+norm2[i0].map(v=>v.toFixed(2)).join(', ')+']</div>';
+  buildOutputSection();
+}
+document.getElementById('ffnMulSlider').addEventListener('input',buildFFNDemo);
+
+function buildBlockDiagram(){
+  const svg=['<svg viewBox="0 0 920 300" width="100%" height="300">',svgMarkerDefs(),
+    svgBox(24,110,122,44,'Input X','token vectors + positions',true),
+    svgBox(188,110,148,44,'Attention','Q, K, V + softmax',true),
+    svgBox(380,110,146,44,'Residual + LN','stabilize the stream',false),
+    svgBox(572,110,146,44,'Feed-forward','per-token nonlinear step',true),
+    svgBox(764,110,122,44,'Output head','logits over vocab',true),
+    '<path class="flowline hot" d="M146,132 H188"/>',
+    '<path class="flowline hot" d="M336,132 H380"/>',
+    '<path class="flowline hot" d="M526,132 H572"/>',
+    '<path class="flowline hot" d="M718,132 H764"/>',
+    svgBox(188,26,148,44,'Block 1','attention -> add/LN -> FFN -> add/LN',false),
+    svgBox(380,26,178,44,'Block stack','repeat the same pattern L times',false),
+    '<path class="flowline soft" d="M262,70 V110" stroke-dasharray="4,4"/>',
+    '<path class="flowline soft" d="M468,70 V110" stroke-dasharray="4,4"/>',
+    '<path class="flowline soft" d="M468,70 H764" stroke-dasharray="4,4"/>' ,
+    '<text x="26" y="16" class="diag-sub">left-to-right forward pass</text>',
+    '<text x="190" y="292" class="diag-sub">sub-layers are applied in sequence inside each block</text>',
+  '</svg>'].join('');
+  document.getElementById('blockDiagram').innerHTML=svg;
+}
+
+function buildFullArchDiagram(){
+  const layerCount=parseInt(document.getElementById('layerSlider').value||12);
+  const topSvg=['<svg viewBox="0 0 1320 220" width="100%" height="220">',svgMarkerDefs(),
+    svgBox(12,84,126,52,'Prompt','user text',true),
+    svgBox(170,84,126,52,'Tokenizer','BOS / tokens / EOS',true),
+    svgBox(328,84,126,52,'Embeddings','lookup table',false),
+    svgBox(486,84,126,52,'Position','order signal',false),
+    svgBox(644,84,174,52,'Transformer stack','all blocks repeated below',true),
+    svgBox(852,84,126,52,'Output head','logits',false),
+    svgBox(1010,84,132,52,'Sampler','temperature / top-k / top-p',true),
+    svgBox(1172,84,120,52,'Text','next token',true),
+    svgLine(138,110,170,110,true,false,true),
+    svgLine(296,110,328,110,false,false,true),
+    svgLine(454,110,486,110,false,false,true),
+    svgLine(612,110,644,110,true,false,true),
+    svgLine(818,110,852,110,false,false,true),
+    svgLine(978,110,1010,110,true,false,true),
+    svgLine(1142,110,1172,110,true,false,true),
+    '<text x="18" y="24" class="diag-sub">forward pass from left to right</text>',
+    '<text x="686" y="198" class="diag-sub">prompt changes rerun the entire path; post-training only changes the sampling distribution</text>',
+  '</svg>'].join('');
+
+  const stack=[];
+  stack.push('<div class="arch-stack-wrap"><div class="arch-stack">');
+  stack.push('<div class="arch-layer hot"><div class="layer-top"><div class="layer-num">input stack</div><div class="layer-tag">pre-block</div></div>');
+  stack.push('<div class="arch-step hot"><div class="stitle">Token embeddings</div><div class="ssub">lookup one vector per token</div></div>');
+  stack.push('<div class="arch-step"><div class="stitle">Add positional encoding</div><div class="ssub">inject order information</div></div>');
+  stack.push('</div>');
+  for(let i=1;i<=Math.min(layerCount,24);i++){
+    stack.push('<div class="rail-arrow">→</div>');
+    stack.push('<div class="arch-layer'+(i===1?' hot':'')+'"><div class="layer-top"><div class="layer-num">block '+String(i).padStart(2,'0')+'</div><div class="layer-tag">repeat</div></div>');
+    stack.push('<div class="arch-step hot"><div class="stitle">1. Multi-head attention</div><div class="ssub">Q, K, V, scaled dot-product softmax</div><div class="arrow">↓</div></div>');
+    stack.push('<div class="arch-step"><div class="stitle">2. Residual + LayerNorm</div><div class="ssub">add the skip path, stabilize activations</div><div class="arrow">↓</div></div>');
+    stack.push('<div class="arch-step hot"><div class="stitle">3. Feed-forward network</div><div class="ssub">per-token MLP, usually 4× wider</div><div class="arrow">↓</div></div>');
+    stack.push('<div class="arch-step"><div class="stitle">4. Residual + LayerNorm</div><div class="ssub">prepare next layer input</div></div>');
+    stack.push('</div>');
+  }
+  stack.push('<div class="rail-arrow">→</div>');
+  stack.push('<div class="arch-layer hot"><div class="layer-top"><div class="layer-num">final</div><div class="layer-tag">head</div></div>');
+  stack.push('<div class="arch-step"><div class="stitle">Final LayerNorm</div><div class="ssub">normalize the last hidden state</div></div>');
+  stack.push('<div class="arch-step hot"><div class="stitle">Output projection</div><div class="ssub">logits over the vocabulary</div></div>');
+  stack.push('<div class="arch-step"><div class="stitle">Sampler</div><div class="ssub">temperature / top-k / top-p</div></div>');
+  stack.push('</div></div>');
+
+  document.getElementById('fullArchDiagram').innerHTML='<div class="arch-full-wrap">'+topSvg+stack.join('')+'</div>';
+}
+
+/* ===================== 06 STACK ===================== */
+function updateStack(){
+  const L=parseInt(document.getElementById('layerSlider').value);
+  const W=parseInt(document.getElementById('widthSlider').value);
+  document.getElementById('layerVal').textContent=L;
+  document.getElementById('widthVal').textContent=W;
+  const params=12*L*W*W;
+  function fmt(n){ if(n>1e9) return (n/1e9).toFixed(1)+'B'; if(n>1e6) return (n/1e6).toFixed(1)+'M'; if(n>1e3) return (n/1e3).toFixed(1)+'K'; return n.toFixed(0); }
+  document.getElementById('stackStats').innerHTML='<div class="readout">layers (L) = '+L+'      d_model = '+W+'\n'+
+'approx. parameters ~= 12 * L * d_model^2  =  '+fmt(params)+'</div>';
+  const maxShow=32;
+  const shown=Math.min(L,maxShow);
+  let boxes='';
+  for(let i=0;i<shown;i++) boxes+='<div style="width:'+Math.max(6,300/shown-2)+'px;height:14px;background:var(--panel-2);border:1px solid var(--line);border-radius:2px;display:inline-block;margin:1px;"></div>';
+  document.getElementById('stackDiagram').innerHTML='<div style="margin-top:10px;">'+boxes+(L>maxShow?'<div class="note" style="margin-top:8px;">(showing '+maxShow+' of '+L+' — too many to draw individually)</div>':'')+'</div>';
+}
+document.getElementById('layerSlider').addEventListener('input',updateStack);
+document.getElementById('layerSlider').addEventListener('input',function(){if(document.getElementById('fullArchDiagram')) renderFullArchDiagram();});
+document.getElementById('widthSlider').addEventListener('input',updateStack);
+
+/* ===================== 07 OUTPUT / SAMPLING ===================== */
+function computeLogits(){
+  if(!state.blockOut || !state.vocab.length) return null;
+  const last=state.blockOut[state.blockOut.length-1];
+  const Wout=matFor(D_MODEL,state.vocab.length,hashStr('Wout'));
+  const logitsRow=matmul([last],Wout)[0];
+  return logitsRow;
+}
+function buildOutputSection(){
+  const logits=computeLogits();
+  if(!logits) return;
+  state.logits=logits;
+  renderOutChartFrom(logits);
+}
+function applyTopKTopP(probs,k,p){
+  let idx=probs.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]);
+  if(k>0) idx=idx.slice(0,k);
+  if(p<1){ let cum=0; const kept=[]; for(let j=0;j<idx.length;j++){cum+=idx[j][0]; kept.push(idx[j]); if(cum>=p) break;} idx=kept; }
+  const allowed={}; idx.forEach(function(pair){allowed[pair[1]]=true;});
+  const filtered=probs.map((v,i)=>allowed[i]?v:0);
+  const sum=filtered.reduce((a,b)=>a+b,0)||1;
+  return filtered.map(v=>v/sum);
+}
+function renderOutChartFrom(logits, opts){
+  if(!logits) return;
+  opts=opts||{};
+  const temp=parseFloat(document.getElementById(opts.tempId||'tempSlider').value);
+  const k=parseInt(document.getElementById(opts.topKId||'topkSlider').value);
+  const p=parseFloat(document.getElementById(opts.topPId||'toppSlider').value);
+  document.getElementById('tempVal').textContent=temp.toFixed(2);
+  document.getElementById('topkVal').textContent=k;
+  document.getElementById('toppVal').textContent=p.toFixed(2);
+  let probs=softmaxRow(logits,temp);
+  probs=applyTopKTopP(probs,k,p);
+  const vocab=state.vocab;
+  const maxP=Math.max.apply(null,probs.concat([0.01]));
+  const order=probs.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]);
+  let html='<div class="barchart" style="height:130px;">';
+  order.forEach(function(pair){
+    const v=pair[0], i=pair[1];
+    html+='<div style="flex:1;text-align:center;min-width:18px;"><div class="bar'+(v===0?' neg':'')+'" style="height:'+Math.max(3,v/maxP*100)+'px;'+(v===0?'opacity:.15;':'')+'"></div><div class="bar-lbl">'+esc(labelToken(vocab[i])).slice(0,5)+'</div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);">'+(v*100).toFixed(0)+'%</div></div>';
+  });
+  html+='</div>';
+  document.getElementById('outChart').innerHTML=html;
+  state.currentProbs=probs;
+}
+function renderOutChart(){
+  renderOutChartFrom(state.logits);
+}
+['tempSlider','topkSlider','toppSlider'].forEach(function(id){document.getElementById(id).addEventListener('input',renderOutChart);});
+
+function sampleFromProbs(probs){
+  const r=Math.random(); let cum=0;
+  for(let i=0;i<probs.length;i++){cum+=probs[i]; if(r<=cum) return i;}
+  return probs.length-1;
+}
+function appendGeneratedToken(token){
+  if(token===SPECIAL_TOKENS.eos){
+    state.genTokens.push(token);
+    state.genDone=true;
+    document.getElementById('genOut').innerHTML = '<span style="color:var(--cyan)">'+esc(state.tokens.map(labelToken).join(' '))+'</span> → '+state.genTokens.map(labelToken).map(esc).join(' ');
+    return;
+  }
+  state.genTokens.push(token);
+  document.getElementById('genOut').innerHTML = '<span style="color:var(--cyan)">'+esc(state.tokens.map(labelToken).join(' '))+'</span> → '+state.genTokens.map(labelToken).map(esc).join(' ');
+}
+document.getElementById('btnSample').addEventListener('click',function(){
+  if(!state.currentProbs) return;
+  const i=sampleFromProbs(state.currentProbs);
+  appendGeneratedToken(state.vocab[i]);
+});
+document.getElementById('btnGreedy').addEventListener('click',function(){
+  if(!state.currentProbs) return;
+  let best=0; state.currentProbs.forEach(function(v,i){if(v>state.currentProbs[best])best=i;});
+  appendGeneratedToken(state.vocab[best]);
+});
+document.getElementById('btnReset').addEventListener('click',function(){state.genTokens=[];state.genDone=false;document.getElementById('genOut').textContent='— generated tokens appear here —';});
+
+/* ===================== 08 PRETRAIN LOSS SIM ===================== */
+function drawLossChart(){
+  const modelSize=parseInt(document.getElementById('modelSizeSlider').value); // 1..3
+  const dataSize=parseInt(document.getElementById('dataSizeSlider').value); // 1..3
+  const lrExp=parseInt(document.getElementById('lrSlider').value); // 1..9
+  const lr=Math.pow(10,-(9-lrExp)/2-1.2);
+  document.getElementById('modelSizeVal').textContent=['small','medium','large'][modelSize-1];
+  document.getElementById('dataSizeVal').textContent=['small','medium','large'][dataSize-1];
+  document.getElementById('lrVal').textContent=lr.toExponential(1);
+
+  const steps=60;
+  const rand=seededRand(modelSize*100+dataSize*10+lrExp);
+  const trainLoss=[],valLoss=[];
+  const asym=1.5-modelSize*0.15; // bigger model -> lower floor
+  const speed=Math.max(0.15,0.25+lrExp*0.12);
+  const overfitGap = Math.max(0,(modelSize-dataSize))*0.9; // model >> data -> overfit
+  const slowLearnPenalty = lrExp<=3 ? (4-lrExp)*0.55 : 0;
+  const unstableSpikes = lrExp>=8 ? (lrExp-7)*0.22 : 0;
+  for(let s=0;s<steps;s++){
+    const x=s/steps*6;
+    let noise=(randnFrom(rand))*0.05*Math.max(0.3,(2-lrExp*0.15));
+    const base=asym+ (4.2-asym)*Math.exp(-x*Math.max(0.12,speed*(0.4+dataSize*0.25)));
+    trainLoss.push(Math.max(0.3,base+noise));
+    const gap=overfitGap*(s/steps)*(s/steps)*1.8;
+    const slowPenalty = slowLearnPenalty*(1-Math.exp(-s/14));
+    const spike = unstableSpikes*Math.max(0,Math.sin(s*0.55))*Math.max(0,1-s/steps);
+    valLoss.push(Math.max(0.3,base+gap+slowPenalty+noise*1.2+spike));
+  }
+  const W=680,H=180,pad=30;
+  const maxY=Math.max.apply(null,trainLoss.concat(valLoss));
+  function pts(arr){return arr.map(function(v,i){return (pad+(i/(steps-1))*(W-2*pad))+','+(H-pad-(v/maxY)*(H-2*pad));}).join(' ');}
+  const svg='<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'">'+
+    '<line x1="'+pad+'" y1="'+(H-pad)+'" x2="'+(W-pad)+'" y2="'+(H-pad)+'" stroke="#232C37"/>'+
+    '<line x1="'+pad+'" y1="'+pad+'" x2="'+pad+'" y2="'+(H-pad)+'" stroke="#232C37"/>'+
+    '<text x="'+pad+'" y="16" class="diag-sub">loss</text>'+
+    '<text x="'+(W-pad)+'" y="'+(H-10)+'" text-anchor="end" class="diag-sub">training steps &rarr;</text>'+
+    '<polyline points="'+pts(trainLoss)+'" fill="none" stroke="#5EEAD4" stroke-width="2"/>'+
+    '<polyline points="'+pts(valLoss)+'" fill="none" stroke="#F5A623" stroke-width="2" stroke-dasharray="4,3"/>'+
+    '<text x="'+(W-pad-70)+'" y="26" class="diag-sub" style="fill:#5EEAD4;">— train</text>'+
+    '<text x="'+(W-pad-70)+'" y="40" class="diag-sub" style="fill:#F5A623;">- - val</text>'+
+  '</svg>';
+  document.getElementById('lossChart').innerHTML=svg;
+  document.getElementById('lossReadout').textContent =
+'final train loss ~= '+trainLoss[steps-1].toFixed(2)+'     final val loss ~= '+valLoss[steps-1].toFixed(2)+'\n'+
+(lrExp<=3 ? 'learning rate is low -> training progresses slowly and loss falls more gradually' : lrExp>=8 ? 'learning rate is high -> loss can wobble or spike from instability' : 'learning rate is in a balanced range')+'\n'+
+(valLoss[steps-1]-trainLoss[steps-1]>0.4 ? 'gap is large -> model is overfitting relative to available data' : 'gap is small -> model size and data are reasonably balanced');
+}
+['modelSizeSlider','dataSizeSlider','lrSlider'].forEach(function(id){document.getElementById(id).addEventListener('input',drawLossChart);});
+
+/* ===================== 09 POST-TRAINING ===================== */
+const postContent={
+  sft:{
+    title:'Supervised Fine-Tuning (SFT)',
+    body:'<p>Collect a (relatively small) set of high-quality <b>demonstrations</b> — prompt paired with an ideal response, usually written or curated by humans. Continue training with the exact same next-token cross-entropy loss as pretraining, just on this new, curated dataset instead of raw web text.</p>'+
+    '<p>This is what teaches the model the <i>format</i> of being an assistant — responding directly to instructions, using a consistent style, following a chat template — rather than continuing text the way raw web documents do.</p>',
+    diagram:'<svg viewBox="0 0 640 90" width="100%" height="90">'+
+      '<rect x="10" y="24" class="diag-box hot" width="140" height="40" rx="6"/><text x="80" y="49" text-anchor="middle" class="diag-label">Pretrained model</text>'+
+      '<rect x="250" y="24" class="diag-box" width="150" height="40" rx="6"/><text x="325" y="44" text-anchor="middle" class="diag-label" style="font-size:10px;">Demonstration data</text><text x="325" y="57" text-anchor="middle" class="diag-sub">(prompt, ideal response)</text>'+
+      '<rect x="490" y="24" class="diag-box hot" width="140" height="40" rx="6"/><text x="560" y="49" text-anchor="middle" class="diag-label">SFT model</text>'+
+      '<path class="flowline hot" d="M150,44 H250"/><path class="flowline hot" d="M400,44 H490"/>'+
+    '</svg>'
+  },
+  rlhf:{
+    title:'RLHF — Reward model + PPO',
+    body:'<p><b>Step 1:</b> the SFT model generates several responses per prompt. Humans rank or compare them ("A is better than B"). A separate <b>reward model</b> is trained to predict that human preference as a scalar score.</p>'+
+    '<p><b>Step 2:</b> the policy (a copy of the SFT model) is optimized with <b>PPO</b> (Proximal Policy Optimization) to generate responses that score highly under the reward model — while a KL-divergence penalty keeps it from drifting too far from the original SFT model (which would let it "hack" the reward model with degenerate outputs).</p>'+
+    '<div class="ctrl"><label>KL penalty coefficient &beta; <span class="val" id="klVal">0.10</span></label><input type="range" id="klSlider" min="0" max="100" value="10"></div>'+
+    '<div id="klPlot"></div>'+
+    '<p style="font-size:13px;">Low &beta;: the policy chases reward aggressively — higher reward score, but risks drifting into text that games the reward model rather than being genuinely better (reward hacking). High &beta;: the policy stays close to the reference model — safe, but barely improves.</p>',
+    diagram:'<svg viewBox="0 0 640 190" width="100%" height="190">'+
+      '<rect x="10" y="10" class="diag-box" width="130" height="36" rx="6"/><text x="75" y="32" text-anchor="middle" class="diag-label" style="font-size:10px;">SFT model samples</text>'+
+      '<rect x="180" y="10" class="diag-box" width="140" height="36" rx="6"/><text x="250" y="32" text-anchor="middle" class="diag-label" style="font-size:10px;">Human preference labels</text>'+
+      '<rect x="360" y="10" class="diag-box hot" width="140" height="36" rx="6"/><text x="430" y="32" text-anchor="middle" class="diag-label" style="font-size:10px;">Reward model (trained)</text>'+
+      '<rect x="10" y="90" class="diag-box hot" width="130" height="36" rx="6"/><text x="75" y="112" text-anchor="middle" class="diag-label" style="font-size:10px;">Policy (PPO, updated)</text>'+
+      '<rect x="180" y="90" class="diag-box" width="130" height="36" rx="6"/><text x="245" y="112" text-anchor="middle" class="diag-label" style="font-size:10px;">Reference model (frozen)</text>'+
+      '<rect x="360" y="90" class="diag-box" width="140" height="36" rx="6"/><text x="430" y="108" text-anchor="middle" class="diag-label" style="font-size:10px;">reward - &beta;*KL(policy||ref)</text>'+
+      '<path class="flowline" d="M140,28 H180"/><path class="flowline" d="M320,28 H360"/>'+
+      '<path class="flowline hot" d="M75,46 V90"/>'+
+      '<path class="flowline" d="M140,108 H180"/>'+
+      '<path class="flowline hot" d="M430,46 V90 H360"/>'+
+      '<text x="430" y="150" class="diag-sub">reward model scores rollouts; PPO updates the policy to raise that score</text>'+
+    '</svg>'
+  },
+  dpo:{
+    title:'DPO — Direct Preference Optimization',
+    body:'<p>RLHF needs a reward model, a reference model, a policy, often a critic — and PPO is notoriously finicky to tune. DPO\'s insight: the RLHF objective has a closed-form optimal policy in terms of the reward, which means you can rewrite the whole thing as a <b>simple classification loss directly on preference pairs</b> — no reward model, no reinforcement learning loop, no rollouts.</p>'+
+    '<div class="readout">loss = -log sigma( beta * [ log piθ(chosen|x) - log piref(chosen|x)\n'+
+    '                          - log piθ(rejected|x) + log piref(rejected|x) ] )</div>'+
+    '<p>In plain terms: push up the model\'s relative probability of the response humans preferred, push down the relative probability of the one they didn\'t — measured against a frozen reference model so the policy doesn\'t drift arbitrarily. One model, one loss, trained offline like SFT.</p>',
+    diagram:'<svg viewBox="0 0 640 90" width="100%" height="90">'+
+      '<rect x="10" y="24" class="diag-box" width="180" height="40" rx="6"/><text x="100" y="40" text-anchor="middle" class="diag-label" style="font-size:10px;">Preference pairs</text><text x="100" y="54" text-anchor="middle" class="diag-sub">(chosen, rejected)</text>'+
+      '<rect x="260" y="24" class="diag-box hot" width="160" height="40" rx="6"/><text x="340" y="44" text-anchor="middle" class="diag-label" style="font-size:10px;">DPO loss (closed form)</text>'+
+      '<rect x="490" y="24" class="diag-box hot" width="140" height="40" rx="6"/><text x="560" y="49" text-anchor="middle" class="diag-label">Aligned model</text>'+
+      '<path class="flowline hot" d="M190,44 H260"/><path class="flowline hot" d="M420,44 H490"/>'+
+    '</svg>'
+  },
+  grpo:{
+    title:'GRPO — Group Relative Policy Optimization',
+    body:'<p>PPO needs a learned <b>critic/value network</b> to estimate how good a state is, so it can compute an "advantage" (was this response better or worse than expected?). Training that critic is itself expensive and unstable.</p>'+
+    '<p>GRPO\'s trick: for each prompt, sample a <b>group</b> of completions (say, 8 or 16), score them all with a reward signal (which can be a trained reward model, or — very commonly for GRPO — an automatic verifier, like "did the math answer match" or "did the code pass tests"), then compute each response\'s advantage <i>relative to the group\'s own mean and standard deviation</i>. No critic network needed.</p>'+
+    '<div class="readout">advantage_i = ( reward_i - mean(group_rewards) ) / std(group_rewards)</div>'+
+    '<p>This made GRPO popular for reasoning-heavy post-training (math, code) where rewards can be computed automatically and cheaply by re-sampling many attempts per problem, rather than requiring a slow, expensive learned reward model for every domain.</p>',
+    diagram:'<svg viewBox="0 0 640 130" width="100%" height="130">'+
+      '<rect x="10" y="10" class="diag-box" width="130" height="36" rx="6"/><text x="75" y="32" text-anchor="middle" class="diag-label" style="font-size:10px;">One prompt</text>'+
+      '<rect x="180" y="10" class="diag-box hot" width="170" height="36" rx="6"/><text x="265" y="32" text-anchor="middle" class="diag-label" style="font-size:10px;">Sample a group (k completions)</text>'+
+      '<rect x="400" y="10" class="diag-box" width="170" height="36" rx="6"/><text x="485" y="32" text-anchor="middle" class="diag-label" style="font-size:10px;">Score each (verifier / RM)</text>'+
+      '<rect x="180" y="80" class="diag-box hot" width="170" height="36" rx="6"/><text x="265" y="102" text-anchor="middle" class="diag-label" style="font-size:10px;">Normalize within group &rarr; advantage</text>'+
+      '<rect x="400" y="80" class="diag-box hot" width="170" height="36" rx="6"/><text x="485" y="102" text-anchor="middle" class="diag-label" style="font-size:10px;">Update policy (no critic)</text>'+
+      '<path class="flowline" d="M140,28 H180"/><path class="flowline" d="M350,28 H400"/>'+
+      '<path class="flowline" d="M485,46 V80 H350"/>'+
+      '<path class="flowline hot" d="M265,116 H400"/>'+
+    '</svg>'
+  }
+};
+function renderPost(key){
+  const c=postContent[key];
+  document.getElementById('postPanel').innerHTML='<div class="panel-title">'+c.title+'</div>'+c.diagram+c.body;
+  document.querySelectorAll('#postSteps .stepdot').forEach(function(d){d.classList.toggle('on',d.dataset.p===key);});
+  if(key==='rlhf'){
+    const slider=document.getElementById('klSlider');
+    slider.addEventListener('input',drawKLPlot);
+    drawKLPlot();
+  }
+}
+function drawKLPlot(){
+  const beta=parseInt(document.getElementById('klSlider').value)/100;
+  document.getElementById('klVal').textContent=beta.toFixed(2);
+  const rewardHackPenalty = beta<0.15 ? (0.15-beta)*10 : 0;
+  const reward = Math.max(0.2, 3.4*(1-Math.exp(-5*(1-beta))) - rewardHackPenalty);
+  const kl = 6*(1-beta);
+  const W=420,H=90,pad=26;
+  const rx = pad+ (kl/6)*(W-2*pad);
+  const ry = H-pad-(reward/3.6)*(H-2*pad);
+  let curve='';
+  for(let b=0;b<=1;b+=0.02){
+    const rr=Math.max(0.2,3.4*(1-Math.exp(-5*(1-b))) - (b<0.15?(0.15-b)*10:0));
+    const kk=6*(1-b);
+    const px=pad+(kk/6)*(W-2*pad), py=H-pad-(rr/3.6)*(H-2*pad);
+    curve+=px+','+py+' ';
+  }
+  document.getElementById('klPlot').innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'">'+
+    '<line x1="'+pad+'" y1="'+(H-pad)+'" x2="'+(W-pad)+'" y2="'+(H-pad)+'" stroke="#232C37"/>'+
+    '<line x1="'+pad+'" y1="'+pad+'" x2="'+pad+'" y2="'+(H-pad)+'" stroke="#232C37"/>'+
+    '<text x="'+pad+'" y="14" class="diag-sub">reward</text>'+
+    '<text x="'+(W-pad)+'" y="'+(H-8)+'" text-anchor="end" class="diag-sub">drift from reference (KL) &rarr;</text>'+
+    '<polyline points="'+curve+'" fill="none" stroke="#232C37" stroke-width="1.5"/>'+
+    '<circle cx="'+rx+'" cy="'+ry+'" r="5" fill="#5EEAD4"/>'+
+  '</svg>';
+}
+document.querySelectorAll('#postSteps .stepdot').forEach(function(d){d.addEventListener('click',function(){renderPost(d.dataset.p);});});
+
+/* ===================== 10 QUIZ ===================== */
+const QUIZ=[
+{q:'Why do transformers need positional encoding at all?',opts:['Self-attention treats every position identically regardless of order, so order must be added explicitly','It speeds up matrix multiplication','It reduces the vocabulary size needed','It replaces the need for layer normalization'],a:0,exp:'Attention computes a weighted sum over all positions with weights that don\'t depend on order — without adding position info, shuffling the input would produce the exact same attention pattern.'},
+{q:'In self-attention, what do "keys" represent?',opts:['The final output of the layer','What each position offers when other positions look for information','A random dropout mask','The gradient used in backpropagation'],a:1,exp:'Each position produces a key describing what it contains; a query is compared against every key to decide how much attention to pay.'},
+{q:'Why divide attention scores by the square root of d_k before softmax?',opts:['To save memory','To keep dot products from growing large and saturating softmax, which would cause vanishing gradients','To convert scores into probabilities directly','It is not actually necessary, just convention'],a:1,exp:'As dimensionality grows, raw dot products scale up in magnitude; scaling keeps softmax in a well-behaved range.'},
+{q:'What is the main purpose of the residual ("skip") connection around each sub-layer?',opts:['To make the model use less memory','To let gradients and information flow through many stacked layers without vanishing','To increase the vocabulary size','To replace the need for attention entirely'],a:1,exp:'Residuals give the network a direct path around each sub-layer, which is critical for training very deep stacks.'},
+{q:'What does the feed-forward network inside a transformer block operate on?',opts:['Pairs of positions, like attention does','Each position/token independently','Only the very last token in the sequence','The vocabulary embedding table directly'],a:1,exp:'Unlike attention, the FFN is applied position-wise — it does not mix information across tokens.'},
+{q:'Roughly, what governs a transformer\'s parameter count?',opts:['Only the vocabulary size','Mainly the depth (layers) and width (d_model), roughly proportional to L times d_model squared','Only the sequence length','Only the number of attention heads'],a:1,exp:'Most parameters live in the attention and FFN projection matrices, which scale with L and the square of d_model.'},
+{q:'What objective does pretraining actually optimize?',opts:['Human preference scores','Predicting the next token given everything before it (cross-entropy loss)','Winning a game against another model','Directly minimizing factual errors'],a:1,exp:'Pretraining is self-supervised next-token prediction over huge amounts of raw text — no human labels required.'},
+{q:'What does a lower sampling temperature do?',opts:['Makes the output distribution flatter and more random','Sharpens the distribution toward the highest-probability tokens, making output more deterministic','Increases the vocabulary size','Has no effect on generation'],a:1,exp:'Dividing logits by a smaller temperature before softmax exaggerates differences between high and low scoring tokens.'},
+{q:'Top-p (nucleus) sampling differs from top-k because it...',opts:['Always keeps exactly k tokens','Keeps the smallest set of top tokens whose cumulative probability reaches p, so the candidate pool size adapts to model confidence','Ignores probability altogether','Is identical to greedy decoding'],a:1,exp:'Top-p adapts: a confident distribution keeps very few tokens, an uncertain one keeps more.'},
+{q:'What does Supervised Fine-Tuning (SFT) train on?',opts:['Human preference comparisons between two responses','Curated (prompt, ideal response) demonstration pairs, using the same next-token loss as pretraining','Reward model scores via PPO','Nothing — SFT is not part of post-training'],a:1,exp:'SFT reuses the pretraining-style loss but on a small, high-quality demonstration dataset to teach response format and behavior.'},
+{q:'In RLHF, what does the reward model do?',opts:['Generates the training text for pretraining','Learns to predict a scalar score matching human preference judgments between responses','Replaces the tokenizer','Computes positional encodings'],a:1,exp:'The reward model is trained on human comparisons (A preferred over B) and then used to score the policy\'s outputs during PPO.'},
+{q:'Why does RLHF include a KL-divergence penalty against a frozen reference model?',opts:['To speed up training','To keep the policy from drifting into degenerate text that exploits ("hacks") the reward model instead of genuinely improving','To reduce the vocabulary size','It is required by the tokenizer'],a:1,exp:'Without it, the policy can find reward-model blind spots and produce high-scoring but low-quality or nonsensical text.'},
+{q:'What is DPO\'s key simplification compared to RLHF/PPO?',opts:['It uses a bigger reward model','It reformulates preference alignment as a direct classification loss on preference pairs, removing the separate reward model and the RL rollout loop','It removes the need for any preference data at all','It only works on images'],a:1,exp:'DPO shows the RLHF objective has a closed-form solution, letting you train directly on (chosen, rejected) pairs with one loss function.'},
+{q:'What does GRPO remove compared to standard PPO?',opts:['The policy model itself','The learned critic/value network — advantages are instead computed by normalizing rewards within a sampled group of completions','The tokenizer','The concept of a reward at all'],a:1,exp:'GRPO samples several completions per prompt and computes each one\'s advantage relative to the group\'s mean/std, avoiding a separate critic network.'},
+{q:'Why is GRPO especially popular for math/code post-training?',opts:['Because math problems have no verifiable answers','Because reward can be computed automatically and cheaply (e.g. "did the answer match" or "did tests pass"), well-suited to sampling many completions per prompt','Because it requires human labelers for every example','Because it eliminates the need for pretraining'],a:1,exp:'Automatic, cheap verifiers make it practical to sample large groups of completions per problem, which is exactly what GRPO needs.'}
+];
+function buildQuiz(){
+  const wrap=document.getElementById('quizWrap');
+  document.getElementById('quizTotal').textContent=QUIZ.length;
+  let score=0;
+  wrap.innerHTML='';
+  QUIZ.forEach(function(item,qi){
+    const box=document.createElement('div'); box.className='quiz-q';
+    box.innerHTML='<div class="qtext">'+(qi+1)+'. '+item.q+'</div>'+
+      item.opts.map(function(o,oi){return '<button class="qopt" data-oi="'+oi+'">'+o+'</button>';}).join('')+
+      '<div class="qexp">'+item.exp+'</div>';
+    wrap.appendChild(box);
+    let answered=false;
+    box.querySelectorAll('.qopt').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        if(answered) return; answered=true;
+        const oi=parseInt(btn.dataset.oi);
+        box.querySelectorAll('.qopt').forEach(function(b,i){
+          if(i===item.a) b.classList.add('correct');
+          else if(i===oi) b.classList.add('wrong');
+        });
+        box.querySelector('.qexp').style.display='block';
+        if(oi===item.a){ score++; document.getElementById('quizScore').textContent=score; }
+      });
+    });
+  });
+}
+
+function getArchitectureLogits(tokens){
+  const uniq=[...new Set(tokens)];
+  const vocabIndex={}; uniq.forEach(function(t,i){vocabIndex[t]=i;});
+  const embMat=tokens.map(function(t){return vecFor(t,D_MODEL,'emb');});
+  const posMat=posEncoding(tokens.length,D_MODEL);
+  const X=embMat.map(function(row,i){return row.map(function(v,j){return v+posMat[i][j];});});
+  const heads=parseInt(document.getElementById('headSlider').value||state.headsN||2);
+  const dk=Math.max(2,Math.floor(D_MODEL/heads));
+  const attnResults=[];
+  for(let h=0;h<heads;h++) attnResults.push(attentionForHead(X,'h'+h,dk));
+  const concatOut=[];
+  for(let i=0;i<X.length;i++){
+    let row=[];
+    attnResults.forEach(function(h){row=row.concat(h.out[i]);});
+    concatOut.push(row);
+  }
+  const Wo=matFor(concatOut[0].length,D_MODEL,hashStr('Wo'+heads));
+  const attnOut=matmul(concatOut,Wo);
+  const resid1=addMat(X,attnOut);
+  const norm1=resid1.map(layerNormRow);
+  const mul=parseInt(document.getElementById('ffnMulSlider').value||4);
+  const dff=D_MODEL*mul;
+  const W1=matFor(D_MODEL,dff,hashStr('W1'+mul));
+  const W2=matFor(dff,D_MODEL,hashStr('W2'+mul));
+  const hidden=matmul(norm1,W1).map(function(row){return row.map(gelu);});
+  const ffnOut=matmul(hidden,W2);
+  const resid2=addMat(norm1,ffnOut);
+  const norm2=resid2.map(layerNormRow);
+  const last=norm2[norm2.length-1];
+  const Wout=matFor(D_MODEL,uniq.length,hashStr('Wout'));
+  const logits=matmul([last],Wout)[0];
+  return {tokens:tokens,vocab:uniq,vocabIndex:vocabIndex,embMat:embMat,posMat:posMat,X:X,heads:heads,attnResults:attnResults,blockOut:norm2,logits:logits};
+}
+
+function runFullPass(stepCount){
+  const text=document.getElementById('archInput').value || ' ';
+  const merges=parseInt(document.getElementById('mergeSlider').value);
+  const targetTokens=trainBPE(text,merges).tokens;
+  const previewTokens=targetTokens.slice();
+  const trace=[];
+  trace.push('prompt: '+text);
+  trace.push('tokens: '+previewTokens.map(labelToken).join(' '));
+  const arch=getArchitectureLogits(previewTokens);
+  state.text=text;
+  state.tokens=previewTokens;
+  state.vocab=arch.vocab;
+  state.vocabIndex=arch.vocabIndex;
+  state.embMat=arch.embMat;
+  state.posMat=arch.posMat;
+  state.X=arch.X;
+  state.attnResults=arch.attnResults;
+  state.blockOut=arch.blockOut;
+  state.logits=arch.logits;
+  state.genTokens=[];
+  state.genDone=false;
+  document.getElementById('archTokCount').textContent=previewTokens.length;
+  document.getElementById('archVocabCount').textContent=arch.vocab.length;
+  document.getElementById('archMeter').style.width=Math.min(100,previewTokens.length*5)+'%';
+  renderOutChartFrom(arch.logits,{tempId:'archTemp',topPId:'archTopP'});
+  const probs=state.currentProbs || softmaxRow(state.logits,parseFloat(document.getElementById('archTemp').value));
+  const temp=parseFloat(document.getElementById('archTemp').value);
+  const p=parseFloat(document.getElementById('archTopP').value);
+  let currentGenerated=[];
+  for(let i=0;i<stepCount;i++){
+    let local=softmaxRow(state.logits,temp);
+    local=applyTopKTopP(local,0,p);
+    const pick=sampleFromProbs(local);
+    const token=state.vocab[pick];
+    currentGenerated.push(token);
+    if(token===SPECIAL_TOKENS.eos) break;
+  }
+  document.getElementById('archTrace').textContent=trace.join('\n')+'\ncontinuation: '+currentGenerated.map(labelToken).join(' ');
+  document.getElementById('fullArchNotes').textContent='Prompt changes re-run the same forward pass: tokenizer -> embeddings -> position -> blocks -> logits -> sampler.';
+  renderFullArchDiagram();
+}
+
+function renderFullArchDiagram(){
+  const layerCount=parseInt(document.getElementById('layerSlider').value||12);
+  const stageTemp=parseFloat(document.getElementById('archTemp').value);
+  const stageP=parseFloat(document.getElementById('archTopP').value);
+  const topSvg=['<svg viewBox="0 0 1320 220" width="100%" height="220">',svgMarkerDefs(),
+    svgBox(12,84,126,52,'Prompt','user text',true),
+    svgBox(170,84,126,52,'Tokenizer','BOS / tokens / EOS',true),
+    svgBox(328,84,126,52,'Embeddings','lookup table',false),
+    svgBox(486,84,126,52,'Position','order signal',false),
+    svgBox(644,84,174,52,'Transformer stack','all blocks repeated below',true),
+    svgBox(852,84,126,52,'Output head','logits',false),
+    svgBox(1010,84,132,52,'Sampler','temperature / top-k / top-p',true),
+    svgBox(1172,84,120,52,'Text','next token',true),
+    svgLine(138,110,170,110,true,false,true),
+    svgLine(296,110,328,110,false,false,true),
+    svgLine(454,110,486,110,false,false,true),
+    svgLine(612,110,644,110,true,false,true),
+    svgLine(818,110,852,110,false,false,true),
+    svgLine(978,110,1010,110,true,false,true),
+    svgLine(1142,110,1172,110,true,false,true),
+    '<text x="18" y="24" class="diag-sub">forward pass from left to right</text>',
+    '<text x="686" y="198" class="diag-sub">prompt changes rerun the entire path; post-training only changes the sampling distribution</text>',
+  '</svg>'].join('');
+
+  const stack=[];
+  stack.push('<div class="arch-stack-wrap"><div class="arch-stack">');
+  stack.push('<div class="arch-layer hot"><div class="layer-top"><div class="layer-num">input stack</div><div class="layer-tag">pre-block</div></div>');
+  stack.push('<div class="arch-step hot"><div class="stitle">Token embeddings</div><div class="ssub">lookup one vector per token</div></div>');
+  stack.push('<div class="arch-step"><div class="stitle">Add positional encoding</div><div class="ssub">inject order information</div></div>');
+  stack.push('</div>');
+  for(let i=1;i<=Math.min(layerCount,24);i++){
+    stack.push('<div class="rail-arrow">→</div>');
+    stack.push('<div class="arch-layer'+(i===1?' hot':'')+'"><div class="layer-top"><div class="layer-num">block '+String(i).padStart(2,'0')+'</div><div class="layer-tag">repeat</div></div>');
+    stack.push('<div class="arch-step hot"><div class="stitle">1. Multi-head attention</div><div class="ssub">Q, K, V, scaled dot-product softmax</div><div class="arrow">↓</div></div>');
+    stack.push('<div class="arch-step"><div class="stitle">2. Residual + LayerNorm</div><div class="ssub">add the skip path, stabilize activations</div><div class="arrow">↓</div></div>');
+    stack.push('<div class="arch-step hot"><div class="stitle">3. Feed-forward network</div><div class="ssub">per-token MLP, usually 4× wider</div><div class="arrow">↓</div></div>');
+    stack.push('<div class="arch-step"><div class="stitle">4. Residual + LayerNorm</div><div class="ssub">prepare next layer input</div></div>');
+    stack.push('</div>');
+  }
+  stack.push('<div class="rail-arrow">→</div>');
+  stack.push('<div class="arch-layer hot"><div class="layer-top"><div class="layer-num">final</div><div class="layer-tag">head</div></div>');
+  stack.push('<div class="arch-step"><div class="stitle">Final LayerNorm</div><div class="ssub">normalize the last hidden state</div></div>');
+  stack.push('<div class="arch-step hot"><div class="stitle">Output projection</div><div class="ssub">logits over the vocabulary</div></div>');
+  stack.push('<div class="arch-step"><div class="stitle">Sampler</div><div class="ssub">temperature / top-k / top-p</div></div>');
+  stack.push('</div></div>');
+
+  document.getElementById('fullArchDiagram').innerHTML='<div class="arch-full-wrap">'+topSvg+stack.join('')+'</div>';
+}
+
+document.getElementById('btnArchRun').addEventListener('click',function(){runFullPass(parseInt(document.getElementById('archSteps').value));});
+document.getElementById('btnArchStep').addEventListener('click',function(){
+  const archInput=document.getElementById('archInput');
+  const text=archInput.value || ' ';
+  const merges=parseInt(document.getElementById('mergeSlider').value);
+  const bpe=trainBPE(text,merges);
+  const augTokens=bpe.tokens.slice();
+  const arch=getArchitectureLogits(augTokens);
+  state.tokens=augTokens;
+  state.vocab=arch.vocab;
+  state.logits=arch.logits;
+  renderOutChart();
+  const pick=sampleFromProbs(applyTopKTopP(softmaxRow(state.logits,parseFloat(document.getElementById('archTemp').value)),0,parseFloat(document.getElementById('archTopP').value)));
+  const token=state.vocab[pick];
+  state.genTokens.push(token);
+  document.getElementById('archTrace').textContent='step output: '+state.genTokens.map(labelToken).join(' ');
+  if(token===SPECIAL_TOKENS.eos) state.genDone=true;
+});
+document.getElementById('btnArchAuto').addEventListener('click',function(){runFullPass(parseInt(document.getElementById('archSteps').value));});
+document.getElementById('archTemp').addEventListener('input',function(e){document.getElementById('archTempVal').textContent=parseFloat(e.target.value).toFixed(2);renderFullArchDiagram();});
+document.getElementById('archTopP').addEventListener('input',function(e){document.getElementById('archTopPVal').textContent=parseFloat(e.target.value).toFixed(2);renderFullArchDiagram();});
+document.getElementById('archSteps').addEventListener('input',function(e){document.getElementById('archStepsVal').textContent=e.target.value;});
+document.getElementById('archInput').addEventListener('input',function(){runFullPass(parseInt(document.getElementById('archSteps').value));});
+
+/* ===================== INIT ===================== */
+buildBlockDiagram();
+updateStack();
+drawLossChart();
+renderPost('sft');
+buildQuiz();
+runTokenizer();
+</script>
+</body>
+</html>
