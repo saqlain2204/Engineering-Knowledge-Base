@@ -44,7 +44,7 @@ a{color:var(--cyan);}
 
 .navsection{margin-bottom:6px;}
 .navlabel{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;padding:14px 10px 6px;}
-.navbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;color:var(--muted);padding:10px 12px;border-radius:12px;cursor:pointer;font-family:var(--sans);font-size:13.5px;position:relative;}
+.navbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;color:var(--muted);padding:9px 10px;border-radius:8px;cursor:pointer;font-family:var(--sans);font-size:13.5px;position:relative;}
 .navbtn .num{font-family:var(--mono);font-size:10.5px;color:var(--dim);width:16px;flex:none;}
 .navbtn:hover{background:var(--panel-2);color:var(--ink);}
 .navbtn.active{background:var(--panel-2);color:var(--cyan);}
@@ -83,10 +83,10 @@ input[type=range]{width:100%;-webkit-appearance:none;height:4px;background:var(-
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--cyan);cursor:pointer;box-shadow:0 0 8px rgba(94,234,212,.5);}
 input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--cyan);border:none;cursor:pointer;}
 
-.btn{font-family:var(--mono);font-size:12px;background:linear-gradient(180deg,#171E27,#11161D);border:1px solid #2A3440;color:var(--ink);padding:10px 16px;border-radius:12px;cursor:pointer;letter-spacing:.03em;transition:.15s;box-shadow:0 1px 0 rgba(255,255,255,.02) inset;}
+.btn{font-family:var(--mono);font-size:12px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);padding:9px 16px;border-radius:7px;cursor:pointer;letter-spacing:.03em;transition:.15s;}
 .btn:hover{border-color:var(--cyan);color:var(--cyan);}
-.btn.primary{background:linear-gradient(180deg,#70F2DF,#4CD0BE);color:#08201C;border-color:transparent;font-weight:600;box-shadow:0 10px 22px rgba(94,234,212,.08);}
-.btn.primary:hover{background:linear-gradient(180deg,#8EF7E8,#67E2D0);color:#08201C;}
+.btn.primary{background:var(--cyan);color:#08201C;border-color:var(--cyan);font-weight:600;}
+.btn.primary:hover{background:#7FF3E1;color:#08201C;}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:4px 10px;color:var(--muted);cursor:pointer;}
 .pill.on{border-color:var(--cyan);color:var(--cyan);}
@@ -129,7 +129,7 @@ table.cmp td{color:#C3CCD4;line-height:1.5;}
 
 .quiz-q{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0;}
 .quiz-q .qtext{font-size:14.5px;margin-bottom:12px;color:var(--ink);}
-.qopt{display:block;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);color:#C3CCD4;padding:10px 12px;border-radius:12px;margin-bottom:7px;cursor:pointer;font-size:13px;}
+.qopt{display:block;width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--line);color:#C3CCD4;padding:9px 12px;border-radius:8px;margin-bottom:7px;cursor:pointer;font-size:13px;}
 .qopt:hover{border-color:var(--muted);}
 .qopt.correct{border-color:var(--cyan);color:var(--cyan);background:rgba(94,234,212,.08);}
 .qopt.wrong{border-color:var(--coral);color:var(--coral);background:rgba(255,107,107,.08);}
@@ -166,23 +166,22 @@ kbd{font-family:var(--mono);background:var(--panel-2);border:1px solid var(--lin
 .arch-node .desc{font-size:12px;color:var(--muted);line-height:1.55;}
 .arch-arrow{display:flex;align-items:center;justify-content:center;color:var(--dim);font-family:var(--mono);font-size:14px;}
 .arch-arrow span{display:inline-block;transform:translateY(-1px);}
-.arch-full-wrap{max-width:1020px;margin:0 auto;}
-.arch-stack-wrap{margin-top:12px;padding:4px 0 0;}
-.arch-stack{display:flex;flex-direction:column;gap:12px;align-items:center;}
-.arch-layer{width:min(760px,100%);background:linear-gradient(180deg,var(--panel-2),rgba(22,29,38,.84));border:1px solid var(--line);border-radius:16px;padding:14px 14px 12px;position:relative;overflow:hidden;}
+.arch-stack-wrap{overflow-x:auto;margin-top:12px;padding-bottom:4px;}
+.arch-stack{display:flex;gap:10px;min-width:100%;align-items:stretch;}
+.arch-layer{flex:0 0 182px;background:linear-gradient(180deg,var(--panel-2),rgba(22,29,38,.84));border:1px solid var(--line);border-radius:14px;padding:12px 12px 10px;position:relative;overflow:hidden;}
 .arch-layer.hot{border-color:rgba(94,234,212,.55);box-shadow:0 0 0 1px rgba(94,234,212,.09) inset;}
 .arch-layer .layer-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
 .arch-layer .layer-num{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);}
 .arch-layer .layer-tag{font-family:var(--mono);font-size:10px;color:var(--dim);}
-.arch-step{background:#0F141A;border:1px solid var(--line);border-radius:12px;padding:9px 10px 8px;margin:8px 0;position:relative;}
+.arch-step{background:#0F141A;border:1px solid var(--line);border-radius:10px;padding:8px 8px 7px;margin:7px 0;position:relative;}
 .arch-step.hot{border-color:rgba(94,234,212,.55);}
 .arch-step .stitle{font-size:12px;line-height:1.25;margin-bottom:4px;}
 .arch-step .ssub{font-family:var(--mono);font-size:9.5px;color:var(--muted);line-height:1.35;}
-.arch-step .arrow{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--cyan);font-family:var(--mono);font-size:14px;}
+.arch-step .arrow{position:absolute;right:-13px;top:50%;transform:translateY(-50%);color:var(--cyan);font-family:var(--mono);font-size:14px;}
 .arch-block-rail{display:flex;align-items:stretch;gap:10px;margin-top:10px;}
-.arch-block-rail .rail-arrow{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:18px;color:var(--dim);padding:0;}
+.arch-block-rail .rail-arrow{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;color:var(--dim);padding:0 2px;}
 .arch-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
-.chip{display:inline-flex;align-items:center;gap:6px;background:rgba(22,29,38,.9);border:1px solid var(--line);border-radius:12px;padding:6px 10px;font-family:var(--mono);font-size:10.5px;color:var(--muted);}
+.chip{display:inline-flex;align-items:center;gap:6px;background:rgba(22,29,38,.9);border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-family:var(--mono);font-size:10.5px;color:var(--muted);}
 .chip strong{color:var(--ink);font-weight:600;}
 .mini-chart{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;}
 .mini-chart .title{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
@@ -1396,13 +1395,12 @@ function renderFullArchDiagram(){
   const layerCount=parseInt(document.getElementById('layerSlider').value||12);
   const stageTemp=parseFloat(document.getElementById('archTemp').value);
   const stageP=parseFloat(document.getElementById('archTopP').value);
-  const visibleLayers=Math.max(1,Math.min(layerCount,3));
   const topSvg=['<svg viewBox="0 0 1320 220" width="100%" height="220">',svgMarkerDefs(),
     svgBox(12,84,126,52,'Prompt','user text',true),
     svgBox(170,84,126,52,'Tokenizer','BOS / tokens / EOS',true),
     svgBox(328,84,126,52,'Embeddings','lookup table',false),
     svgBox(486,84,126,52,'Position','order signal',false),
-    svgBox(644,84,174,52,'Transformer stack','showing '+visibleLayers+' of '+layerCount+' blocks',true),
+    svgBox(644,84,174,52,'Transformer stack','all blocks repeated below',true),
     svgBox(852,84,126,52,'Output head','logits',false),
     svgBox(1010,84,132,52,'Sampler','temperature / top-k / top-p',true),
     svgBox(1172,84,120,52,'Text','next token',true),
@@ -1423,8 +1421,8 @@ function renderFullArchDiagram(){
   stack.push('<div class="arch-step hot"><div class="stitle">Token embeddings</div><div class="ssub">lookup one vector per token</div></div>');
   stack.push('<div class="arch-step"><div class="stitle">Add positional encoding</div><div class="ssub">inject order information</div></div>');
   stack.push('</div>');
-  for(let i=1;i<=visibleLayers;i++){
-    stack.push('<div class="rail-arrow">↓</div>');
+  for(let i=1;i<=Math.min(layerCount,24);i++){
+    stack.push('<div class="rail-arrow">→</div>');
     stack.push('<div class="arch-layer'+(i===1?' hot':'')+'"><div class="layer-top"><div class="layer-num">block '+String(i).padStart(2,'0')+'</div><div class="layer-tag">repeat</div></div>');
     stack.push('<div class="arch-step hot"><div class="stitle">1. Multi-head attention</div><div class="ssub">Q, K, V, scaled dot-product softmax</div><div class="arrow">↓</div></div>');
     stack.push('<div class="arch-step"><div class="stitle">2. Residual + LayerNorm</div><div class="ssub">add the skip path, stabilize activations</div><div class="arrow">↓</div></div>');
@@ -1432,7 +1430,7 @@ function renderFullArchDiagram(){
     stack.push('<div class="arch-step"><div class="stitle">4. Residual + LayerNorm</div><div class="ssub">prepare next layer input</div></div>');
     stack.push('</div>');
   }
-  stack.push('<div class="rail-arrow">↓</div>');
+  stack.push('<div class="rail-arrow">→</div>');
   stack.push('<div class="arch-layer hot"><div class="layer-top"><div class="layer-num">final</div><div class="layer-tag">head</div></div>');
   stack.push('<div class="arch-step"><div class="stitle">Final LayerNorm</div><div class="ssub">normalize the last hidden state</div></div>');
   stack.push('<div class="arch-step hot"><div class="stitle">Output projection</div><div class="ssub">logits over the vocabulary</div></div>');
