@@ -84,8 +84,16 @@ def page_entry(path: Path) -> dict:
         title = re.sub(suffix, "", title)
     title = htmllib.unescape(title)
 
-    m = re.search(r"<header>\s*[\s\S]*?<p>([^<]+)</p>", html)
-    desc = htmllib.unescape(m.group(1).strip()) if m else ""
+    # Short summary shown under each search hit: the page's meta description,
+    # else the first paragraph after the <h1> (tags stripped). The old pattern
+    # skipped any paragraph containing a link and could pick a random line
+    # from the page body instead.
+    m = re.search(r'<meta name="description" content="([^"]*)"', html)
+    if not m:
+        m = re.search(r"</h1>\s*<p[^>]*>([\s\S]*?)</p>", html)
+    desc = htmllib.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", m.group(1))).strip()) if m else ""
+    if len(desc) > 220:
+        desc = desc[:220].rsplit(" ", 1)[0].rstrip(",;:") + "..."
 
     headings = [htmllib.unescape(re.sub(r"^\d+\.\s*", "", h.strip())) for h in re.findall(r"<h2[^>]*>([^<]+)</h2>", html)]
     details = [htmllib.unescape(s.strip()) for s in re.findall(r"<summary>([^<]+)</summary>", html)]

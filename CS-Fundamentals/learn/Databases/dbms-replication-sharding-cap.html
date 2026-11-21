@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Replication, Sharding &amp; the CAP Theorem | CS Fundamentals</title>
+  <meta name="description" content="Distributed databases from zero: why one database server is not enough, leader and follower replication, synchronous vs asynchronous copies, replication lag and stale reads, failover and split brain, quorums (W + R &gt; N), range and hash sharding, consistent hashing with a real experiment, hot keys, cross-shard queries, the CAP theorem and PACELC in plain words, a worked design, practice problems with answers, and a cheat sheet.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../cs-fundamentals.html">CS Fundamentals</a> &rsaquo; <a href="../cs-fundamentals-learn.html">Learn</a> &rsaquo; Replication, Sharding &amp; CAP</p>
+  </nav>
+  <h1>Replication, Sharding &amp; the CAP Theorem</h1>
+  <p>One database server can hold a lot. But one day it is too slow, too full, or it breaks at 3 AM. This page shows the two big ideas that fix this: <strong>replication</strong> (keep copies of the same data on several machines) and <strong>sharding</strong> (split the data so each machine holds only part of it). Then it explains the hard trade-off that every system with copies must make, known as the <strong>CAP theorem</strong>. You only need the ideas from <a href="dbms-transactions-isolation-mvcc.html">Transactions &amp; MVCC</a> (what a commit is, and what the write-ahead log is). Every term is explained when it first appears.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why">Why One Server Is Not Enough</a></li>
+    <li><a href="#words">The Words, in Plain English</a></li>
+    <li><a href="#leader">Leader and Followers: How Copies Are Made</a></li>
+    <li><a href="#sync">Synchronous vs Asynchronous: When Is a Write "Done"?</a></li>
+    <li><a href="#lag">Replication Lag and Stale Reads</a></li>
+    <li><a href="#failover">Failover and Split Brain</a></li>
+    <li><a href="#quorum">Leaderless Replication and Quorums</a></li>
+    <li><a href="#sharding">Sharding: Splitting the Data</a></li>
+    <li><a href="#consistent-hashing">Consistent Hashing (Real Experiment)</a></li>
+    <li><a href="#hot-keys">Hot Keys and Cross-Shard Queries</a></li>
+    <li><a href="#cap">The CAP Theorem and PACELC</a></li>
+    <li><a href="#design">Worked Design: Growing a Shop's Database</a></li>
+    <li><a href="#pitfalls">Common Pitfalls</a></li>
+    <li><a href="#practice">Practice Problems</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="why">
+    <h2>1. Why One Server Is Not Enough</h2>
+    <p>Picture a small online shop. It has one PostgreSQL server. Everything works. Then the shop grows, and three different problems show up:</p>
+    <ul>
+      <li><strong>It breaks.</strong> The disk fails, or the cloud restarts the machine. While it is down, nobody can buy anything. One machine is a <strong>single point of failure</strong>: one broken part stops everything.</li>
+      <li><strong>Too many reads.</strong> Thousands of people browse products. Most queries only <em>read</em>. The one server's CPU is at 100%.</li>
+      <li><strong>Too much data or too many writes.</strong> The orders table no longer fits on one disk, or one machine cannot write fast enough.</li>
+    </ul>
+    <p>Each problem has a different fix:</p>
+    <table>
+      <thead><tr><th>Problem</th><th>Fix</th><th>Idea</th></tr></thead>
+      <tbody>
+        <tr><td>Server breaks</td><td>Replication</td><td>Keep a full copy on another machine, ready to take over</td></tr>
+        <tr><td>Too many reads</td><td>Replication</td><td>Send reads to the copies</td></tr>
+        <tr><td>Too much data, too many writes</td><td>Sharding</td><td>Split the data across machines; each holds a part</td></tr>
+      </tbody>
+    </table>
+    <div class="callout callout-intuition">
+      <p><strong>Intuition.</strong> Replication is <em>photocopying</em> a book so several people can read it, and so you still have it if one copy is lost. Sharding is <em>splitting</em> an encyclopedia into volumes A-F, G-M, and so on, because no single shelf can hold it all. Big systems do both: they split the data into shards, and keep copies of each shard.</p>
+    </div>
+    <p>Before you reach for either, remember the cheaper steps: add an <a href="dbms-indexing-btrees-query-plans.html">index</a>, fix slow queries, add a cache, or buy a bigger machine (called <strong>scaling up</strong> or <strong>vertical scaling</strong>). Adding more machines is called <strong>scaling out</strong> or <strong>horizontal scaling</strong>. Scaling out is powerful, but it makes everything harder, as this page will show.</p>
+  </section>
+
+  <section id="words">
+    <h2>2. The Words, in Plain English</h2>
+    <table>
+      <thead><tr><th>Word</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Node</strong></td><td>One machine (or one database process) in the group.</td></tr>
+        <tr><td><strong>Replica</strong></td><td>A copy of the data on one node.</td></tr>
+        <tr><td><strong>Leader</strong> (also primary, master)</td><td>The one node that accepts writes.</td></tr>
+        <tr><td><strong>Follower</strong> (also replica, standby, secondary)</td><td>A node that copies changes from the leader. It can serve reads.</td></tr>
+        <tr><td><strong>Replication lag</strong></td><td>How far behind the leader a follower is, in time or in bytes of log.</td></tr>
+        <tr><td><strong>Failover</strong></td><td>Making a follower the new leader when the old leader dies.</td></tr>
+        <tr><td><strong>Network partition</strong></td><td>The network breaks so that some nodes cannot talk to others, while each side is still running.</td></tr>
+        <tr><td><strong>Shard</strong> (also partition)</td><td>One slice of the data. Each row lives in exactly one shard.</td></tr>
+        <tr><td><strong>Shard key</strong></td><td>The column used to decide which shard a row goes to, for example <code>customer_id</code>.</td></tr>
+        <tr><td><strong>Consistency</strong> (in CAP)</td><td>Every read sees the latest write, as if there were only one copy.</td></tr>
+        <tr><td><strong>Availability</strong> (in CAP)</td><td>Every request to a working node gets an answer (not an error).</td></tr>
+      </tbody>
+    </table>
+    <p>Note: "consistency" in CAP is <em>not</em> the C in ACID. ACID's C means "the data follows its rules" (for example, a balance is never negative). CAP's C means "all copies look like one copy". Same word, two meanings.</p>
+  </section>
+
+  <section id="leader">
+    <h2>3. Leader and Followers: How Copies Are Made</h2>
+    <p>The most common setup is <strong>single-leader replication</strong>. One node is the leader. All writes go to it. The leader sends every change to the followers, and they apply the changes in the same order.</p>
+    <pre><code>                 writes                      reads
+   app  ───────────────────►  LEADER  ◄──────────── app
+                                │
+              change log (WAL)  │  sent in order
+                ┌───────────────┼────────────────┐
+                ▼               ▼                ▼
+           FOLLOWER 1      FOLLOWER 2       FOLLOWER 3
+               ▲               ▲                ▲
+               └──── reads ────┴──── reads ─────┘</code></pre>
+    <h3>What exactly is sent?</h3>
+    <p>In PostgreSQL, the leader already writes every change to its <strong>write-ahead log</strong> (WAL) before changing the data files (see <a href="dbms-transactions-isolation-mvcc.html">Transactions</a>). The WAL is a list of low-level changes, like "in page 812 of the orders table, put these bytes at this spot". <strong>Streaming replication</strong> simply sends this WAL to followers over a network connection. Each follower replays it, so its files become byte-for-byte the same as the leader's.</p>
+    <p>MySQL usually sends a different log, the <strong>binlog</strong>, which can hold the changed rows ("row 42 of orders now has status = 'shipped'"). This is called <strong>logical</strong> replication: it describes rows, not bytes on disk. PostgreSQL also has logical replication for special cases, like copying one table into another kind of system.</p>
+    <table>
+      <thead><tr><th>Method</th><th>What is sent</th><th>Good for</th><th>Limits</th></tr></thead>
+      <tbody>
+        <tr><td>Physical (WAL streaming)</td><td>Byte-level page changes</td><td>Exact copies, failover</td><td>Same major version on both sides; copies the whole server</td></tr>
+        <tr><td>Logical (row changes)</td><td>"Insert / update / delete this row"</td><td>Copying some tables, upgrades, feeding other systems</td><td>Schema changes need care; more work per change</td></tr>
+        <tr><td>Statement-based</td><td>The SQL text itself</td><td>Small logs</td><td><code>NOW()</code> or <code>RANDOM()</code> give different results on each copy. Mostly avoided today.</td></tr>
+      </tbody>
+    </table>
+    <h3>Adding a new follower</h3>
+    <ol>
+      <li>Take a copy (a <strong>snapshot</strong>) of the leader's data while it keeps running. Remember the log position at that moment, for example WAL position <code>0/3A000060</code>.</li>
+      <li>Load the snapshot on the new machine.</li>
+      <li>Ask the leader for every change after that position, and replay them.</li>
+      <li>When the follower has caught up, it keeps streaming new changes as they happen.</li>
+    </ol>
+    <p>In PostgreSQL, the tool <code>pg_basebackup</code> does steps 1 and 2. A log position is called an <strong>LSN</strong> (log sequence number). It just counts bytes in the WAL, so a bigger LSN means "later".</p>
+  </section>
+
+  <section id="sync">
+    <h2>4. Synchronous vs Asynchronous: When Is a Write "Done"?</h2>
+    <p>When the app sends <code>COMMIT</code>, when should the leader say "OK"? There are two choices.</p>
+    <pre><code>ASYNCHRONOUS                              SYNCHRONOUS
+app      leader      follower             app      leader      follower
+ │ COMMIT  │            │                  │ COMMIT  │            │
+ │────────►│ write WAL  │                  │────────►│ write WAL  │
+ │◄────────│ "OK"       │                  │         │──── WAL ──►│ write WAL
+ │         │──── WAL ──►│ (later)          │         │◄─── ack ───│
+ │         │            │                  │◄────────│ "OK"       │</code></pre>
+    <ul>
+      <li><strong>Asynchronous</strong>: the leader says OK as soon as its own disk has the change. It sends the change to followers afterwards. Fast. But if the leader dies right after saying OK, and before the change left the machine, that committed write is <strong>lost</strong> when a follower takes over.</li>
+      <li><strong>Synchronous</strong>: the leader waits until at least one follower confirms it has the change. No committed write is lost if the leader dies. But every commit now waits one network round trip, and if that follower is down or slow, writes stop or slow down.</li>
+    </ul>
+    <h3>Worked example: what does waiting cost?</h3>
+    <p>The leader is in one data center. The synchronous follower is in another data center, and a round trip between them (the RTT, see <a href="../Computer-Networks/cn-tcp-deep-dive.html">TCP</a>) is 2 ms. A local disk flush takes 1 ms.</p>
+    <ul>
+      <li>Async commit: about 1 ms (just the local flush).</li>
+      <li>Sync commit: about 1 ms + 2 ms (send and get the ack) + the follower's own flush, so at least 3 ms.</li>
+    </ul>
+    <p>If the follower were in another country with an RTT of 120 ms, every commit would take more than 120 ms. That is why the usual setup is: <strong>one synchronous follower nearby</strong> (no data loss if the leader dies), plus <strong>asynchronous followers further away</strong> (for reads and disaster recovery). PostgreSQL lets you say this with <code>synchronous_standby_names = 'ANY 1 (replica_a, replica_b)'</code>: wait for any one of those two.</p>
+    <div class="callout">
+      <p><strong>Note.</strong> In PostgreSQL, the setting <code>synchronous_commit</code> picks how much to wait for: <code>remote_write</code> (the follower received it), <code>on</code> (the follower flushed it to disk), or <code>remote_apply</code> (the follower has also applied it, so a read there will see it). More waiting means more safety and more delay.</p>
+    </div>
+  </section>
+
+  <section id="lag">
+    <h2>5. Replication Lag and Stale Reads</h2>
+    <p>With async followers, a follower is always a little behind. Usually it is milliseconds. Under heavy load, or while a follower runs a long query, it can be seconds or minutes. Reading old data from a follower is called a <strong>stale read</strong>.</p>
+    <h3>The classic bug: "my comment disappeared"</h3>
+    <pre><code>time  user                          leader           follower (lag 2 s)
+ 0.0  posts a comment  ──write──►   comment saved
+ 0.3  page reloads     ──read───────────────────────► no comment yet!
+ 2.0                                                  comment arrives
+ 2.5  reloads again    ──read───────────────────────► comment shows</code></pre>
+    <p>The user thinks the site lost their comment. The data was fine; the read just went to a copy that had not caught up. Different users need different promises:</p>
+    <table>
+      <thead><tr><th>Promise</th><th>What it means</th><th>A common way to get it</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Read-your-writes</strong></td><td>You always see your own changes.</td><td>For a short time after a user writes (say, 10 s), send that user's reads to the leader. Or remember the LSN of their write, and only read from a follower that has replayed past it.</td></tr>
+        <tr><td><strong>Monotonic reads</strong></td><td>You never see time go backwards (new data, then old data on the next refresh).</td><td>Send each user to the same follower every time (for example, pick the follower by hashing the user ID).</td></tr>
+        <tr><td><strong>Consistent prefix</strong></td><td>You see changes in the order they happened (never an answer before its question).</td><td>Keep related data in the same shard, so one log orders it.</td></tr>
+      </tbody>
+    </table>
+    <h3>Measuring lag</h3>
+    <p>On the PostgreSQL leader, the view <code>pg_stat_replication</code> has one row per follower. Its columns <code>write_lag</code>, <code>flush_lag</code> and <code>replay_lag</code> show how long recent changes took to reach each step on that follower. On a follower you can ask:</p>
+    <pre><code>SELECT now() - pg_last_xact_replay_timestamp() AS replay_delay;</code></pre>
+    <p>This shows how old the last replayed transaction is. (Careful: if the leader has had no writes for a minute, this number grows even though the follower is fully caught up.)</p>
+    <h3>Worked example: lag that keeps growing</h3>
+    <p>During a sale, the leader produces 60 MB of WAL per second. One follower, on a slow disk, can only replay 50 MB per second. Every second it falls 10 MB further behind. After 10 minutes (600 s), it is 600 &times; 10 = 6,000 MB = about 6 GB behind. At normal load it catches up, but during the sale its reads get older and older. <strong>Lesson:</strong> followers need the same disk speed as the leader, and you need an alert on lag.</p>
+  </section>
+
+  <section id="failover">
+    <h2>6. Failover and Split Brain</h2>
+    <p>When the leader dies, something must pick a follower and make it the new leader. Doing it by hand is slow (someone must wake up). Doing it automatically is fast but tricky. The steps are:</p>
+    <ol>
+      <li><strong>Notice the leader is dead.</strong> Usually: "no heartbeat for 30 seconds". A <strong>heartbeat</strong> is a small "I am alive" message sent every few seconds.</li>
+      <li><strong>Choose the new leader.</strong> Pick the follower that is most up to date (the highest replayed LSN), so the least data is lost.</li>
+      <li><strong>Promote it</strong> (it starts accepting writes) and <strong>point the apps at it</strong>, usually by moving a DNS name or a virtual IP address, or by updating a proxy.</li>
+      <li><strong>Make sure the old leader cannot come back as a leader.</strong></li>
+    </ol>
+    <h3>Why step 4 matters: split brain</h3>
+    <p>"No heartbeat" does not always mean "dead". Maybe the old leader is fine, and only the network between it and the others broke. If a new leader is promoted while the old one still accepts writes, you now have <strong>two leaders</strong>. Some apps write to one, some to the other. Their data goes in two directions and cannot be simply merged. This is called <strong>split brain</strong>.</p>
+    <pre><code>   network partition
+          ┊
+ app A ──►┊   OLD LEADER  (still thinks it leads, takes order #9001)
+          ┊
+ app B ───┊──►NEW LEADER  (promoted, also takes an order #9001)
+          ┊
+ Two different orders with the same ID. Which one is real?</code></pre>
+    <p>The fixes:</p>
+    <ul>
+      <li><strong>Majority vote.</strong> A node may only be leader if a <em>majority</em> of nodes agree. With 3 nodes, a majority is 2. In a split, only one side can have 2 of the 3, so only one side can have a leader. This is the idea behind consensus protocols like <strong>Raft</strong>, used by etcd (the Kubernetes database, see <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-architecture.html">Kubernetes Architecture</a>). PostgreSQL tools such as Patroni use etcd to hold the "who is leader" lock.</li>
+      <li><strong>Fencing.</strong> Before the new leader starts, cut the old one off for sure: power it off, revoke its disk, or block it at the firewall. (The old joke name is STONITH: "shoot the other node in the head".)</li>
+      <li><strong>Leases.</strong> The leader holds a lock that expires, for example after 10 seconds. If it cannot renew the lock, it must stop taking writes by itself.</li>
+    </ul>
+    <div class="callout callout-intuition">
+      <p><strong>Why odd numbers?</strong> With 3 nodes, a majority is 2, so you survive 1 failure. With 4 nodes, a majority is 3, so you still survive only 1 failure. The 4th node adds cost but no safety. With 5 nodes you survive 2. In general, with <em>n</em> nodes the majority is <em>floor(n/2) + 1</em>, and you survive <em>n</em> minus that.</p>
+    </div>
+    <h3>The data-loss window</h3>
+    <p>With async replication, writes the old leader committed but did not send yet are lost after failover. If the chosen follower was 300 ms behind, the last 300 ms of commits are gone. Systems state this as the <strong>RPO</strong> (recovery point objective: how much data you can lose) and the <strong>RTO</strong> (recovery time objective: how long you can be down). A synchronous follower gives an RPO of zero.</p>
+  </section>
+
+  <section id="quorum">
+    <h2>7. Leaderless Replication and Quorums</h2>
+    <p>Some databases, inspired by Amazon's Dynamo paper (for example Cassandra and ScyllaDB), have <strong>no leader</strong>. The client (or a coordinator node) sends each write to several replicas at once, and reads from several replicas at once.</p>
+    <p>Three numbers control this:</p>
+    <ul>
+      <li><strong>N</strong> = how many replicas hold each piece of data.</li>
+      <li><strong>W</strong> = how many replicas must confirm a write before it counts as done.</li>
+      <li><strong>R</strong> = how many replicas you ask when you read. You take the newest value among the answers.</li>
+    </ul>
+    <p>The key rule: <strong>if W + R &gt; N, every read overlaps at least one replica that has the latest write.</strong></p>
+    <h3>Worked example: N = 3, W = 2, R = 2</h3>
+    <pre><code>write x = 7 (version 5):    A ✓   B ✓   C ✗ (was down, still has version 4)
+                            2 confirmations = W, so the write is done
+
+read x, ask any 2:
+   ask A, B  → 7 (v5), 7 (v5)          → answer 7
+   ask A, C  → 7 (v5), 3 (v4)          → newest is v5 → answer 7
+   ask B, C  → 7 (v5), 3 (v4)          → newest is v5 → answer 7
+
+W + R = 2 + 2 = 4 &gt; 3, so any 2 readers include at least 1 writer.</code></pre>
+    <p>Now try W = 1, R = 1. W + R = 2, which is not more than 3. A write might land only on A, and a read might ask only C, and get the old value. Fast, but stale reads are possible.</p>
+    <table>
+      <thead><tr><th>N, W, R</th><th>W + R &gt; N?</th><th>Survives</th><th>Feels like</th></tr></thead>
+      <tbody>
+        <tr><td>3, 2, 2</td><td>Yes (4 &gt; 3)</td><td>1 node down for both reads and writes</td><td>Balanced, the usual choice</td></tr>
+        <tr><td>3, 3, 1</td><td>Yes (4 &gt; 3)</td><td>Reads survive 2 down; writes fail if any node is down</td><td>Fast reads, fragile writes</td></tr>
+        <tr><td>3, 1, 3</td><td>Yes (4 &gt; 3)</td><td>Writes survive 2 down; reads fail if any node is down</td><td>Fast writes, fragile reads</td></tr>
+        <tr><td>3, 1, 1</td><td>No (2)</td><td>Up to 2 down</td><td>Very available, stale reads likely</td></tr>
+      </tbody>
+    </table>
+    <h3>How stale copies get fixed</h3>
+    <ul>
+      <li><strong>Read repair</strong>: when a read sees that C has an old version, it writes the new value back to C.</li>
+      <li><strong>Anti-entropy</strong>: a background job compares replicas and copies over what is missing. To compare quickly it uses a <strong>Merkle tree</strong>: a tree of hashes where each parent is a hash of its children. If the top hashes match, everything below matches, so you only dig into parts that differ.</li>
+      <li><strong>Hinted handoff</strong>: if C is down during a write, another node keeps a note ("this belongs to C") and hands it over when C comes back.</li>
+    </ul>
+    <h3>Two writes at the same time</h3>
+    <p>Without a leader, two clients can write the same key at once on different replicas. Which one wins? The simple rule is <strong>last write wins</strong> (LWW): keep the one with the later timestamp. But clocks on different machines are never exactly equal, so LWW can silently throw away a write. When that matters, systems keep both versions and let the app merge them (for example, a shopping cart keeps the union of both carts), or use special data types called <strong>CRDTs</strong> (conflict-free replicated data types), such as counters that can always be merged.</p>
+  </section>
+
+  <section id="sharding">
+    <h2>8. Sharding: Splitting the Data</h2>
+    <p>Replication copies <em>all</em> the data to every node. That does not help when the data is too big for one node, or when writes are too many for one leader. Then you <strong>shard</strong>: each shard holds some of the rows, and each shard has its own leader (and usually its own followers).</p>
+    <pre><code>                    router (knows which shard has which keys)
+                     ┌──────────────┼──────────────┐
+                     ▼              ▼              ▼
+                 SHARD 1         SHARD 2        SHARD 3
+              customers 1..    customers ..    customers ..
+              leader + 2       leader + 2      leader + 2
+              followers        followers       followers</code></pre>
+    <p>The big question: <strong>which shard does a row go to?</strong> That is decided by the <strong>shard key</strong>. There are three common methods.</p>
+    <h3>Range sharding</h3>
+    <p>Each shard gets a range of key values: customers A-H on shard 1, I-P on shard 2, Q-Z on shard 3. Range queries ("all orders from 1 to 7 November") are easy, because neighbours are stored together. The danger: if the key is a time or an increasing ID, all <em>new</em> rows go to the last shard, and that one shard does all the work. Systems like CockroachDB and HBase use ranges and split a range in two when it gets too big.</p>
+    <h3>Hash sharding</h3>
+    <p>Compute a <strong>hash</strong> of the key. A hash function turns any input into a number that looks random but is always the same for the same input. Then use the hash to pick a shard. Keys spread evenly, even if they arrive in order. The price: range queries must ask every shard, because neighbours are now scattered.</p>
+    <p>The simplest version is <code>shard = hash(key) mod N</code>, where N is the number of shards and "mod" means "the remainder after dividing". It has one big problem, shown next.</p>
+    <h3>Directory (lookup table) sharding</h3>
+    <p>Keep a small table that says "tenant 42 lives on shard 3". Very flexible: you can move one big customer to its own shard. But the directory must be fast, and always available, or nothing works.</p>
+  </section>
+
+  <section id="consistent-hashing">
+    <h2>9. Consistent Hashing (Real Experiment)</h2>
+    <h3>The problem with hash mod N</h3>
+    <p>Say you have 4 shards and use <code>hash(key) mod 4</code>. A key with hash 10 goes to shard 10 mod 4 = 2. Now you add a 5th shard. The same key goes to 10 mod 5 = 0. It must <strong>move</strong>. In fact, most keys move. Moving data is slow and risky, so this is bad.</p>
+    <h3>The hash ring</h3>
+    <p><strong>Consistent hashing</strong> fixes this. Imagine the hash values as a clock face (a ring). Put each shard at one or more points on the ring by hashing its name. To find a key's shard, hash the key, find that point on the ring, and walk clockwise to the first shard you meet.</p>
+    <pre><code>                 0
+            S1 ●   ● key "user:7" → walks clockwise → S2
+          ●              ● S2
+   S4 ●                      
+          ●              ●
+            ●   ● S3
+                 
+ Add S5 between S1 and S2: only keys in that one arc (S1 → S5)
+ move, from S2 to S5. Every other key stays where it was.</code></pre>
+    <p>One point per shard makes the arcs uneven: one shard can get a huge arc and most of the keys. The fix is <strong>virtual nodes</strong>: put each shard at many points (for example, hash "s1#0", "s1#1", ... "s1#99"). Many small arcs average out, so each shard gets about the same share.</p>
+    <h3>The experiment</h3>
+    <p>We ran this Python program (standard library only) on 100,000 keys, growing from 4 shards to 5. A perfect result would move exactly 1/5 = 20% of the keys (just enough to fill the new shard), and give each of the 5 shards 20,000 keys.</p>
+    <pre><code>import bisect, hashlib
+
+def h(s):  # stable 64-bit hash (Python's built-in hash() changes every run)
+    return int.from_bytes(hashlib.sha256(s.encode()).digest()[:8], "big")
+
+KEYS = [f"user:{i}" for i in range(100_000)]
+
+class Ring:
+    def __init__(self, shards, vnodes):
+        self.points = sorted((h(f"{s}#{v}"), s) for s in shards for v in range(vnodes))
+        self.hashes = [p for p, _ in self.points]
+    def owner(self, key):  # first point clockwise from the key's hash
+        i = bisect.bisect(self.hashes, h(key)) % len(self.points)
+        return self.points[i][1]
+
+def moved(before, after):
+    return sum(1 for k in KEYS if before(k) != after(k))
+
+print(moved(lambda k: h(k) % 4, lambda k: h(k) % 5))
+for v in (1, 10, 100, 200):
+    r4 = Ring([f"s{i}" for i in range(4)], v)
+    r5 = Ring([f"s{i}" for i in range(5)], v)
+    print(v, moved(r4.owner, r5.owner))</code></pre>
+    <p>Real output, with the keys-per-shard spread added:</p>
+    <pre><code>100000 keys, growing from 4 shards to 5
+hash mod N:              79888 keys moved (79.9%)
+ring,   1 vnodes/shard: 53016 keys moved (53.0%), keys per shard after: min 5374, max 53016
+ring,  10 vnodes/shard: 23797 keys moved (23.8%), keys per shard after: min 14112, max 28442
+ring, 100 vnodes/shard: 22372 keys moved (22.4%), keys per shard after: min 16500, max 22398
+ring, 200 vnodes/shard: 20803 keys moved (20.8%), keys per shard after: min 19098, max 20803
+hash mod 5 spread: min 19853, max 20320</code></pre>
+    <p>How to read it:</p>
+    <ul>
+      <li><strong>hash mod N moved 79.9% of all keys.</strong> That matches the math: a key stays only if <code>hash mod 4</code> equals <code>hash mod 5</code>, which happens for about 1 in 5 keys. So about 4 in 5 move.</li>
+      <li><strong>A ring with 1 point per shard moved 53%, and was badly unbalanced</strong>: the new shard landed on a huge arc and took 53,016 keys, while one shard kept only 5,374. Fewer moves, but a terrible spread.</li>
+      <li><strong>With 200 virtual nodes, only 20.8% moved</strong>, very close to the perfect 20%, and every shard holds between 19,098 and 20,803 keys.</li>
+    </ul>
+    <div class="callout">
+      <p><strong>In real systems.</strong> Cassandra and DynamoDB use rings with many tokens per node. Redis Cluster uses a fixed set of 16,384 <strong>hash slots</strong> (<code>slot = CRC16(key) mod 16384</code>) and moves whole slots between nodes. That is the same trick in another form: the number of slots never changes, so adding a node only moves the slots you choose to give it.</p>
+    </div>
+  </section>
+
+  <section id="hot-keys">
+    <h2>10. Hot Keys and Cross-Shard Queries</h2>
+    <h3>Hot keys</h3>
+    <p>Even spreading of keys is not the same as even spreading of <em>work</em>. If one celebrity's account gets a million reads per minute, the one shard that holds that account melts, no matter how good the hash is. This is a <strong>hot key</strong> (or hot spot).</p>
+    <ul>
+      <li>For hot <em>reads</em>: put a cache in front, or keep extra read copies of that key.</li>
+      <li>For hot <em>writes</em> (like a "likes" counter): split the key into pieces, such as <code>likes:post42:0</code> to <code>likes:post42:9</code>. Each write picks a random piece. A read adds up all 10. The work now spreads over up to 10 shards.</li>
+    </ul>
+    <h3>Choosing a shard key</h3>
+    <p>A good shard key:</p>
+    <ul>
+      <li>Has <strong>many different values</strong> (country is bad: only a few values, and one country may be huge).</li>
+      <li><strong>Spreads the work</strong> evenly (not a timestamp with range sharding).</li>
+      <li><strong>Matches the most common query</strong>, so that query touches one shard. For a shop, most queries are "this customer's orders", so <code>customer_id</code> is a good key. For a business app with many company customers, <code>tenant_id</code> (the company) is the usual key.</li>
+    </ul>
+    <h3>Cross-shard queries</h3>
+    <p>A query that includes the shard key goes to one shard: fast. A query that does not must ask <strong>every shard</strong> and combine the answers. This is called <strong>scatter-gather</strong>.</p>
+    <pre><code>SELECT * FROM orders WHERE customer_id = 42;        -- one shard (good)
+SELECT * FROM orders WHERE product_id = 'P9';       -- every shard, then merge
+SELECT COUNT(*) FROM orders WHERE day = '2026-11-21';  -- every shard, add the counts</code></pre>
+    <p>Scatter-gather is only as fast as the <strong>slowest</strong> shard. If each shard is slow 1% of the time, a query that asks 50 shards hits at least one slow shard 1 - 0.99<sup>50</sup> = about 39.5% of the time.</p>
+    <p>Writes that touch two shards (move money from a customer on shard 1 to one on shard 3) cannot use one normal transaction. They need <strong>two-phase commit</strong> (2PC): a coordinator first asks every shard "can you commit?" and only if all say yes, tells them all "commit". It works, but it is slow and blocks if the coordinator dies at the wrong moment. Good designs avoid most cross-shard writes by picking the shard key well.</p>
+    <p>A global unique ID is also harder: one auto-increment counter would be a bottleneck. Common choices are random UUIDs, or IDs built from "time + shard number + a counter" (Twitter's Snowflake design), which stay roughly sorted by time.</p>
+  </section>
+
+  <section id="cap">
+    <h2>11. The CAP Theorem and PACELC</h2>
+    <p>Now the big trade-off. Take two replicas, A and B, of the same data. The network between them breaks (a partition). A client sends a write to A. Another client then reads from B. What should B do?</p>
+    <pre><code>  client 1                         client 2
+     │ write x = 7                     │ read x
+     ▼                                 ▼
+     A  ────────── ✂ network cut ✂ ──── B   (B still has x = 3)
+
+  Option 1: B answers "x = 3"          → available, but not consistent
+  Option 2: B answers "error, try later" → consistent, but not available</code></pre>
+    <p>There is no third option. B cannot know about the write, because the message cannot get through. This is the <strong>CAP theorem</strong>: when a network <strong>P</strong>artition happens, a replicated system must choose between <strong>C</strong>onsistency and <strong>A</strong>vailability.</p>
+    <ul>
+      <li><strong>CP systems</strong> refuse some requests during a partition, so they never return stale data. Example: etcd and ZooKeeper (the minority side of a split stops accepting writes), a PostgreSQL cluster with a synchronous follower (writes stop if the follower is unreachable).</li>
+      <li><strong>AP systems</strong> keep answering on both sides, and fix up the differences later. Example: Cassandra with W = 1 and R = 1, DNS (see <a href="../Computer-Networks/cn-dns-http.html">DNS</a>: caches answer with old records until the TTL runs out).</li>
+    </ul>
+    <div class="callout callout-intuition">
+      <p><strong>Common misreading.</strong> People say "pick 2 of 3". That is misleading. You cannot "choose" to have no partitions: networks break whether you like it or not. The real statement is: <em>when</em> there is a partition, pick C or A. When the network is fine, you can have both.</p>
+    </div>
+    <h3>PACELC: the trade-off that happens every day</h3>
+    <p>Partitions are rare. A more useful rule for normal days is <strong>PACELC</strong>: if there is a <strong>P</strong>artition, choose <strong>A</strong> or <strong>C</strong>; <strong>E</strong>lse (normal times), choose low <strong>L</strong>atency or <strong>C</strong>onsistency. Waiting for other replicas before answering (synchronous replication, W = 3, reading from the leader) gives consistency but adds round trips. Answering right away from the nearest copy is fast but may be stale.</p>
+    <table>
+      <thead><tr><th>System (typical setup)</th><th>During a partition</th><th>Normal times</th></tr></thead>
+      <tbody>
+        <tr><td>Single PostgreSQL leader, async followers, reads from followers</td><td>Writes only where the leader is</td><td>Low latency reads, may be stale</td></tr>
+        <tr><td>etcd / ZooKeeper</td><td>C: minority side refuses writes</td><td>C: reads go through the leader</td></tr>
+        <tr><td>Cassandra, W = R = QUORUM</td><td>Requests that cannot reach a quorum fail</td><td>Pays latency for consistency</td></tr>
+        <tr><td>Cassandra, W = R = ONE</td><td>A: always answers</td><td>L: fastest, may be stale</td></tr>
+      </tbody>
+    </table>
+    <p>Most real systems let you choose per request. A bank balance check uses a strong read; a "people also viewed" list uses a fast, maybe-stale read.</p>
+  </section>
+
+  <section id="design">
+    <h2>12. Worked Design: Growing a Shop's Database</h2>
+    <p>Let us put it all together. The shop from section 1 grows in stages.</p>
+    <h3>Stage 1: one server goes down once a month</h3>
+    <p>Add <strong>two followers</strong>: one in the same region as a <strong>synchronous</strong> standby (no lost orders on failover), one in another region as an <strong>async</strong> copy for disasters. Use a tool like Patroni with a 3-node etcd for automatic failover (majority vote, no split brain). Apps connect through one DNS name or proxy that always points at the current leader.</p>
+    <h3>Stage 2: product pages are slow</h3>
+    <p>Send product browsing (reads that may be a second old) to followers. Keep checkout, the cart, and "my orders" on the leader for read-your-writes. Add an alert when <code>replay_lag</code> is over 5 seconds.</p>
+    <h3>Stage 3: the orders table is 4 TB and growing 300 GB a month</h3>
+    <p>Shard <code>orders</code> and <code>order_items</code> by <code>customer_id</code>, using hash slots so shards can be added later without moving most data. A customer's orders and their items live on the same shard, so "show my orders" is one shard, and placing an order is one normal transaction. The <code>products</code> table is small and read-heavy: copy it fully to every shard (a <strong>reference table</strong>) instead of sharding it.</p>
+    <h3>Stage 4: the finance team needs "revenue per day"</h3>
+    <p>That query crosses every shard. Do not run it on the live shards. Stream changes (logical replication, or a change-data-capture tool) into a separate analytics store and run reports there.</p>
+    <p>Notice the order: indexes and caching first, then replication, then sharding. Each step adds machines and new ways to fail, so take it only when the earlier step is not enough.</p>
+  </section>
+
+  <section id="pitfalls">
+    <h2>13. Common Pitfalls</h2>
+    <ul>
+      <li><strong>Reading your own write from a follower.</strong> Users see their change vanish. Route those reads to the leader, or wait for the write's LSN.</li>
+      <li><strong>Calling a follower a backup.</strong> A follower copies mistakes too: <code>DROP TABLE</code> on the leader drops it on every follower within milliseconds. You still need real backups with point-in-time recovery.</li>
+      <li><strong>Automatic failover without fencing.</strong> Leads to split brain and two diverging copies of the truth.</li>
+      <li><strong>Two-node clusters.</strong> With 2 nodes, neither side of a split has a majority, so either both stop or you risk split brain. Use 3 (or add a small "witness" node).</li>
+      <li><strong>A shard key nobody queries by.</strong> Every common query becomes scatter-gather.</li>
+      <li><strong>Range sharding on time or a growing ID.</strong> All new writes hit the last shard.</li>
+      <li><strong>hash mod N.</strong> Adding a shard moves almost all data (79.9% in our run). Use a ring with virtual nodes or fixed hash slots.</li>
+      <li><strong>Trusting clocks for "last write wins".</strong> Machine clocks drift, so the "later" write may really be the earlier one, and data is lost without any error.</li>
+      <li><strong>Forgetting lag on failover.</strong> With async replication, promoting a lagging follower loses recent commits. Know your RPO.</li>
+    </ul>
+  </section>
+
+  <section id="practice">
+    <h2>14. Practice Problems</h2>
+    <p>Work these out on paper. Answers follow each one.</p>
+
+    <h3>Problem 1: quorums</h3>
+    <p>N = 5. You want reads to always see the latest write, and you want writes to keep working when 2 nodes are down. What W and R do you choose?</p>
+    <p><em>Answer:</em> Writes must work with 3 nodes up, so W &le; 3. Reads must overlap writes, so W + R &gt; 5. With W = 3, R must be at least 3. Choose <strong>W = 3, R = 3</strong>. Reads also survive 2 nodes down.</p>
+
+    <h3>Problem 2: how many failures?</h3>
+    <p>An etcd cluster has 5 members. How many can fail before writes stop? What about 6 members?</p>
+    <p><em>Answer:</em> 5 members: majority is floor(5/2) + 1 = 3, so <strong>2</strong> can fail. 6 members: majority is 4, so still only <strong>2</strong> can fail. The 6th member adds nothing.</p>
+
+    <h3>Problem 3: lag math</h3>
+    <p>A follower is 900 MB behind. The leader now writes 20 MB/s of WAL, and the follower can replay 50 MB/s. How long until it has caught up?</p>
+    <p><em>Answer:</em> It gains 50 - 20 = 30 MB each second. 900 / 30 = <strong>30 seconds</strong>.</p>
+
+    <h3>Problem 4: sync or async?</h3>
+    <p>A payments service must never lose a confirmed payment. Its database leader is in Mumbai. Option A: a synchronous follower in Hyderabad (RTT 20 ms). Option B: a synchronous follower in another zone of the Mumbai region (RTT 1 ms) plus an async one in Hyderabad. Which is better and why?</p>
+    <p><em>Answer:</em> <strong>Option B.</strong> Both give zero data loss if the leader's machine dies, but B adds about 1 ms per commit instead of about 20 ms. The async Hyderabad copy still protects against losing the whole Mumbai region (with a small RPO). If you must survive a full region loss with zero data loss, you need A and must pay the 20 ms.</p>
+
+    <h3>Problem 5: keys that move</h3>
+    <p>You use <code>hash(key) mod N</code> and go from 10 shards to 11. About what fraction of keys move? With a good consistent-hashing ring, about what fraction?</p>
+    <p><em>Answer:</em> With mod, a key stays only when <code>h mod 10 = h mod 11</code>, about 1 in 11 keys, so about <strong>10/11 = 91%</strong> move. With a ring, only enough to fill the new shard: about <strong>1/11 = 9%</strong>.</p>
+
+    <h3>Problem 6: pick a shard key</h3>
+    <p>A chat app stores messages. The main screen shows "the last 50 messages in this chat room". Candidates: <code>message_id</code> (random), <code>sent_at</code> (time), <code>room_id</code>. Which one, and what could still go wrong?</p>
+    <p><em>Answer:</em> <strong><code>room_id</code></strong> (hashed): the main query touches one shard, and a room's messages are stored together in order. <code>message_id</code> would scatter one room over all shards; <code>sent_at</code> with ranges would send all new messages to one shard. What can still go wrong: one giant room (a hot key). For very large rooms, split by <code>(room_id, month)</code> or give them their own shard.</p>
+
+    <h3>Problem 7: CAP in practice</h3>
+    <p>During a partition, a shopping cart service can either show "error, try again" or let the user add items to a cart copy that may be stale. A seat booking system for a concert can do the same. Which should choose which?</p>
+    <p><em>Answer:</em> The cart should choose <strong>availability</strong>: merging two carts later (union of items) is easy and users hate errors. Seat booking should choose <strong>consistency</strong>: selling one seat to two people cannot be fixed later, so refuse bookings on the minority side.</p>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>15. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Idea</th><th>One-line rule</th></tr></thead>
+      <tbody>
+        <tr><td>Replication</td><td>Same data on many nodes: for failover and more reads</td></tr>
+        <tr><td>Sharding</td><td>Different data on each node: for more data and more writes</td></tr>
+        <tr><td>Async replication</td><td>Fast commits; may lose the last few writes on failover</td></tr>
+        <tr><td>Sync replication</td><td>No lost commits; each commit waits at least one RTT</td></tr>
+        <tr><td>Read-your-writes</td><td>Read from the leader just after a write, or wait for the write's LSN</td></tr>
+        <tr><td>Majority</td><td>floor(n/2) + 1; use odd n (3 or 5)</td></tr>
+        <tr><td>Split brain</td><td>Prevent with majority votes, fencing, and leases</td></tr>
+        <tr><td>Quorum</td><td>W + R &gt; N means reads see the latest write</td></tr>
+        <tr><td>hash mod N</td><td>Adding a shard moves about N/(N+1) of keys (79.9% for 4 to 5 in our run)</td></tr>
+        <tr><td>Consistent hashing</td><td>Adding a shard moves about 1/(N+1) of keys; use many virtual nodes</td></tr>
+        <tr><td>Shard key</td><td>Many values, even load, matches the main query</td></tr>
+        <tr><td>CAP</td><td>During a partition, pick consistency (refuse) or availability (maybe stale)</td></tr>
+        <tr><td>PACELC</td><td>Otherwise, pick latency or consistency</td></tr>
+      </tbody>
+    </table>
+    <pre><code>-- PostgreSQL: follower status, run on the leader
+SELECT client_addr, state, sync_state, write_lag, flush_lag, replay_lag
+FROM pg_stat_replication;
+
+-- PostgreSQL: how old is the last replayed change, run on a follower
+SELECT now() - pg_last_xact_replay_timestamp() AS replay_delay;
+
+-- PostgreSQL: am I a follower?
+SELECT pg_is_in_recovery();</code></pre>
+    <p class="refer-link"><small>Refer: <a href="https://www.postgresql.org/docs/current/warm-standby.html" rel="noopener noreferrer">PostgreSQL: Log-Shipping Standby Servers</a> &middot; <a href="https://www.postgresql.org/docs/current/runtime-config-replication.html" rel="noopener noreferrer">PostgreSQL: Replication Settings</a> &middot; <a href="https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW" rel="noopener noreferrer">pg_stat_replication</a> &middot; <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf" rel="noopener noreferrer">Dynamo paper (2007)</a> &middot; <a href="https://raft.github.io/" rel="noopener noreferrer">The Raft consensus algorithm</a> &middot; <a href="https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/" rel="noopener noreferrer">Redis Cluster specification</a></small></p>
+  </section>
+
+  <!-- prev-next:start -->
+  <nav class="prev-next" aria-label="Reading order">
+    <a class="prev-next-prev" href="dbms-indexing-btrees-query-plans.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">Indexing, B+ Trees &amp; Query Plans</span></a>
+    <a class="prev-next-next" href="../Computer-Networks/cn-ip-addressing-subnetting-routing.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">IP Addressing, Subnetting &amp; Routing</span></a>
+    <p class="prev-next-step">Page 8 of 15 in the suggested reading order</p>
+  </nav>
+  <!-- prev-next:end -->
+
+  <nav class="page-footer-nav">
+    <p>Related: <a href="dbms-transactions-isolation-mvcc.html">Transactions, Isolation Levels &amp; MVCC</a> &middot; <a href="dbms-indexing-btrees-query-plans.html">Indexing, B+ Trees &amp; Query Plans</a> &middot; <a href="../Scenarios/scenario-slow-api-debugging.html">Scenario: Debugging a Slow API</a> &middot; <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-storage.html">Kubernetes Storage</a></p>
+    <p><a href="../cs-fundamentals-learn.html">Back to CS Fundamentals Learn</a></p>
+  </nav>
+</main>
+
+<footer>
+  <p><small><a href="../../cs-fundamentals.html">Back to CS Fundamentals</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

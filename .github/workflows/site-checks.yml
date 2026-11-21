@@ -29,3 +29,9 @@ jobs:
 
       - name: Internal links and #anchors resolve
         run: python3 scripts/check-links.py
+
+      - name: Reading-order links are up to date
+        run: python3 scripts/update-prev-next.py --check
+
+      - name: Page basics (title, description, viewport, one h1, unique ids)
+        run: python3 scripts/check-pages.py

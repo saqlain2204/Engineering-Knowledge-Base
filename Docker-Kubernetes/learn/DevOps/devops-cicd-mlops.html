@@ -243,6 +243,7 @@ spec:
 
   <section id="releases">
     <h2>5. Release Strategies and Rollbacks</h2>
+    <p>Every strategy below replaces pods, so each one depends on pods starting and stopping cleanly. How maxSurge and maxUnavailable pace a rolling update is worked step by step in <a href="../Kubernetes/kubernetes-autoscaling-probes-rollouts.html#rolling">Rolling Updates, Step by Step</a>, and a measured walkthrough of why releases cause 502 errors is in <a href="../../../CS-Fundamentals/learn/Scenarios/scenario-errors-during-deploys.html">Scenario: Errors During Every Deploy</a>.</p>
     <table>
       <thead><tr><th>Strategy</th><th>How it works</th><th>Good</th><th>Watch out</th></tr></thead>
       <tbody>
@@ -549,8 +550,15 @@ print(psi(m.predict_proba(Xtr)[:, 1], m.predict_proba(Xprod)[:, 1]))</code></pre
     <p class="refer-link"><small>Refer: <a href="https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions" rel="noopener noreferrer">GitHub Actions workflow syntax</a> &middot; <a href="https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/about-security-hardening-with-openid-connect" rel="noopener noreferrer">GitHub: OIDC for deployments</a> &middot; <a href="https://argo-cd.readthedocs.io/en/stable/" rel="noopener noreferrer">Argo CD docs</a> &middot; <a href="https://argoproj.github.io/argo-rollouts/" rel="noopener noreferrer">Argo Rollouts docs</a> &middot; <a href="https://kserve.github.io/website/" rel="noopener noreferrer">KServe docs</a> &middot; <a href="https://mlflow.org/docs/latest/index.html" rel="noopener noreferrer">MLflow docs</a> &middot; <a href="https://github.com/rhysd/actionlint" rel="noopener noreferrer">actionlint</a> &middot; <a href="https://github.com/yannh/kubeconform" rel="noopener noreferrer">kubeconform</a> &middot; <a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" rel="noopener noreferrer">Google Cloud: MLOps continuous delivery and automation pipelines</a></small></p>
   </section>
 
+  <!-- prev-next:start -->
+  <nav class="prev-next" aria-label="Reading order">
+    <a class="prev-next-prev" href="../Kubernetes/kubernetes-gpu-scheduling.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">GPU Scheduling on Kubernetes</span></a>
+    <p class="prev-next-step">Page 12 of 12 in the suggested reading order</p>
+  </nav>
+  <!-- prev-next:end -->
+
   <nav class="page-footer-nav">
-    <p>Related: <a href="../Docker/docker-advanced.html">Advanced Docker</a> &middot; <a href="../Kubernetes/kubernetes-workloads.html">Workloads</a> &middot; <a href="../Kubernetes/kubernetes-helm-observability.html">Helm &amp; Observability</a> &middot; <a href="../Kubernetes/kubernetes-gpu-scheduling.html">GPU Scheduling</a></p>
+    <p>Related: <a href="../Docker/docker-advanced.html">Advanced Docker</a> &middot; <a href="../Kubernetes/kubernetes-workloads.html">Workloads</a> &middot; <a href="../Kubernetes/kubernetes-autoscaling-probes-rollouts.html">Autoscaling, Probes &amp; Rollouts</a> &middot; <a href="../../../CS-Fundamentals/learn/Scenarios/scenario-errors-during-deploys.html">Scenario: Errors During Every Deploy</a> &middot; <a href="../Kubernetes/kubernetes-helm-observability.html">Helm &amp; Observability</a> &middot; <a href="../Kubernetes/kubernetes-gpu-scheduling.html">GPU Scheduling</a></p>
     <p><a href="../docker-kubernetes-learn.html">Back to Docker &amp; Kubernetes Learn</a></p>
   </nav>
 </main>

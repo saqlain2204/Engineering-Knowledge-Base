@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>TLS, HTTPS &amp; Certificates | CS Fundamentals</title>
+  <meta name="description" content="TLS from zero: what HTTPS protects, symmetric and public-key encryption in plain words, Diffie-Hellman with small numbers you can check by hand, digital signatures, certificates and the chain of trust, the TLS 1.3 handshake read from real openssl output, session resumption and 0-RTT, a hands-on lab that makes a CA and breaks certificates on purpose (wrong name, unknown issuer, expired, missing intermediate), Let's Encrypt and certificate expiry, mutual TLS, TLS at load balancers, practice problems, and a cheat sheet.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../cs-fundamentals.html">CS Fundamentals</a> &rsaquo; <a href="../cs-fundamentals-learn.html">Learn</a> &rsaquo; TLS, HTTPS &amp; Certificates</p>
+  </nav>
+  <h1>TLS, HTTPS &amp; Certificates</h1>
+  <p>The small lock icon in your browser means the page came over <strong>TLS</strong> (Transport Layer Security). TLS lets two computers that have never met talk privately over a network that anyone could be listening to, and lets your browser check that it is really talking to your bank and not to someone pretending. This page builds TLS from zero, then runs a real lab: we make our own certificate authority, run a TLS server, and break it on purpose to see every common error. It builds on <a href="cn-tcp-deep-dive.html">TCP</a> and <a href="cn-dns-http.html">DNS &amp; HTTP</a>.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#why">What Could Go Wrong Without TLS</a></li>
+    <li><a href="#locks">Two Kinds of Locks: Symmetric and Public-Key</a></li>
+    <li><a href="#dh">Agreeing on a Secret in Public: Diffie-Hellman by Hand</a></li>
+    <li><a href="#signatures">Digital Signatures: Proving Who Wrote It</a></li>
+    <li><a href="#certificates">Certificates and the Chain of Trust</a></li>
+    <li><a href="#handshake">The TLS 1.3 Handshake, Step by Step</a></li>
+    <li><a href="#resumption">Resumption and 0-RTT</a></li>
+    <li><a href="#lab">Lab: Make a CA, Run a Server, Break It on Purpose</a></li>
+    <li><a href="#errors">Reading TLS Errors</a></li>
+    <li><a href="#lifecycle">Getting and Renewing Certificates</a></li>
+    <li><a href="#mtls">Mutual TLS: When the Server Checks the Client Too</a></li>
+    <li><a href="#load-balancers">TLS at Load Balancers and Proxies</a></li>
+    <li><a href="#pitfalls">Common Pitfalls</a></li>
+    <li><a href="#practice">Practice Problems</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="why">
+    <h2>1. What Could Go Wrong Without TLS</h2>
+    <p>When you send a request over plain HTTP, the bytes pass through many machines: your Wi-Fi router, your internet provider, several routers between cities, and the website's data center. Any of them could do three bad things:</p>
+    <table>
+      <thead><tr><th>Attack</th><th>Example</th><th>What TLS gives you</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Read</strong> (eavesdrop)</td><td>Someone on café Wi-Fi sees your password</td><td><strong>Confidentiality</strong>: the bytes are encrypted, so they look like random noise</td></tr>
+        <tr><td><strong>Change</strong> (tamper)</td><td>A network inserts ads into a page, or changes a bank account number</td><td><strong>Integrity</strong>: any change is detected and the connection is closed</td></tr>
+        <tr><td><strong>Pretend</strong> (impersonate)</td><td>A fake server answers for <code>mybank.com</code></td><td><strong>Authentication</strong>: the server proves it owns the name, using a certificate</td></tr>
+      </tbody>
+    </table>
+    <p><strong>HTTPS</strong> is just HTTP sent inside a TLS connection, usually on port 443. TLS sits between TCP and HTTP:</p>
+    <pre><code>  HTTP        GET /account  (readable only at the two ends)
+  ─────────────────────────────────────────────
+  TLS         encrypts + protects + proves identity
+  ─────────────────────────────────────────────
+  TCP         reliable byte stream (port 443)
+  ─────────────────────────────────────────────
+  IP          packets between addresses</code></pre>
+    <div class="callout callout-intuition">
+      <p><strong>Intuition.</strong> Encryption alone is not enough. If you encrypt perfectly but to the <em>wrong</em> person, the attacker just reads it. That is why authentication (certificates) is the hardest and most important part of TLS.</p>
+    </div>
+    <p>A note on names: the old name was <strong>SSL</strong>. SSL and TLS 1.0 and 1.1 are all broken or retired. Use TLS 1.2 or, better, <strong>TLS 1.3</strong>. People still say "SSL certificate"; it means the same thing as a TLS certificate.</p>
+  </section>
+
+  <section id="locks">
+    <h2>2. Two Kinds of Locks: Symmetric and Public-Key</h2>
+    <h3>Symmetric encryption: one shared key</h3>
+    <p>In <strong>symmetric</strong> encryption, the same key locks and unlocks. Both sides must have it. It is very fast: modern CPUs have special instructions for <strong>AES</strong> (the Advanced Encryption Standard), so they can encrypt gigabytes per second. TLS uses symmetric encryption for all the real data.</p>
+    <p>The problem: how do two strangers get the same secret key, when everything they send can be read?</p>
+    <h3>Public-key (asymmetric) cryptography: a key pair</h3>
+    <p>Here each side has two keys that belong together:</p>
+    <ul>
+      <li>a <strong>private key</strong>, kept secret, never sent anywhere;</li>
+      <li>a <strong>public key</strong>, given to anyone.</li>
+    </ul>
+    <p>What one key does, only the other can check or undo. This gives two powers: other people can create a shared secret with you (section 3), and you can <strong>sign</strong> things so anyone can check you wrote them (section 4). Public-key math is much slower than AES, so TLS uses it only during the start of the connection, the <strong>handshake</strong>.</p>
+    <table>
+      <thead><tr><th></th><th>Symmetric (AES, ChaCha20)</th><th>Public-key (ECDHE, RSA, ECDSA)</th></tr></thead>
+      <tbody>
+        <tr><td>Keys</td><td>One shared secret</td><td>A private and public pair</td></tr>
+        <tr><td>Speed</td><td>Very fast</td><td>Slow</td></tr>
+        <tr><td>Used in TLS for</td><td>All application data</td><td>Agreeing on keys, and proving identity</td></tr>
+      </tbody>
+    </table>
+    <p>TLS also adds a <strong>tag</strong> to every encrypted record, a short code computed from the key and the data. If even one bit is changed in transit, the tag no longer matches. Ciphers that encrypt and tag in one step are called <strong>AEAD</strong> (authenticated encryption with associated data), for example AES-GCM and ChaCha20-Poly1305. This is how TLS gives integrity.</p>
+  </section>
+
+  <section id="dh">
+    <h2>3. Agreeing on a Secret in Public: Diffie-Hellman by Hand</h2>
+    <p><strong>Diffie-Hellman</strong> (DH) is a trick that lets two people create the same secret number while an eavesdropper sees every message and still cannot work it out. Let us do it with tiny numbers. ("mod 23" means "the remainder after dividing by 23".)</p>
+    <ol>
+      <li>Everyone agrees on two public numbers: <strong>p = 23</strong> and <strong>g = 5</strong>.</li>
+      <li>Alice picks a secret <strong>a = 6</strong>. She sends <code>A = 5<sup>6</sup> mod 23</code>. 5<sup>6</sup> = 15,625, and 15,625 mod 23 = <strong>8</strong>. She sends 8.</li>
+      <li>Bob picks a secret <strong>b = 15</strong>. He sends <code>B = 5<sup>15</sup> mod 23 = 19</code>.</li>
+      <li>Alice computes <code>B<sup>a</sup> mod 23 = 19<sup>6</sup> mod 23 = 2</code>.</li>
+      <li>Bob computes <code>A<sup>b</sup> mod 23 = 8<sup>15</sup> mod 23 = 2</code>.</li>
+    </ol>
+    <p>Both get <strong>2</strong>. It works because both are really computing 5<sup>6 &times; 15</sup> mod 23. The eavesdropper saw 23, 5, 8 and 19, but never 6 or 15. To find the secret they would have to undo "5 to the power of something mod 23", which is easy for 23 but practically impossible for the huge numbers used in real life. You can check the numbers yourself in Python:</p>
+    <pre><code>p, g, a, b = 23, 5, 6, 15
+A, B = pow(g, a, p), pow(g, b, p)
+print(A, B, pow(B, a, p), pow(A, b, p))   # prints: 8 19 2 2</code></pre>
+    <p>Real TLS uses the same idea on <strong>elliptic curves</strong> (a different kind of math where the same "easy one way, hard to undo" property holds with smaller keys). The curve named <strong>X25519</strong> is the common choice. In TLS 1.3, both sides make a fresh random secret for <em>every</em> connection and throw it away afterwards. This is called <strong>ephemeral</strong> DH (the "E" in ECDHE). It gives <strong>forward secrecy</strong>: even if the server's private key is stolen next year, recorded old traffic still cannot be decrypted, because those session secrets no longer exist anywhere.</p>
+    <div class="callout">
+      <p><strong>Post-quantum key exchange.</strong> In our lab below, the connection used a group called <code>X25519MLKEM768</code>. That is a <em>hybrid</em>: it combines classic X25519 with <strong>ML-KEM</strong>, a newer method designed to resist attacks by future quantum computers. The secret is safe if <em>either</em> part holds. Recent browsers and OpenSSL 3.5 pick it by default.</p>
+    </div>
+    <p>But DH alone has a hole: Alice does not know that "19" really came from Bob. A person in the middle could do one DH exchange with Alice and another with Bob, and read everything. Fixing that needs signatures and certificates.</p>
+  </section>
+
+  <section id="signatures">
+    <h2>4. Digital Signatures: Proving Who Wrote It</h2>
+    <p>A <strong>digital signature</strong> works like this:</p>
+    <ol>
+      <li>The signer takes a message, makes a short fingerprint of it with a <strong>hash function</strong> (like SHA-256, which turns any input into a fixed 32-byte value that changes completely if the input changes at all).</li>
+      <li>They compute a signature from that hash using their <strong>private key</strong>.</li>
+      <li>Anyone with the <strong>public key</strong> can check that the signature matches the message. Nobody without the private key can make a valid signature.</li>
+    </ol>
+    <p>In the TLS handshake, the server signs the handshake messages so far (including its DH value) with its private key. The client checks the signature with the server's public key. Now the person in the middle cannot swap the DH value, because they cannot sign as the server.</p>
+    <p>One question remains: how does the client know which public key belongs to <code>mybank.com</code>? That is what certificates are for.</p>
+  </section>
+
+  <section id="certificates">
+    <h2>5. Certificates and the Chain of Trust</h2>
+    <p>A <strong>certificate</strong> is a small signed document that says: "the public key <em>K</em> belongs to the name <em>shop.test</em>, valid from date X to date Y". It is signed by a <strong>certificate authority</strong> (CA): an organization that checks you really control the name before signing.</p>
+    <p>Here are the main fields of the certificate from our lab, printed with <code>openssl x509 -noout -subject -issuer -dates -ext subjectAltName,extendedKeyUsage</code> (real output; the dates are in GMT):</p>
+    <pre><code>subject=CN=shop.test
+issuer=CN=Demo Intermediate CA
+notBefore=Nov 21 08:53:06 2026 GMT
+notAfter=Feb 19 08:53:06 2027 GMT
+X509v3 Subject Alternative Name:
+    DNS:shop.test, DNS:www.shop.test
+X509v3 Extended Key Usage:
+    TLS Web Server Authentication</code></pre>
+    <table>
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Subject / CN</td><td>Who the certificate is for. CN means "common name". Clients today <em>ignore</em> CN for checking the name.</td></tr>
+        <tr><td>Subject Alternative Name (SAN)</td><td>The list of names the certificate is valid for. <strong>This is what clients check.</strong> <code>*.shop.test</code> would match <code>www.shop.test</code> but not <code>shop.test</code> or <code>a.b.shop.test</code>.</td></tr>
+        <tr><td>Issuer</td><td>Which CA signed it.</td></tr>
+        <tr><td>notBefore / notAfter</td><td>The dates it is valid. Outside them, clients reject it.</td></tr>
+        <tr><td>Public key</td><td>The server's public key.</td></tr>
+        <tr><td>Key usage, extended key usage</td><td>What the key may be used for (for example, "TLS server", or "may sign other certificates").</td></tr>
+        <tr><td>Signature</td><td>The issuer's signature over all of the above.</td></tr>
+      </tbody>
+    </table>
+    <h3>The chain of trust</h3>
+    <p>Your computer and browser come with a list of about 150 trusted <strong>root CAs</strong>, the <strong>trust store</strong>. Root CA private keys are kept offline in safes, so roots rarely sign servers directly. Instead, a root signs an <strong>intermediate CA</strong>, and the intermediate signs servers (the <strong>leaf</strong> certificates).</p>
+    <pre><code>  Demo Root CA              (in the client's trust store; signs itself)
+       │ signs
+       ▼
+  Demo Intermediate CA      (sent by the server)
+       │ signs
+       ▼
+  shop.test                 (the leaf, sent by the server)</code></pre>
+    <p>To check a leaf, the client walks up: is the leaf signed by the intermediate? Is the intermediate signed by a root I trust? Are all of them within their dates? Does the leaf's SAN list contain the name I typed? If every answer is yes, the certificate is trusted.</p>
+    <div class="callout callout-intuition">
+      <p><strong>The server must send the intermediate.</strong> The client has the roots but usually not the intermediates. If the server sends only its leaf, the client cannot connect the leaf to a root, and fails with "unable to get local issuer certificate". Some browsers hide this mistake by fetching or caching intermediates, so the site "works in Chrome" but fails in curl, Python, or Java. Always serve the <strong>full chain</strong>: leaf first, then intermediates. Do not send the root.</p>
+    </div>
+    <h3>Revocation</h3>
+    <p>If a private key is stolen, the certificate should be <strong>revoked</strong> (cancelled) before it expires. CAs publish lists of revoked certificates (CRLs) and answer live checks (OCSP). In practice these checks are slow and often skipped, which is one reason the industry is moving to <strong>short-lived certificates</strong>: a stolen certificate that expires soon does less harm.</p>
+  </section>
+
+  <section id="handshake">
+    <h2>6. The TLS 1.3 Handshake, Step by Step</h2>
+    <p>After the TCP handshake, TLS needs <strong>one round trip</strong> before the client can send its HTTP request. We captured the real messages with <code>openssl s_client -msg</code> (lines shortened):</p>
+    <pre><code>&gt;&gt;&gt; TLS 1.3, Handshake [length 05f8], ClientHello
+&lt;&lt;&lt; TLS 1.3, Handshake [length 04ba], ServerHello
+&lt;&lt;&lt; TLS 1.3, ChangeCipherSpec [length 0001]
+&lt;&lt;&lt; TLS 1.3, Handshake [length 0006], EncryptedExtensions
+&lt;&lt;&lt; TLS 1.3, Handshake [length 01c2], Certificate
+&lt;&lt;&lt; TLS 1.3, Handshake [length 004e], CertificateVerify
+&lt;&lt;&lt; TLS 1.3, Handshake [length 0034], Finished
+&gt;&gt;&gt; TLS 1.3, ChangeCipherSpec [length 0001]
+     (then the client's Finished and the first HTTP request)</code></pre>
+    <p>(<code>&gt;&gt;&gt;</code> is client to server, <code>&lt;&lt;&lt;</code> is server to client. Lengths are in hex: <code>05f8</code> = 1,528 bytes. The ClientHello is big here because the post-quantum key share is large.)</p>
+    <pre><code>client                                              server
+  │  ClientHello: versions, ciphers, key share,          │
+  │               SNI = "shop.test"  ───────────────────►│
+  │                                                      │ picks cipher, makes
+  │◄──────────── ServerHello: its key share              │ its own key share
+  │     (both sides can now compute the shared secret;   │
+  │      everything below is ENCRYPTED)                  │
+  │◄──────────── EncryptedExtensions                     │
+  │◄──────────── Certificate (leaf + intermediates)      │
+  │◄──────────── CertificateVerify (signature)           │
+  │◄──────────── Finished                                │
+  │ check chain, name, dates, signature                  │
+  │  Finished + GET / ──────────────────────────────────►│
+  │◄───────────────────────────────────── HTTP response  │</code></pre>
+    <ol>
+      <li><strong>ClientHello.</strong> The client lists the TLS versions and cipher suites it supports, sends its DH key share (it guesses which group the server likes), and names the site it wants in the <strong>SNI</strong> field (Server Name Indication). SNI lets one IP address host many HTTPS sites: the server reads the name and picks the matching certificate.</li>
+      <li><strong>ServerHello.</strong> The server picks the cipher suite and sends its key share. Now both sides do the DH math and get the same secret. From here on, all handshake messages are encrypted.</li>
+      <li><strong>Certificate</strong> carries the leaf and intermediates. <strong>CertificateVerify</strong> is the server's signature over the handshake so far, made with the private key matching the certificate. This proves the server owns the certificate and that nobody changed the key shares.</li>
+      <li><strong>Finished</strong> (both sides) is a check value over the whole handshake. If an attacker changed any message (for example, removed the strongest cipher from the list), the Finished values do not match and the connection fails.</li>
+    </ol>
+    <p>The <code>ChangeCipherSpec</code> lines are empty leftovers kept only so old middleboxes (firewalls that expect TLS 1.2) do not break the connection.</p>
+    <p>openssl's summary for this connection (real output, <code>-brief</code>):</p>
+    <pre><code>CONNECTION ESTABLISHED
+Protocol version: TLSv1.3
+Ciphersuite: TLS_AES_256_GCM_SHA384
+Peer certificate: CN=shop.test
+Hash used: SHA256
+Signature type: ecdsa_secp256r1_sha256
+Verification: OK
+Verified peername: shop.test
+Negotiated TLS1.3 group: X25519MLKEM768</code></pre>
+    <p>Read it as: TLS 1.3; data encrypted with AES-256 in GCM mode; the server signed with an ECDSA key on the P-256 curve; the chain and the name checked out; the key exchange used the hybrid post-quantum group.</p>
+    <h3>Why TLS 1.3 is faster than 1.2</h3>
+    <p>TLS 1.2 needed <strong>two</strong> round trips before data could flow, because the client first learned which key exchange the server wanted, and only then sent its share. TLS 1.3 sends the key share in the first message, saving a round trip. On a link with a 120 ms RTT, that is 120 ms saved on every new connection. (The <a href="cn-tcp-deep-dive.html#page-load">page-load budget</a> on the TCP page adds this up end to end.)</p>
+  </section>
+
+  <section id="resumption">
+    <h2>7. Resumption and 0-RTT</h2>
+    <p>After a handshake, the server can give the client a <strong>session ticket</strong>: an encrypted blob that lets the client <strong>resume</strong> later with a shared key (a PSK, pre-shared key) instead of checking the full certificate chain again. Resumption still takes one round trip, but less CPU work.</p>
+    <p>We measured both on the same machine, client and server both on localhost (so there is almost no network delay and the numbers show only CPU and memory work), with Python's <code>ssl</code> module, 200 handshakes each, two runs:</p>
+    <pre><code>full handshake  median 0.89 ms over 200
+resumed         median 0.54 ms, reused=200/200
+full handshake  median 0.90 ms over 200
+resumed         median 0.58 ms, reused=200/200</code></pre>
+    <p>So on this machine, a full handshake cost under 1 ms of computer time, and resumption cut that by roughly a third. Over a real network, the <strong>round trip</strong> (tens or hundreds of milliseconds) is far bigger than this CPU time. That is why reusing connections (HTTP keep-alive and connection pools) matters much more than tuning crypto.</p>
+    <h3>0-RTT (early data)</h3>
+    <p>With a ticket, a TLS 1.3 client may send its first request <em>inside</em> the very first message, with zero round trips of waiting. The catch: an attacker who records that first message can <strong>replay</strong> it (send it again). So 0-RTT is only safe for requests that do no harm when repeated, like <code>GET /logo.png</code>, never for "pay ₹500". Servers usually allow early data only for safe, idempotent methods (see <a href="cn-dns-http.html#methods">HTTP methods</a>).</p>
+  </section>
+
+  <section id="lab">
+    <h2>8. Lab: Make a CA, Run a Server, Break It on Purpose</h2>
+    <p>Everything below was run with OpenSSL 3.5 on Linux. You can copy it into a terminal in an empty folder. We use the made-up name <code>shop.test</code> (the <code>.test</code> ending is reserved for testing and never exists on the internet).</p>
+    <h3>Step 1: a root CA</h3>
+    <pre><code>openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+  -keyout ca.key -out ca.crt -days 3650 -subj "/CN=Demo Root CA" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign"</code></pre>
+    <p><code>-x509</code> makes a self-signed certificate (a root signs itself). <code>-nodes</code> means "do not password-protect the key" (fine for a lab, not for real CAs). <code>basicConstraints CA:TRUE</code> marks it as allowed to sign other certificates.</p>
+    <h3>Step 2: an intermediate CA, signed by the root</h3>
+    <pre><code>openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+  -keyout int.key -out int.csr -subj "/CN=Demo Intermediate CA"
+printf "basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign\n" &gt; int.cnf
+openssl x509 -req -in int.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out int.crt -days 1825 -extfile int.cnf</code></pre>
+    <p>A <strong>CSR</strong> (certificate signing request) is the public key plus the requested name, signed by the requester. The CA turns it into a certificate. <code>pathlen:0</code> means this intermediate may sign leaves but not more CAs.</p>
+    <h3>Step 3: the server's leaf certificate</h3>
+    <pre><code>openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+  -keyout leaf.key -out leaf.csr -subj "/CN=shop.test"
+printf "subjectAltName=DNS:shop.test,DNS:www.shop.test\nextendedKeyUsage=serverAuth\n" &gt; ext.cnf
+openssl x509 -req -in leaf.csr -CA int.crt -CAkey int.key -CAcreateserial \
+  -out leaf.crt -days 90 -extfile ext.cnf</code></pre>
+    <h3>Step 4: check the chain offline</h3>
+    <pre><code>$ openssl verify -CAfile ca.crt leaf.crt
+CN=shop.test
+error 20 at 0 depth lookup: unable to get local issuer certificate
+error leaf.crt: verification failed
+
+$ openssl verify -CAfile ca.crt -untrusted int.crt leaf.crt
+leaf.crt: OK</code></pre>
+    <p>Real output. The first check fails because nothing links the leaf to the root. Giving the intermediate (<code>-untrusted</code> means "use this to build the chain, but do not trust it by itself") fixes it.</p>
+    <h3>Step 5: run servers and connect</h3>
+    <pre><code># server that sends only the leaf (a common mistake)
+openssl s_server -accept 8444 -cert leaf.crt -key leaf.key -www -quiet &amp;
+# server that sends leaf + intermediate (correct)
+openssl s_server -accept 8445 -cert leaf.crt -cert_chain int.crt -key leaf.key -www -quiet &amp;
+
+echo | openssl s_client -connect 127.0.0.1:8445 -verify_hostname shop.test \
+  -CAfile ca.crt -verify_return_error</code></pre>
+    <p>Real results, trimmed to the verification lines:</p>
+    <pre><code>port 8444 (leaf only):
+  depth=0 CN=shop.test
+  verify error:num=20:unable to get local issuer certificate
+  Verification error: unable to get local issuer certificate
+
+port 8445 (full chain):
+  depth=2 CN=Demo Root CA           verify return:1
+  depth=1 CN=Demo Intermediate CA   verify return:1
+  depth=0 CN=shop.test              verify return:1
+   0 s:CN=shop.test              i:CN=Demo Intermediate CA
+   1 s:CN=Demo Intermediate CA   i:CN=Demo Root CA</code></pre>
+    <p>"depth" counts up from the leaf (0). <code>s:</code> is the subject and <code>i:</code> the issuer of each certificate the server sent. Each <code>i:</code> must match the next line's <code>s:</code>.</p>
+    <h3>Step 6: break it three more ways</h3>
+    <p>We also made a leaf signed directly by the root (<code>server.crt</code>, on port 8443) and one whose dates had already passed (<code>-not_before 20260101000000Z -not_after 20260301000000Z</code>, on port 8446). Real results:</p>
+    <pre><code># 1. wrong name: asked for api.other.test, certificate says shop.test
+verify error:num=62:hostname mismatch
+
+# 2. unknown CA: we did not pass -CAfile, so our demo root is not trusted
+verify error:num=20:unable to get local issuer certificate
+
+# 3. expired certificate
+verify error:num=10:certificate has expired
+curl: (60) SSL certificate problem: certificate has expired
+
+# curl, connecting by IP instead of name
+curl: (60) SSL: no alternative certificate subject name matches target ipv4 address '127.0.0.1'
+
+# curl, correct CA and correct name (the --resolve flag maps shop.test to 127.0.0.1)
+$ curl -s -o /dev/null -w "%{http_code}\n" --cacert ca.crt \
+    --resolve shop.test:8443:127.0.0.1 https://shop.test:8443/
+200</code></pre>
+    <h3>A surprise from Python 3.13</h3>
+    <p>Our first attempt made the root CA <em>without</em> the <code>keyUsage</code> line. openssl and curl accepted it. Python 3.13 refused it:</p>
+    <pre><code>ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed:
+CA cert does not include key usage extension (_ssl.c:1029)</code></pre>
+    <p>Python 3.13 turned on strict checking (<code>VERIFY_X509_STRICT</code>) in its default settings. A CA certificate that is missing the fields the standard requires now fails, even though older tools allowed it. This is why the root in Step 1 has a <code>keyUsage</code> line. <strong>Lesson:</strong> different TLS clients check different things. Test your certificates with the actual clients your users run.</p>
+  </section>
+
+  <section id="errors">
+    <h2>9. Reading TLS Errors</h2>
+    <table>
+      <thead><tr><th>Error (typical wording)</th><th>What it means</th><th>Usual fix</th></tr></thead>
+      <tbody>
+        <tr><td>"unable to get local issuer certificate" (openssl 20), "PKIX path building failed" (Java)</td><td>The client cannot link the certificate to a root it trusts</td><td>Serve the full chain; or add your private CA to the client's trust store</td></tr>
+        <tr><td>"self-signed certificate" (openssl 18 or 19)</td><td>The server sent a certificate that signs itself, or a chain ending in an untrusted root</td><td>Use a real CA, or trust the private root on purpose</td></tr>
+        <tr><td>"hostname mismatch" (62), "no alternative certificate subject name matches"</td><td>The name you connected to is not in the SAN list</td><td>Add the name to the SAN; connect by name, not IP; check SNI is sent</td></tr>
+        <tr><td>"certificate has expired" (10), "not yet valid" (9)</td><td>Outside the date range. "Not yet valid" often means the client's clock is wrong</td><td>Renew; fix the clock (NTP)</td></tr>
+        <tr><td>"handshake failure", "no shared cipher", "protocol version"</td><td>The two sides have no TLS version or cipher in common</td><td>Upgrade the old side; do not re-enable old TLS versions</td></tr>
+        <tr><td>"wrong version number"</td><td>One side is not speaking TLS at all (for example, plain HTTP on the TLS port)</td><td>Check the port and the <code>http://</code> vs <code>https://</code> in the URL</td></tr>
+      </tbody>
+    </table>
+    <p>The fastest debugging command is:</p>
+    <pre><code>openssl s_client -connect example.com:443 -servername example.com -showcerts &lt;/dev/null</code></pre>
+    <p>It shows every certificate the server sends, the chain it built, and the verification result. Always pass <code>-servername</code>, or a server that hosts many sites may send the wrong certificate.</p>
+  </section>
+
+  <section id="lifecycle">
+    <h2>10. Getting and Renewing Certificates</h2>
+    <p>Public certificates usually come from <strong>Let's Encrypt</strong> or another CA using <strong>ACME</strong>, an automatic protocol. The CA checks you control the name by asking you to prove it, for example by serving a token at <code>http://yoursite/.well-known/acme-challenge/...</code> (HTTP-01) or by creating a DNS TXT record (DNS-01, needed for wildcard names like <code>*.shop.test</code>).</p>
+    <p>Certificate lifetimes keep getting shorter. Let's Encrypt certificates have long lasted 90 days (and it has announced plans to shorten them further), and the CA/Browser Forum (the group of browsers and CAs that sets the rules) has voted to cut the maximum lifetime of public certificates in steps, down to 47 days by 2029. At that pace, <strong>renewing by hand is not an option</strong>: renewal must be automatic, and there must be an alert if it fails.</p>
+    <p>In Kubernetes, <strong>cert-manager</strong> does this: you declare a Certificate resource, it talks ACME, stores the result in a Secret, and renews before expiry. (See <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-config-security.html">Kubernetes Config, Secrets &amp; Security</a>.)</p>
+    <h3>Checking expiry from a script</h3>
+    <pre><code># exit code 1 if the certificate expires within 90 days (7,776,000 seconds)
+$ openssl x509 -in leaf.crt -noout -checkend 7776000; echo $?
+Certificate will expire
+1
+# exit code 0 if it is still valid 30 days (2,592,000 s) from now
+$ openssl x509 -in leaf.crt -noout -checkend 2592000; echo $?
+Certificate will not expire
+0</code></pre>
+    <p>Real output for our 90-day leaf. A daily job that runs this against every live site, and alerts when fewer than 14 days remain, prevents the most common TLS outage of all: a certificate that silently expired.</p>
+  </section>
+
+  <section id="mtls">
+    <h2>11. Mutual TLS: When the Server Checks the Client Too</h2>
+    <p>Normal TLS only proves the <em>server's</em> identity. The client proves who it is later, with a password or a token inside HTTP. In <strong>mutual TLS</strong> (mTLS), the server also asks for a <strong>client certificate</strong> during the handshake (a <code>CertificateRequest</code> message), and the client answers with its certificate and a signature.</p>
+    <ul>
+      <li><strong>Where it is used:</strong> service-to-service traffic inside a company, banking APIs, IoT devices. Service meshes such as Istio and Linkerd give every pod a short-lived certificate and turn on mTLS between all pods automatically.</li>
+      <li><strong>What it gives:</strong> a stolen password is not enough; the attacker would also need the private key. And each service has a strong identity ("this request came from <code>payments</code>").</li>
+      <li><strong>What it costs:</strong> you must run a private CA, hand out certificates, and rotate them. That is exactly the boring work meshes automate.</li>
+    </ul>
+    <p>With openssl, the lab server would add <code>-Verify 1 -CAfile ca.crt</code> to require client certificates, and the client would add <code>-cert client.crt -key client.key</code>.</p>
+  </section>
+
+  <section id="load-balancers">
+    <h2>12. TLS at Load Balancers and Proxies</h2>
+    <p>Most sites do not run TLS in the app itself. A <strong>load balancer</strong> (a machine that spreads incoming connections over many servers, see <a href="cn-dns-http.html#middle">Proxies, Load Balancers, and CDNs</a>) usually handles it. There are three layouts:</p>
+    <pre><code>1. TLS termination        client ══TLS══► LB ──plain HTTP──► app
+2. Re-encryption          client ══TLS══► LB ══new TLS════► app
+3. TLS passthrough (L4)   client ══════════TLS═════════════► app
+                                   (LB only sees TCP + SNI)</code></pre>
+    <table>
+      <thead><tr><th>Layout</th><th>Good</th><th>Watch out</th></tr></thead>
+      <tbody>
+        <tr><td>Termination</td><td>One place for certificates; the LB can read HTTP, so it can route by path, add headers, cache</td><td>Traffic inside the network is plain text. Fine only if that network is trusted.</td></tr>
+        <tr><td>Re-encryption</td><td>Routing by path <em>and</em> encrypted all the way</td><td>Two sets of certificates; a little more CPU</td></tr>
+        <tr><td>Passthrough</td><td>Only the app holds the private key; works for any protocol over TLS</td><td>The LB cannot see paths or headers. It can only route by SNI or IP.</td></tr>
+      </tbody>
+    </table>
+    <p>Two details that cause real bugs:</p>
+    <ul>
+      <li>After termination, the app sees the LB's IP, not the user's, and sees plain HTTP. The LB passes the real details in headers like <code>X-Forwarded-For</code> and <code>X-Forwarded-Proto: https</code>. An app that ignores <code>X-Forwarded-Proto</code> may think the request was HTTP and redirect to HTTPS forever (a redirect loop).</li>
+      <li>Tell browsers to always use HTTPS with the header <code>Strict-Transport-Security: max-age=31536000</code> (<strong>HSTS</strong>). After the first visit, the browser will not even try plain HTTP for a year, so nobody can quietly downgrade the user.</li>
+    </ul>
+  </section>
+
+  <section id="pitfalls">
+    <h2>13. Common Pitfalls</h2>
+    <ul>
+      <li><strong>Turning verification off</strong> (<code>curl -k</code>, <code>verify=False</code> in Python requests, <code>InsecureSkipVerify</code> in Go) "just to make it work". You still get encryption, but to anyone. It removes the whole point. Add the right CA instead.</li>
+      <li><strong>Serving only the leaf.</strong> Works in some browsers, fails in curl, Python, Java and mobile apps.</li>
+      <li><strong>Forgetting a name in the SAN.</strong> <code>shop.test</code> and <code>www.shop.test</code> are different names. A wildcard covers one level only.</li>
+      <li><strong>Manual renewals.</strong> The certificate expires on a holiday. Automate and alert.</li>
+      <li><strong>Wrong clocks.</strong> A device with its clock set to 2020 rejects every certificate as "not yet valid".</li>
+      <li><strong>Committing private keys to Git</strong> or baking them into container images. Treat them as secrets; store them in a secret manager.</li>
+      <li><strong>Allowing TLS 1.0/1.1</strong> for "old clients". They have known weaknesses. Use TLS 1.2 as the minimum, prefer 1.3.</li>
+      <li><strong>Using 0-RTT for non-idempotent requests.</strong> Early data can be replayed.</li>
+      <li><strong>Assuming all clients check the same things.</strong> Our lab showed Python 3.13 rejecting a CA that openssl and curl accepted.</li>
+    </ul>
+  </section>
+
+  <section id="practice">
+    <h2>14. Practice Problems</h2>
+    <p>Work these out first. Answers follow each one.</p>
+
+    <h3>Problem 1: Diffie-Hellman by hand</h3>
+    <p>p = 23, g = 5. Alice's secret is a = 4, Bob's is b = 3. What do they send, and what shared secret do they get?</p>
+    <p><em>Answer:</em> A = 5<sup>4</sup> mod 23 = 625 mod 23 = <strong>4</strong> (23 &times; 27 = 621). B = 5<sup>3</sup> mod 23 = 125 mod 23 = <strong>10</strong> (23 &times; 5 = 115). Alice: 10<sup>4</sup> mod 23 = 10,000 mod 23 = <strong>18</strong> (23 &times; 434 = 9,982). Bob: 4<sup>3</sup> mod 23 = 64 mod 23 = <strong>18</strong>. Both get 18.</p>
+
+    <h3>Problem 2: does the name match?</h3>
+    <p>A certificate has SAN <code>DNS:*.shop.test, DNS:shop.test</code>. Which of these pass: <code>shop.test</code>, <code>api.shop.test</code>, <code>v2.api.shop.test</code>, <code>shop.test.evil.com</code>?</p>
+    <p><em>Answer:</em> <code>shop.test</code> passes (listed). <code>api.shop.test</code> passes (wildcard covers one label). <code>v2.api.shop.test</code> fails (two labels). <code>shop.test.evil.com</code> fails (a completely different name).</p>
+
+    <h3>Problem 3: read the chain</h3>
+    <p><code>openssl s_client -showcerts</code> shows only <code>0 s:CN=api.shop.test i:CN=R11</code> and then "unable to get local issuer certificate". The site works in Chrome. What is wrong and how do you fix it?</p>
+    <p><em>Answer:</em> The server sends only the leaf. Chrome found the intermediate "R11" on its own; other clients do not. Configure the server with the <strong>full chain</strong> file (leaf followed by the R11 intermediate), not just the leaf.</p>
+
+    <h3>Problem 4: how many round trips?</h3>
+    <p>RTT is 80 ms. A new HTTPS request needs a TCP handshake, a TLS handshake, then one round trip for the request and response. How long before the first byte arrives with TLS 1.3? With TLS 1.2? (Ignore DNS and server time.)</p>
+    <p><em>Answer:</em> TLS 1.3: TCP 1 RTT + TLS 1 RTT + HTTP 1 RTT = 3 &times; 80 = <strong>240 ms</strong>. TLS 1.2: 1 + 2 + 1 = 4 RTTs = <strong>320 ms</strong>. A reused connection needs only the HTTP round trip: 80 ms.</p>
+
+    <h3>Problem 5: which layout?</h3>
+    <p>You run an API on Kubernetes. Security rules say traffic must be encrypted on every network hop. You also want the load balancer to send <code>/v2/</code> to new pods and everything else to old pods. Which TLS layout do you choose?</p>
+    <p><em>Answer:</em> <strong>Re-encryption.</strong> Termination would leave the LB-to-pod hop in plain text. Passthrough would hide the path, so the LB could not route on <code>/v2/</code>.</p>
+
+    <h3>Problem 6: renewal alert</h3>
+    <p>Write the <code>openssl</code> command that exits with an error if <code>site.crt</code> expires in the next 14 days.</p>
+    <p><em>Answer:</em> 14 days = 14 &times; 86,400 = 1,209,600 seconds. <code>openssl x509 -in site.crt -noout -checkend 1209600</code>. It exits with 1 if the certificate will expire within that time.</p>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>15. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Idea</th><th>One line</th></tr></thead>
+      <tbody>
+        <tr><td>TLS gives</td><td>Confidentiality, integrity, authentication</td></tr>
+        <tr><td>Symmetric (AES-GCM, ChaCha20)</td><td>Fast; encrypts all the data</td></tr>
+        <tr><td>ECDHE</td><td>Creates a fresh shared secret per connection; gives forward secrecy</td></tr>
+        <tr><td>Signature</td><td>Proves the server holds the private key for its certificate</td></tr>
+        <tr><td>Certificate</td><td>"This public key belongs to these names", signed by a CA</td></tr>
+        <tr><td>SAN</td><td>The list of names clients actually check</td></tr>
+        <tr><td>Chain</td><td>Leaf &larr; intermediate(s) &larr; root in the trust store. Serve leaf + intermediates.</td></tr>
+        <tr><td>TLS 1.3</td><td>1 RTT handshake; resumption with tickets; 0-RTT only for safe requests</td></tr>
+        <tr><td>mTLS</td><td>Both sides present certificates</td></tr>
+        <tr><td>HSTS</td><td>Tells browsers to use HTTPS only</td></tr>
+      </tbody>
+    </table>
+    <pre><code># what does the server send, and does it verify?
+openssl s_client -connect HOST:443 -servername HOST -showcerts &lt;/dev/null
+
+# short summary: version, cipher, verification result
+echo | openssl s_client -connect HOST:443 -servername HOST -brief
+
+# read a certificate file
+openssl x509 -in cert.pem -noout -subject -issuer -dates -ext subjectAltName
+
+# check a chain offline
+openssl verify -CAfile root.pem -untrusted intermediate.pem leaf.pem
+
+# expires within 14 days? (exit code 1 = yes)
+openssl x509 -in cert.pem -noout -checkend 1209600
+
+# curl: show the TLS handshake time
+curl -so /dev/null -w 'tcp=%{time_connect} tls=%{time_appconnect}\n' https://HOST/</code></pre>
+    <p class="refer-link"><small>Refer: <a href="https://www.rfc-editor.org/rfc/rfc8446" rel="noopener noreferrer">RFC 8446: TLS 1.3</a> &middot; <a href="https://www.rfc-editor.org/rfc/rfc5280" rel="noopener noreferrer">RFC 5280: X.509 certificates</a> &middot; <a href="https://www.rfc-editor.org/rfc/rfc8555" rel="noopener noreferrer">RFC 8555: ACME</a> &middot; <a href="https://docs.openssl.org/3.5/man1/openssl-s_client/" rel="noopener noreferrer">openssl s_client manual</a> &middot; <a href="https://letsencrypt.org/how-it-works/" rel="noopener noreferrer">How Let's Encrypt works</a> &middot; <a href="https://docs.python.org/3/library/ssl.html" rel="noopener noreferrer">Python ssl module</a></small></p>
+  </section>
+
+  <!-- prev-next:start -->
+  <nav class="prev-next" aria-label="Reading order">
+    <a class="prev-next-prev" href="cn-dns-http.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">DNS &amp; HTTP: From a Name to a Web Page</span></a>
+    <a class="prev-next-next" href="../Scenarios/scenario-slow-api-debugging.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">Scenario: Debugging a Slow API End to End</span></a>
+    <p class="prev-next-step">Page 12 of 15 in the suggested reading order</p>
+  </nav>
+  <!-- prev-next:end -->
+
+  <nav class="page-footer-nav">
+    <p>Related: <a href="cn-tcp-deep-dive.html">TCP Deep Dive</a> &middot; <a href="cn-dns-http.html">DNS &amp; HTTP</a> &middot; <a href="../Scenarios/scenario-service-cannot-reach-database.html">Scenario: A Service Cannot Reach Its Database</a> &middot; <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-networking.html">Kubernetes Networking</a> &middot; <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-config-security.html">Kubernetes Config &amp; Security</a></p>
+    <p><a href="../cs-fundamentals-learn.html">Back to CS Fundamentals Learn</a></p>
+  </nav>
+</main>
+
+<footer>
+  <p><small><a href="../../cs-fundamentals.html">Back to CS Fundamentals</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

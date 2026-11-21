@@ -226,7 +226,7 @@ Connection to 10.1.5.10 6432 port [tcp/*] succeeded!</code></pre>
 
   <section id="next-layers">
     <h2>11. The Next Errors: TLS and Connection Limits</h2>
-    <p>Fixing a network problem often reveals the next problem up the stack, because now the connection gets further. Two came up during the move.</p>
+    <p>Fixing a network problem often reveals the next problem up the stack, because now the connection gets further. Two came up during the move. (For how TLS certificates are checked, and every common certificate error reproduced on purpose, see <a href="../Computer-Networks/cn-tls-https-certificates.html">TLS, HTTPS &amp; Certificates</a>.)</p>
     <h3>"no pg_hba.conf entry ... no encryption"</h3>
     <pre><code>FATAL: no pg_hba.conf entry for host "10.1.20.15", user "checkout", database "shop", no encryption</code></pre>
     <p>This is good news: TCP works now. PostgreSQL's access file (<code>pg_hba.conf</code>) only accepts connections from Network B if they use TLS (<code>hostssl</code> lines). The new deployment had dropped <code>sslmode=require</code> from its connection string. Adding it back fixed the error. Better still is <code>sslmode=verify-full</code> with the database's CA certificate, which also checks that you are talking to the real server.</p>
@@ -359,7 +359,8 @@ sys.exit(1 if problems else 0)</code></pre>
   <!-- prev-next:start -->
   <nav class="prev-next" aria-label="Reading order">
     <a class="prev-next-prev" href="scenario-slow-api-debugging.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">Scenario: Debugging a Slow API End to End</span></a>
-    <p class="prev-next-step">Page 12 of 12 in the suggested reading order</p>
+    <a class="prev-next-next" href="scenario-errors-during-deploys.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">Scenario: Errors During Every Deploy</span></a>
+    <p class="prev-next-step">Page 14 of 15 in the suggested reading order</p>
   </nav>
   <!-- prev-next:end -->
 

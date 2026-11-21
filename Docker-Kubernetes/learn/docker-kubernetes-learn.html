@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
   <title>Learn | Docker &amp; Kubernetes</title>
-  <meta name="description" content="Docker and Kubernetes learning track: fundamentals, Compose, advanced builds, cluster architecture, workloads, networking, storage, security, Helm, and observability.">
+  <meta name="description" content="Docker and Kubernetes learning track: fundamentals, Compose, advanced builds, cluster architecture, workloads, probes, rollouts and autoscaling, networking, storage, security, Helm, and observability.">
   <link rel="stylesheet" href="../../styles.css">
 </head>
 <body class="learn-page">
@@ -21,6 +21,25 @@
 <main>
 
   <section>
+    <h2>Suggested reading order</h2>
+    <p>New to containers? This order builds each idea on the one before it. Every page also stands on its own, and each one has Previous / Next links at the bottom.</p>
+    <ol class="learning-path">
+      <li><a href="Docker/docker-fundamentals.html">Docker Fundamentals</a>: what a container and an image are</li>
+      <li><a href="Docker/docker-compose.html">Docker Compose</a>: running several containers together</li>
+      <li><a href="Docker/docker-advanced.html">Advanced Docker</a>: smaller, safer, faster builds</li>
+      <li><a href="Kubernetes/kubernetes-architecture.html">Kubernetes Architecture</a>: the parts of a cluster and how they talk</li>
+      <li><a href="Kubernetes/kubernetes-workloads.html">Workloads</a>: Pods, Deployments, StatefulSets, Jobs</li>
+      <li><a href="Kubernetes/kubernetes-autoscaling-probes-rollouts.html">Autoscaling, Probes &amp; Rollouts</a>: staying healthy while traffic and code change</li>
+      <li><a href="Kubernetes/kubernetes-networking.html">Networking &amp; Services</a>: how traffic reaches pods</li>
+      <li><a href="Kubernetes/kubernetes-storage.html">Storage</a>: data that outlives a pod</li>
+      <li><a href="Kubernetes/kubernetes-config-security.html">Config, Secrets &amp; Security</a>: settings, secrets, and who may do what</li>
+      <li><a href="Kubernetes/kubernetes-helm-observability.html">Helm &amp; Observability</a>: packaging apps and watching them run</li>
+      <li><a href="Kubernetes/kubernetes-gpu-scheduling.html">GPU Scheduling</a>: sharing GPUs and serving LLMs</li>
+      <li><a href="DevOps/devops-cicd-mlops.html">CI/CD and MLOps on Kubernetes</a>: shipping code and models automatically</li>
+    </ol>
+  </section>
+
+  <section>
     <h2>Docker</h2>
     <ul>
       <li><a href="Docker/docker-fundamentals.html"><strong>Docker Fundamentals</strong></a>  -  containers vs VMs, architecture, images, Dockerfile, CLI, networking, volumes</li>
@@ -34,6 +53,7 @@
     <ul>
       <li><a href="Kubernetes/kubernetes-architecture.html"><strong>Kubernetes Architecture</strong></a>  -  control plane, etcd, scheduler, kubelet, kube-proxy, kubectl</li>
       <li><a href="Kubernetes/kubernetes-workloads.html"><strong>Workloads</strong></a>  -  Pods, Deployments, StatefulSets, Jobs, probes, HPA</li>
+      <li><a href="Kubernetes/kubernetes-autoscaling-probes-rollouts.html"><strong>Autoscaling, Probes &amp; Rollouts</strong></a>  -  probe timing math, maxSurge and maxUnavailable step by step, the pod shutdown sequence, the HPA formula with a calculator, scaling behavior, VPA, Cluster Autoscaler and Karpenter, PodDisruptionBudgets, a traffic-spike timeline</li>
       <li><a href="Kubernetes/kubernetes-networking.html"><strong>Networking &amp; Services</strong></a>  -  Services, Ingress, DNS, NetworkPolicy, CNI</li>
     </ul>
   </section>

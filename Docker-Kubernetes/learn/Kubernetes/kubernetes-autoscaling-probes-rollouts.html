@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Autoscaling, Probes &amp; Rollouts | Docker &amp; Kubernetes</title>
+  <meta name="description" content="Keeping a Kubernetes app healthy while traffic and code change: requests as the base of everything, startup, readiness and liveness probes with timing math, rolling updates with maxSurge and maxUnavailable worked step by step, the pod shutdown sequence, the Horizontal Pod Autoscaler formula with a runnable calculator, scaling behavior and stabilization, the Vertical Pod Autoscaler, Cluster Autoscaler and Karpenter, PodDisruptionBudgets, a traffic-spike timeline, validated manifests, practice problems, and a cheat sheet.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &rsaquo; <a href="../docker-kubernetes-learn.html">Learn</a> &rsaquo; Autoscaling, Probes &amp; Rollouts</p>
+  </nav>
+  <h1>Autoscaling, Probes &amp; Rollouts</h1>
+  <p>An app in Kubernetes has to cope with three kinds of change: <strong>traffic</strong> goes up and down, <strong>code</strong> changes with every release, and <strong>pods die</strong> for many reasons. This page explains the tools that handle each one: probes (is this pod healthy?), rolling updates (swap versions without downtime), and autoscalers (add or remove pods and machines). It goes deeper than the short sections on <a href="kubernetes-workloads.html#probes">probes</a> and <a href="kubernetes-workloads.html#hpa">HPA</a> in <a href="kubernetes-workloads.html">Workloads</a>, and every number is worked out step by step.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#big-picture">The Big Picture</a></li>
+    <li><a href="#words">The Words, in Plain English</a></li>
+    <li><a href="#requests">Requests: the Number Everything Depends On</a></li>
+    <li><a href="#probes">Probes: Startup, Readiness, Liveness</a></li>
+    <li><a href="#rolling">Rolling Updates, Step by Step</a></li>
+    <li><a href="#shutdown">How a Pod Shuts Down</a></li>
+    <li><a href="#hpa">The Horizontal Pod Autoscaler (HPA)</a></li>
+    <li><a href="#behavior">Scaling Speed: Behavior and Stabilization</a></li>
+    <li><a href="#vpa">The Vertical Pod Autoscaler (VPA)</a></li>
+    <li><a href="#cluster-autoscaler">Adding Machines: Cluster Autoscaler and Karpenter</a></li>
+    <li><a href="#pdb">PodDisruptionBudgets</a></li>
+    <li><a href="#spike">Putting It Together: a Traffic Spike, Minute by Minute</a></li>
+    <li><a href="#manifests">The Full Manifests (Validated)</a></li>
+    <li><a href="#pitfalls">Common Pitfalls</a></li>
+    <li><a href="#practice">Practice Problems</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="big-picture">
+    <h2>1. The Big Picture</h2>
+    <pre><code>                 traffic goes up                     new release
+                       │                                  │
+                       ▼                                  ▼
+   ┌──────────── HPA: more pods ◄── metrics      Deployment: rolling update
+   │                   │                                  │
+   │          pods are Pending (no room)          new pods must pass the
+   │                   ▼                          readiness probe before
+   │   Cluster Autoscaler / Karpenter:            they get traffic
+   │          add a machine (node)                        │
+   │                   ▼                                  ▼
+   └────► pods start ─► startup probe ─► readiness probe ─► Service sends traffic
+                                         liveness probe ─► restart if stuck</code></pre>
+    <p>Each tool answers one question:</p>
+    <table>
+      <thead><tr><th>Tool</th><th>Question it answers</th><th>What it changes</th></tr></thead>
+      <tbody>
+        <tr><td>Startup probe</td><td>Has the app finished starting?</td><td>Holds off the other probes until it has</td></tr>
+        <tr><td>Readiness probe</td><td>Should this pod get traffic right now?</td><td>Adds or removes the pod from the Service</td></tr>
+        <tr><td>Liveness probe</td><td>Is the app stuck and needs a restart?</td><td>Restarts the container</td></tr>
+        <tr><td>Rolling update</td><td>How do we replace old pods with new ones safely?</td><td>Creates and deletes pods in steps</td></tr>
+        <tr><td>HPA</td><td>How many pods do we need?</td><td>The replica count</td></tr>
+        <tr><td>VPA</td><td>How much CPU and memory should each pod ask for?</td><td>The pod's requests</td></tr>
+        <tr><td>Cluster Autoscaler / Karpenter</td><td>Do we have enough machines?</td><td>The number of nodes</td></tr>
+        <tr><td>PodDisruptionBudget</td><td>How many pods may be taken down on purpose at once?</td><td>Blocks evictions that would go below the limit</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="words">
+    <h2>2. The Words, in Plain English</h2>
+    <table>
+      <thead><tr><th>Word</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Pod</strong></td><td>One running copy of your app (one or more containers sharing an IP address).</td></tr>
+        <tr><td><strong>Node</strong></td><td>A machine that runs pods.</td></tr>
+        <tr><td><strong>Replica</strong></td><td>One of several identical pods. "4 replicas" means 4 copies.</td></tr>
+        <tr><td><strong>Deployment</strong></td><td>The object that says "keep N replicas of this pod template running" and manages updates.</td></tr>
+        <tr><td><strong>Service / endpoints</strong></td><td>A stable address that spreads traffic over the ready pods. The list of ready pod IPs behind it is called its endpoints.</td></tr>
+        <tr><td><strong>Probe</strong></td><td>A check the kubelet (the agent on each node) runs against a container: an HTTP request, a TCP connect, a command, or a gRPC health check.</td></tr>
+        <tr><td><strong>Pending</strong></td><td>A pod that the scheduler could not place on any node yet, usually because no node has enough free CPU or memory.</td></tr>
+        <tr><td><strong>Eviction</strong></td><td>Removing a pod from a node on purpose, for example to empty the node for maintenance.</td></tr>
+        <tr><td><strong>Millicores (m)</strong></td><td>Thousandths of a CPU core. <code>500m</code> = half a core.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="requests">
+    <h2>3. Requests: the Number Everything Depends On</h2>
+    <p>Every container can say how much CPU and memory it needs, its <strong>request</strong> (see <a href="kubernetes-workloads.html#resources">Resource Requests &amp; Limits</a>). Three tools on this page read that number:</p>
+    <ul>
+      <li>The <strong>scheduler</strong> only places a pod on a node with that much unclaimed room.</li>
+      <li>The <strong>HPA</strong> measures CPU as a percentage <em>of the request</em>. A pod with request <code>500m</code> that uses <code>300m</code> is at 60% utilization.</li>
+      <li>The <strong>Cluster Autoscaler</strong> adds a node when pods do not fit by request, and removes nodes whose pods ask for little.</li>
+    </ul>
+    <div class="callout callout-intuition">
+      <p><strong>Intuition.</strong> Requests are a <em>reservation</em>, like booking seats in a restaurant. The scheduler counts booked seats, not people actually eating. If you book too few seats, the HPA thinks every pod is overloaded. If you book too many, nodes look full while the CPUs sit idle, and you pay for machines you do not use.</p>
+    </div>
+    <p>Without a CPU request, the HPA cannot compute a CPU percentage at all, and it reports an error instead of scaling.</p>
+  </section>
+
+  <section id="probes">
+    <h2>4. Probes: Startup, Readiness, Liveness</h2>
+    <p>The kubelet runs each probe every <code>periodSeconds</code>. A probe "fails" if the HTTP status is not 200-399, the TCP connect fails, the command exits non-zero, or there is no answer within <code>timeoutSeconds</code>. After <code>failureThreshold</code> failures in a row, the probe's action happens. After <code>successThreshold</code> successes (usually 1), it counts as passing again.</p>
+    <table>
+      <thead><tr><th>Probe</th><th>When it fails enough times</th><th>Use it for</th></tr></thead>
+      <tbody>
+        <tr><td><strong>startupProbe</strong></td><td>The container is restarted. While it has not yet passed, readiness and liveness are not run.</td><td>Slow starters: loading a large model, warming a cache, running migrations</td></tr>
+        <tr><td><strong>readinessProbe</strong></td><td>The pod is <strong>removed from the Service endpoints</strong>. It is <em>not</em> restarted. When it passes again, it is added back.</td><td>"Can I take traffic right now?" Also during shutdown and overload.</td></tr>
+        <tr><td><strong>livenessProbe</strong></td><td>The container is <strong>restarted</strong>.</td><td>A process that is running but stuck forever (a deadlock, see <a href="../../../CS-Fundamentals/learn/Operating-Systems/os-concurrency-synchronization-deadlocks.html">Concurrency &amp; Deadlocks</a>)</td></tr>
+      </tbody>
+    </table>
+    <h3>Timing math</h3>
+    <p>The time to notice a problem is roughly <strong>periodSeconds &times; failureThreshold</strong>.</p>
+    <p><strong>Worked example.</strong> Our checkout app (manifest in section 13) uses:</p>
+    <pre><code>startupProbe:   periodSeconds: 5,  failureThreshold: 24
+readinessProbe: periodSeconds: 5,  failureThreshold: 2
+livenessProbe:  periodSeconds: 10, failureThreshold: 3</code></pre>
+    <ul>
+      <li><strong>Start-up budget:</strong> 5 &times; 24 = <strong>120 seconds</strong>. If the app is not healthy after about 2 minutes, it is restarted. Before then, the liveness probe cannot kill it for being slow.</li>
+      <li><strong>Out of traffic:</strong> if <code>/ready</code> starts failing, the pod leaves the endpoints after about 5 &times; 2 = <strong>10 seconds</strong>.</li>
+      <li><strong>Restart if stuck:</strong> about 10 &times; 3 = <strong>30 seconds</strong> of failed <code>/healthz</code> before a restart.</li>
+    </ul>
+    <p>Why not just give the liveness probe a long <code>initialDelaySeconds</code> instead of a startup probe? Because start-up time varies. A delay of 120 seconds would slow down detection of a stuck app <em>forever</em>; a startup probe only applies once, at the start.</p>
+    <h3>What should each endpoint check?</h3>
+    <ul>
+      <li><strong>Liveness (<code>/healthz</code>)</strong>: only "is this process able to respond at all?" Do <em>not</em> check the database here. If the database is down, restarting every pod does not fix it, and all pods restarting at once makes things much worse (they all reconnect at the same moment).</li>
+      <li><strong>Readiness (<code>/ready</code>)</strong>: "can I do useful work?" It is fine to check things that make this pod useless (for example, "my local cache is loaded"). Be careful with shared dependencies: if every pod's readiness checks the same database, a database blip removes <em>all</em> pods, and users get "no healthy upstream" instead of a slower answer.</li>
+    </ul>
+  </section>
+
+  <section id="rolling">
+    <h2>5. Rolling Updates, Step by Step</h2>
+    <p>When you change a Deployment's pod template (for example, a new image tag), it creates a new ReplicaSet and moves pods over in steps. Two settings control the speed:</p>
+    <ul>
+      <li><strong>maxSurge</strong>: how many pods <em>above</em> the desired count may exist during the update.</li>
+      <li><strong>maxUnavailable</strong>: how many pods <em>below</em> the desired count may be not-ready during the update.</li>
+    </ul>
+    <p>Both can be a number or a percentage. Percentages are turned into numbers this way: <strong>maxSurge rounds up, maxUnavailable rounds down</strong>. The default is 25% for both.</p>
+    <h3>Worked example 1: defaults, 10 replicas</h3>
+    <p>maxSurge = 25% of 10 = 2.5, rounded up = <strong>3</strong>. maxUnavailable = 2.5, rounded down = <strong>2</strong>. So during the update there are at most 10 + 3 = 13 pods, and at least 10 - 2 = 8 ready pods.</p>
+    <h3>Worked example 2: our checkout app, 4 replicas, maxSurge 1, maxUnavailable 0</h3>
+    <p>Never fewer than 4 ready pods, never more than 5 pods. Each step:</p>
+    <pre><code>step  old (v1)   new (v2)        total   ready   what happens
+  0   ● ● ● ●                     4       4      start
+  1   ● ● ● ●    ○                5       4      create 1 new (surge = 1)
+  2   ● ● ● ●    ●                5       5      new pod passes readiness + minReadySeconds
+  3   ● ● ●      ●                4       4      delete 1 old
+  4   ● ● ●      ● ○              5       4      create 1 new
+ ...  (repeat)
+  12             ● ● ● ●          4       4      done
+ ● = ready   ○ = starting</code></pre>
+    <p>If a new pod takes 40 seconds to start plus <code>minReadySeconds: 10</code>, each of the 4 steps takes about 50 seconds, so the rollout takes about 4 &times; 50 = <strong>200 seconds</strong>. With <code>maxSurge: 2</code> it would do two at a time and take about half as long, at the cost of 2 extra pods' worth of room.</p>
+    <div class="callout">
+      <p><strong>minReadySeconds</strong> says "a new pod must stay ready this long before it counts as available". It catches apps that pass readiness and then crash a few seconds later. <strong>progressDeadlineSeconds</strong> (default 600) marks the rollout as failed if it makes no progress for that long. Kubernetes does <em>not</em> roll back by itself; your pipeline must notice the failed status and run <code>kubectl rollout undo</code>.</p>
+    </div>
+    <pre><code>kubectl rollout status deployment/checkout     # waits; exits non-zero if it fails
+kubectl rollout history deployment/checkout    # list revisions
+kubectl rollout undo deployment/checkout       # go back one revision
+kubectl rollout pause / resume deployment/checkout</code></pre>
+    <p>The key safety rule: <strong>a rolling update is only as safe as the readiness probe.</strong> Without one, a pod counts as ready the moment its container starts, so Kubernetes happily deletes old pods while new ones cannot serve yet. For canary and blue-green releases, see <a href="../DevOps/devops-cicd-mlops.html#releases">CI/CD and MLOps</a>.</p>
+  </section>
+
+  <section id="shutdown">
+    <h2>6. How a Pod Shuts Down</h2>
+    <p>Every rollout, scale-down, and node drain ends with pods being deleted. What happens next decides whether users see errors. Two things start <strong>at the same time</strong>:</p>
+    <pre><code>kubectl delete pod / rollout / scale down
+        │
+        ├──► (A) kubelet: run preStop hook (if any), then send SIGTERM
+        │        wait up to terminationGracePeriodSeconds (default 30 s)
+        │        still running? send SIGKILL
+        │
+        └──► (B) endpoints controller: remove the pod from the Service
+                 → kube-proxy on every node, ingress controllers, and
+                   cloud load balancers each update... a little later</code></pre>
+    <p>The problem is the word "later". Path (B) takes time to reach every node and load balancer. If the app exits the moment it gets SIGTERM, some traffic is still being sent to it, and those requests fail.</p>
+    <p>The fix has two parts:</p>
+    <ol>
+      <li><strong>A preStop sleep</strong> of a few seconds (<code>lifecycle.preStop.sleep.seconds</code>, available from Kubernetes 1.30; on older clusters use an <code>exec</code> hook that runs <code>sleep</code>). The app keeps serving while the rest of the cluster catches up.</li>
+      <li><strong>Graceful shutdown in the app</strong>: on SIGTERM, stop accepting new connections, finish the requests already in progress, close database connections, then exit.</li>
+    </ol>
+    <p>The preStop time counts as part of the grace period, so <code>terminationGracePeriodSeconds</code> must be bigger than the preStop sleep plus your longest request. Our manifest uses a 10 s sleep and a 45 s grace period.</p>
+    <p>We measured what each piece is worth in a local experiment: <a href="../../../CS-Fundamentals/learn/Scenarios/scenario-errors-during-deploys.html">Scenario: Errors During Every Deploy</a>. With no readiness check and no graceful shutdown, 30.6% to 30.7% of requests failed during the rollout (three runs). With a readiness check, graceful shutdown and a preStop-style delay, 0 failed in all three runs.</p>
+  </section>
+
+  <section id="hpa">
+    <h2>7. The Horizontal Pod Autoscaler (HPA)</h2>
+    <p>The HPA changes a Deployment's replica count based on a measurement. About every 15 seconds it asks the metrics API for the current value, and computes:</p>
+    <pre><code>desired replicas = ceil( current replicas × current value / target value )</code></pre>
+    <p>"ceil" means "round up to a whole number". Then it clamps the result between <code>minReplicas</code> and <code>maxReplicas</code>. If the ratio <em>current / target</em> is within 10% of 1.0 (the default <strong>tolerance</strong>), it does nothing, so it does not flap up and down over tiny changes.</p>
+    <h3>Worked examples, checked with code</h3>
+    <p>This short Python function is the same formula. We ran it with <code>minReplicas = 4</code> and <code>maxReplicas = 20</code>:</p>
+    <pre><code>import math
+
+def desired(current_pods, current_value, target_value,
+            min_pods=1, max_pods=100, tolerance=0.1):
+    ratio = current_value / target_value
+    if abs(ratio - 1.0) &lt;= tolerance:          # close enough: do nothing
+        return current_pods
+    want = math.ceil(current_pods * ratio)     # always round UP
+    return max(min_pods, min(max_pods, want))</code></pre>
+    <pre><code>busy: 4 pods at 90% CPU, target 60%              -&gt; 6 pods
+almost on target: 6 pods at 63%                  -&gt; 6 pods
+quiet: 10 pods at 20%                            -&gt; 4 pods
+spike: 4 pods at 300%                            -&gt; 20 pods
+requests: 5 pods at 180 req/s each, target 100   -&gt; 9 pods</code></pre>
+    <ul>
+      <li><strong>Busy:</strong> 4 &times; 90 / 60 = 6.0, so 6.</li>
+      <li><strong>Almost on target:</strong> 63 / 60 = 1.05, within the 10% tolerance, so no change.</li>
+      <li><strong>Quiet:</strong> 10 &times; 20 / 60 = 3.33, rounded up to 4, which is also the minimum.</li>
+      <li><strong>Spike:</strong> 4 &times; 300 / 60 = 20. (CPU can go above 100% of the <em>request</em> when there is no limit or the limit is higher.) The formula says 20, but scaling speed rules (next section) may get there in steps.</li>
+      <li><strong>Requests per second:</strong> 5 &times; 180 / 100 = 9. Here the metric is not CPU but a custom one.</li>
+    </ul>
+    <h3>Which metric?</h3>
+    <table>
+      <thead><tr><th>Metric type</th><th>Example</th><th>Needs</th></tr></thead>
+      <tbody>
+        <tr><td>Resource (CPU, memory)</td><td>Average CPU at 60% of request</td><td>metrics-server installed in the cluster</td></tr>
+        <tr><td>Pods (custom, per pod)</td><td>Requests per second per pod, queue length per worker</td><td>A custom metrics adapter, for example Prometheus Adapter</td></tr>
+        <tr><td>External</td><td>Messages waiting in a cloud queue</td><td>An external metrics adapter; KEDA is a popular tool that also scales to zero</td></tr>
+      </tbody>
+    </table>
+    <p>If you list several metrics, the HPA computes a count for each and uses the <strong>largest</strong>. Memory is often a poor scaling metric: many apps (Java, Python with caches) do not give memory back when load drops, so the HPA scales up and never down.</p>
+    <p>CPU works well for apps where CPU rises with load. For apps that wait on other services (most web APIs) or work through a queue, requests in flight per pod or queue length per worker usually track load better. (Little's law, from <a href="../../../CS-Fundamentals/learn/Scenarios/scenario-slow-api-debugging.html">Debugging a Slow API</a>, links requests per second, time per request, and requests in flight.)</p>
+  </section>
+
+  <section id="behavior">
+    <h2>8. Scaling Speed: Behavior and Stabilization</h2>
+    <p>The formula says <em>where</em> to go. The <code>behavior</code> section says <em>how fast</em>.</p>
+    <ul>
+      <li><strong>stabilizationWindowSeconds</strong>: the HPA looks at all the counts it computed over this window and, when scaling down, picks the <em>highest</em> one. So a short dip in traffic does not remove pods. Default: 300 seconds (5 minutes) for scale-down, 0 for scale-up.</li>
+      <li><strong>policies</strong>: limits like "add at most 100% per 60 s" or "remove at most 2 pods per 60 s". Default for scale-up: in each 15 s, add up to 100% or 4 pods, whichever is more.</li>
+    </ul>
+    <h3>Worked example: scale-up limited to doubling each minute</h3>
+    <p>Our HPA allows +100% per 60 s. Traffic jumps so the formula says 20 pods, starting from 4:</p>
+    <pre><code>minute 0:  4 pods   → may go to 4 × 2 = 8
+minute 1:  8 pods   → may go to 16
+minute 2: 16 pods   → may go to 32, but max is 20 → 20</code></pre>
+    <p>About 2 minutes to reach 20 (plus the time for new pods to start).</p>
+    <h3>Worked example: careful scale-down</h3>
+    <p>Traffic drops at 14:00 IST. The formula says 4 pods, from 12. The 5-minute window means nothing happens until about 14:05. Then the policy removes at most 2 pods per minute: 12 &rarr; 10 &rarr; 8 &rarr; 6 &rarr; 4, which takes 4 more minutes. Fully scaled down at about 14:09. Slow on purpose: removing pods too fast and then needing them again is worse than paying for a few extra minutes.</p>
+  </section>
+
+  <section id="vpa">
+    <h2>9. The Vertical Pod Autoscaler (VPA)</h2>
+    <p>The HPA adds more pods. The <strong>VPA</strong> changes how big each pod is: it watches real CPU and memory use over time and recommends better <em>requests</em>. It is an add-on (not built in) with three parts: a <strong>recommender</strong> that computes the numbers, an <strong>updater</strong> that evicts pods whose requests are far off, and an <strong>admission controller</strong> that writes the new requests into pods as they are created.</p>
+    <table>
+      <thead><tr><th>updateMode</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>Off</code></td><td>Only recommends. You read the numbers and change the manifest yourself. Safest start.</td></tr>
+        <tr><td><code>Initial</code></td><td>Sets requests only when a pod is created; never evicts.</td></tr>
+        <tr><td><code>Recreate</code> / <code>Auto</code></td><td>Evicts and recreates pods to apply new requests. Newer VPA versions can also try to resize pods in place, using Kubernetes' in-place resize feature.</td></tr>
+      </tbody>
+    </table>
+    <pre><code>kubectl describe vpa report-worker   # look for: Recommendation → Target, Lower Bound, Upper Bound</code></pre>
+    <p><strong>Do not let the HPA and VPA both act on CPU for the same Deployment.</strong> The VPA raises the CPU request, which lowers the CPU percentage, which makes the HPA remove pods, which raises CPU per pod again: they fight. Common pattern: HPA on a custom metric (like requests per second), and VPA in <code>Off</code> mode to help you pick requests.</p>
+    <p>The VPA is a good fit for things that cannot be split into more copies: a single-instance job, a batch worker with uneven input, or an app whose memory need you do not know yet.</p>
+  </section>
+
+  <section id="cluster-autoscaler">
+    <h2>10. Adding Machines: Cluster Autoscaler and Karpenter</h2>
+    <p>The HPA can ask for 20 pods, but if the nodes are full, the extra pods stay <strong>Pending</strong>. A node autoscaler fixes that.</p>
+    <h3>Cluster Autoscaler</h3>
+    <ul>
+      <li><strong>Scale up:</strong> every few seconds it looks for Pending pods that cannot be scheduled. It asks: "if I added one more node from this node group, would they fit?" If yes, it asks the cloud for more machines in that group.</li>
+      <li><strong>Scale down:</strong> a node whose pods' requests add up to less than 50% of its size (the default threshold) for 10 minutes (the default wait), and whose pods can all move elsewhere, is drained and removed.</li>
+      <li>Things that stop a node from being removed: pods with local storage, pods not managed by a controller, a PodDisruptionBudget that would be broken, and the annotation <code>cluster-autoscaler.kubernetes.io/safe-to-evict: "false"</code>.</li>
+    </ul>
+    <h3>Karpenter</h3>
+    <p><strong>Karpenter</strong> (first built for AWS, now also on Azure) does not use fixed node groups. It looks at the Pending pods and picks a machine type that fits them, possibly a different size each time. It also <strong>consolidates</strong>: it replaces several half-empty nodes with fewer, cheaper ones.</p>
+    <h3>The slow part</h3>
+    <p>A new pod on an existing node can start in seconds. A new <em>node</em> takes much longer: the cloud must boot a machine, it must join the cluster, then pull your image. That usually takes <strong>minutes</strong>, and large images (like LLM servers, see <a href="kubernetes-gpu-scheduling.html">GPU Scheduling</a>) make it longer. To hide this delay, some teams run low-priority <strong>placeholder pods</strong> that only reserve space. When real pods need the room, the scheduler evicts the placeholders right away (they have a lower <code>PriorityClass</code>), and the node autoscaler adds a node for the placeholders in the background.</p>
+  </section>
+
+  <section id="pdb">
+    <h2>11. PodDisruptionBudgets</h2>
+    <p>Some pod removals are <strong>voluntary</strong>: a person or tool decided to do them (draining a node for an upgrade, the Cluster Autoscaler removing a node). Others are <strong>involuntary</strong>: a machine crashes. A <strong>PodDisruptionBudget</strong> (PDB) limits voluntary ones:</p>
+    <pre><code>apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: checkout
+spec:
+  minAvailable: 3        # or maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: checkout</code></pre>
+    <p>With 4 checkout pods and <code>minAvailable: 3</code>, a <code>kubectl drain</code> may evict only one checkout pod at a time. It waits until a replacement is ready before evicting the next. PDBs do not protect against crashes, and they do not slow down a Deployment's own rolling update (that is what maxUnavailable is for).</p>
+    <p>Pitfall: <code>minAvailable</code> equal to the replica count (for example 4 of 4) means no pod can ever be evicted, so node drains hang forever and cluster upgrades get stuck.</p>
+  </section>
+
+  <section id="spike">
+    <h2>12. Putting It Together: a Traffic Spike, Minute by Minute</h2>
+    <p>A shop's checkout service runs 4 pods. Each pod requests 500m CPU. The HPA target is 60%. Each node has 4 CPUs free for these pods, so 8 pods fit per node, and there is one node with room for 2 more. A sale starts at 12:00 IST and traffic triples.</p>
+    <pre><code>12:00:00  traffic ×3. CPU per pod jumps from 50% to about 150%.
+12:00:15  HPA: 4 × 150 / 60 = 10 → policy allows ×2 per minute → 8 pods.
+12:00:20  2 new pods fit on the free space → start. 2 pods Pending.
+12:00:25  Cluster Autoscaler sees Pending pods → asks the cloud for a node.
+12:00:50  first 2 new pods pass readiness → 6 pods serving.
+12:01:15  HPA: now 6 ready pods at about 100% → wants 10 → allowed (≤ 16).
+12:02:30  new node joined, image pulled → the Pending pods start.
+12:03:10  10 pods ready. CPU per pod about 60%. Stable.</code></pre>
+    <p>(The times here are an illustration of the order of events, not a measurement. Real node start-up time depends on the cloud, the machine type, and the image size.)</p>
+    <p>What did users see? Between 12:00 and about 12:03, the pods were overloaded, so responses were slow. What would make it better?</p>
+    <ul>
+      <li><strong>Scale before the sale</strong>: the sale time is known, so raise <code>minReplicas</code> to 10 at 11:45 (a scheduled job, or a tool like KEDA's cron trigger).</li>
+      <li><strong>Lower the target</strong> from 60% to 50% to keep more spare room for sudden jumps.</li>
+      <li><strong>Placeholder pods</strong> so a node is already waiting.</li>
+      <li><strong>Make start-up faster</strong>: smaller images, lazy loading.</li>
+      <li><strong>Protect the app while it scales</strong>: limit concurrent requests and return 429 or 503 quickly instead of letting all requests get slow (load shedding, see <a href="../../../CS-Fundamentals/learn/Scenarios/scenario-slow-api-debugging.html">Debugging a Slow API</a>).</li>
+    </ul>
+  </section>
+
+  <section id="manifests">
+    <h2>13. The Full Manifests (Validated)</h2>
+    <p>These are the manifests used on this page. We checked them with <code>kubeconform</code> 0.8.0 in strict mode against the Kubernetes 1.33 schemas (the VPA against its CRD schema). Real output:</p>
+    <pre><code>$ kubeconform -strict -summary -kubernetes-version 1.33.0 deploy.yaml hpa.yaml pdb.yaml
+Summary: 3 resources found in 3 files - Valid: 3, Invalid: 0, Errors: 0, Skipped: 0
+$ kubeconform -strict -summary -schema-location default \
+    -schema-location '...CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' vpa.yaml
+Summary: 1 resource found in 1 file - Valid: 1, Invalid: 0, Errors: 0, Skipped: 0</code></pre>
+    <p>Schema checks catch typos and wrong fields. They do not prove the app behaves well; that needs a real cluster or a test like the one in the <a href="../../../CS-Fundamentals/learn/Scenarios/scenario-errors-during-deploys.html">deploy scenario</a>.</p>
+    <h3>deploy.yaml</h3>
+    <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: checkout
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          # at most 1 extra pod during the update
+      maxUnavailable: 0    # never go below 4 ready pods
+  minReadySeconds: 10      # a new pod must stay ready 10 s to count
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: app
+          image: registry.example.com/checkout:1.8.2
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 24     # allow up to 24 x 5 = 120 s to start
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 10          # keep serving while load balancers catch up</code></pre>
+    <p>Note there is a memory limit but no CPU limit. A CPU limit causes <strong>throttling</strong> (the container is paused for part of every 100 ms period even when the node has idle CPU; see <a href="../../../CS-Fundamentals/learn/Operating-Systems/os-processes-threads-scheduling.html">CPU Scheduling</a>), which shows up as slow requests. Many teams set CPU requests and skip CPU limits for latency-sensitive services. Memory limits stay, because memory cannot be throttled, only killed.</p>
+    <h3>hpa.yaml</h3>
+    <pre><code>apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: checkout
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+  minReplicas: 4
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60     # aim for 60% of the CPU request
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100                 # at most double every 60 s
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 2                   # remove at most 2 pods per minute
+          periodSeconds: 60</code></pre>
+    <p>When an HPA manages a Deployment, remove <code>replicas:</code> from the Deployment you apply with GitOps, or every sync will reset the count back to 4 and fight the HPA.</p>
+    <h3>vpa.yaml</h3>
+    <pre><code>apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: report-worker
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: report-worker
+  updatePolicy:
+    updateMode: "Off"        # only recommend; do not restart pods</code></pre>
+  </section>
+
+  <section id="pitfalls">
+    <h2>14. Common Pitfalls</h2>
+    <ul>
+      <li><strong>No readiness probe.</strong> Pods get traffic before they can serve, and rollouts delete old pods too early.</li>
+      <li><strong>Liveness checks a shared dependency.</strong> The database blips and every pod restarts at once.</li>
+      <li><strong>Liveness with no startup probe on a slow app.</strong> The app is killed while still loading, restarts, is killed again: a <code>CrashLoopBackOff</code> that only happens in production, where data is bigger.</li>
+      <li><strong>Exiting at once on SIGTERM.</strong> Requests in flight are cut, and new ones still arrive for a moment. Add a preStop sleep and graceful shutdown.</li>
+      <li><strong>No CPU request</strong> on an HPA target. The HPA cannot compute utilization.</li>
+      <li><strong><code>replicas:</code> in Git plus an HPA.</strong> GitOps keeps resetting the count.</li>
+      <li><strong>HPA and VPA both on CPU.</strong> They fight.</li>
+      <li><strong>maxReplicas too low</strong>, or not enough node quota in the cloud account. The autoscaler silently stops at the ceiling.</li>
+      <li><strong>Scaling on memory</strong> for apps that never free memory. Scales up, never down.</li>
+      <li><strong>PDB with minAvailable = replicas.</strong> Drains and upgrades hang.</li>
+      <li><strong>Forgetting the slow path.</strong> A new node takes minutes. Plan for known spikes ahead of time.</li>
+    </ul>
+  </section>
+
+  <section id="practice">
+    <h2>15. Practice Problems</h2>
+    <p>Work these out first. Answers follow each one.</p>
+
+    <h3>Problem 1: HPA math</h3>
+    <p>8 pods, CPU target 70%, current average 105%. minReplicas 2, maxReplicas 10. What does the HPA want?</p>
+    <p><em>Answer:</em> 105 / 70 = 1.5, outside the tolerance. 8 &times; 1.5 = 12, capped at maxReplicas: <strong>10</strong>.</p>
+
+    <h3>Problem 2: tolerance</h3>
+    <p>5 pods, target 50%, current 54%. What happens? What if current is 56%?</p>
+    <p><em>Answer:</em> 54 / 50 = 1.08, within 10%: <strong>no change</strong>. 56 / 50 = 1.12: 5 &times; 1.12 = 5.6, round up: <strong>6</strong>.</p>
+
+    <h3>Problem 3: rolling update limits</h3>
+    <p>A Deployment has 8 replicas with maxSurge 25% and maxUnavailable 25%. What is the most pods there can be, and the fewest ready pods?</p>
+    <p><em>Answer:</em> 25% of 8 = 2 exactly, so maxSurge = 2 and maxUnavailable = 2. At most <strong>10</strong> pods; at least <strong>6</strong> ready.</p>
+
+    <h3>Problem 4: rounding</h3>
+    <p>Same settings but 6 replicas.</p>
+    <p><em>Answer:</em> 25% of 6 = 1.5. maxSurge rounds up to 2, maxUnavailable rounds down to 1. At most <strong>8</strong> pods; at least <strong>5</strong> ready.</p>
+
+    <h3>Problem 5: probe timing</h3>
+    <p>A model server takes between 60 and 150 seconds to load. Design a startup probe with periodSeconds 10. How large must failureThreshold be? Then the liveness probe should restart it within about 30 seconds of getting stuck. Suggest settings.</p>
+    <p><em>Answer:</em> The start-up budget must exceed 150 s with some margin: 10 &times; 18 = 180 s, so <strong>failureThreshold: 18</strong>. Liveness: <strong>periodSeconds: 10, failureThreshold: 3</strong> (about 30 s).</p>
+
+    <h3>Problem 6: shutdown budget</h3>
+    <p>Your preStop sleep is 15 s. The slowest normal request takes 20 s. Is <code>terminationGracePeriodSeconds: 30</code> enough?</p>
+    <p><em>Answer:</em> No. The preStop time counts inside the grace period: 15 + 20 = 35 s &gt; 30 s, so a slow request could be killed by SIGKILL. Use at least <strong>40</strong> (some margin).</p>
+
+    <h3>Problem 7: why is it Pending?</h3>
+    <p>The HPA scaled to 12 pods, but 3 stay Pending for 20 minutes. The Cluster Autoscaler is installed. Name three things to check.</p>
+    <p><em>Answer:</em> (1) <code>kubectl describe pod</code> events: is it CPU, memory, a node selector, or a taint that no node group can satisfy? (2) Has the node group reached its <strong>maximum size</strong>, or has the cloud account hit its <strong>quota</strong>? (3) The Cluster Autoscaler's own logs or status (for example its "NotTriggerScaleUp" events): it explains why no node group would help. Also check whether a single pod requests more than any node type offers.</p>
+
+    <h3>Problem 8: scale-down time</h3>
+    <p>Using the HPA in section 13: 20 pods, traffic drops so the formula says 4. About how long until 4?</p>
+    <p><em>Answer:</em> 5 minutes of stabilization, then at most 2 pods per minute: 16 pods to remove = 8 minutes. About <strong>13 minutes</strong> in total.</p>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>16. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Thing</th><th>Rule of thumb</th></tr></thead>
+      <tbody>
+        <tr><td>Detection time</td><td>periodSeconds &times; failureThreshold</td></tr>
+        <tr><td>Startup probe</td><td>Budget = longest start-up plus margin</td></tr>
+        <tr><td>Readiness</td><td>Out of the Service; no restart</td></tr>
+        <tr><td>Liveness</td><td>Restart; check only the process itself</td></tr>
+        <tr><td>maxSurge / maxUnavailable</td><td>% values: surge rounds up, unavailable rounds down; default 25% / 25%</td></tr>
+        <tr><td>Zero-downtime rollout</td><td>maxUnavailable 0 + readiness probe + preStop sleep + graceful SIGTERM</td></tr>
+        <tr><td>Grace period</td><td>&gt; preStop + slowest request; default 30 s</td></tr>
+        <tr><td>HPA formula</td><td>ceil(pods &times; current / target), 10% tolerance, clamp to min/max</td></tr>
+        <tr><td>HPA defaults</td><td>Checks about every 15 s; scale-down window 300 s</td></tr>
+        <tr><td>Several metrics</td><td>HPA takes the largest answer</td></tr>
+        <tr><td>VPA</td><td>Right-size requests; start with updateMode Off; not with HPA on CPU</td></tr>
+        <tr><td>Cluster Autoscaler</td><td>Adds nodes for Pending pods; removes nodes under 50% requested for 10 min</td></tr>
+        <tr><td>PDB</td><td>Limits voluntary evictions; never minAvailable = replicas</td></tr>
+      </tbody>
+    </table>
+    <pre><code>kubectl get hpa checkout --watch                  # TARGETS shows current/target
+kubectl describe hpa checkout                     # events: why it scaled, or why not
+kubectl top pods -l app=checkout                  # current CPU and memory (metrics-server)
+kubectl rollout status deployment/checkout
+kubectl rollout undo deployment/checkout
+kubectl get pods --field-selector=status.phase=Pending
+kubectl describe pod &lt;name&gt;                        # FailedScheduling reasons
+kubectl get pdb                                   # ALLOWED DISRUPTIONS column
+kubectl get endpointslices -l kubernetes.io/service-name=checkout</code></pre>
+    <p class="refer-link"><small>Refer: <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/" rel="noopener noreferrer">Configure probes</a> &middot; <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment" rel="noopener noreferrer">Rolling updates</a> &middot; <a href="https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination" rel="noopener noreferrer">Pod termination</a> &middot; <a href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/" rel="noopener noreferrer">Horizontal Pod Autoscaling</a> &middot; <a href="https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler" rel="noopener noreferrer">Vertical Pod Autoscaler</a> &middot; <a href="https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md" rel="noopener noreferrer">Cluster Autoscaler FAQ</a> &middot; <a href="https://karpenter.sh/docs/" rel="noopener noreferrer">Karpenter</a> &middot; <a href="https://kubernetes.io/docs/concepts/workloads/pods/disruptions/" rel="noopener noreferrer">Disruptions and PDBs</a></small></p>
+  </section>
+
+  <!-- prev-next:start -->
+  <nav class="prev-next" aria-label="Reading order">
+    <a class="prev-next-prev" href="kubernetes-workloads.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">Kubernetes Workloads</span></a>
+    <a class="prev-next-next" href="kubernetes-networking.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">Kubernetes Networking &amp; Services</span></a>
+    <p class="prev-next-step">Page 6 of 12 in the suggested reading order</p>
+  </nav>
+  <!-- prev-next:end -->
+
+  <nav class="page-footer-nav">
+    <p>Related: <a href="kubernetes-workloads.html">Kubernetes Workloads</a> &middot; <a href="kubernetes-architecture.html">Kubernetes Architecture</a> &middot; <a href="kubernetes-networking.html">Networking &amp; Services</a> &middot; <a href="kubernetes-helm-observability.html">Helm &amp; Observability</a> &middot; <a href="../DevOps/devops-cicd-mlops.html">CI/CD and MLOps</a> &middot; <a href="../../../CS-Fundamentals/learn/Scenarios/scenario-errors-during-deploys.html">Scenario: Errors During Every Deploy</a></p>
+    <p><a href="../docker-kubernetes-learn.html">Back to Docker &amp; Kubernetes Learn</a></p>
+  </nav>
+</main>
+
+<footer>
+  <p><small><a href="../../docker-kubernetes.html">Back to Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

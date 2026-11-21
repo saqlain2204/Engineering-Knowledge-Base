@@ -227,7 +227,7 @@ $ ss -ti dst example.com                            # per connection: cwnd, rtt,
     <p>The browser asks its resolver for the IP. Assume the resolver is nearby and has the answer cached: about 10 ms. (If not cached, add round trips to root, TLD, and authoritative servers.)</p>
     <h3>Step 2: TCP handshake = 1 RTT = 120 ms</h3>
     <h3>Step 3: TLS 1.3 handshake = 1 RTT = 120 ms</h3>
-    <p>The client sends <code>ClientHello</code> with its key share. The server replies with <code>ServerHello</code>, its key share, certificate, and <code>Finished</code>. Now both sides can derive keys, and the client sends its <code>Finished</code> together with the HTTP request. (TLS 1.2 needed 2 RTTs here.)</p>
+    <p>(For what each message contains, certificates, and a hands-on lab, see <a href="cn-tls-https-certificates.html">TLS, HTTPS &amp; Certificates</a>.) The client sends <code>ClientHello</code> with its key share. The server replies with <code>ServerHello</code>, its key share, certificate, and <code>Finished</code>. Now both sides can derive keys, and the client sends its <code>Finished</code> together with the HTTP request. (TLS 1.2 needed 2 RTTs here.)</p>
     <h3>Step 4: HTTP request and response = 1 RTT + server time = 160 ms</h3>
     <pre><code>HTTP/1.1 or HTTP/2 over TLS 1.3 over TCP:
   DNS 10 + TCP 120 + TLS 120 + HTTP (120 + 40) = 410 ms to first byte
@@ -314,12 +314,12 @@ dns=0.001378 connect=0.001902 tls=0.024213 ttfb=0.039511 total=0.039601</code></
   <nav class="prev-next" aria-label="Reading order">
     <a class="prev-next-prev" href="cn-ip-addressing-subnetting-routing.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">IP Addressing, Subnetting &amp; Routing</span></a>
     <a class="prev-next-next" href="cn-dns-http.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">DNS &amp; HTTP: From a Name to a Web Page</span></a>
-    <p class="prev-next-step">Page 9 of 12 in the suggested reading order</p>
+    <p class="prev-next-step">Page 10 of 15 in the suggested reading order</p>
   </nav>
   <!-- prev-next:end -->
 
   <nav class="page-footer-nav">
-    <p>Related: <a href="cn-ip-addressing-subnetting-routing.html">IP Addressing, Subnetting &amp; Routing</a> &middot; <a href="cn-dns-http.html">DNS &amp; HTTP</a> &middot; <a href="../Scenarios/scenario-service-cannot-reach-database.html">Scenario: A Service Cannot Reach Its Database</a> &middot; <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-networking.html">Kubernetes Networking &amp; Services</a> &middot; <a href="../Operating-Systems/os-processes-threads-scheduling.html">Processes &amp; Scheduling</a></p>
+    <p>Related: <a href="cn-ip-addressing-subnetting-routing.html">IP Addressing, Subnetting &amp; Routing</a> &middot; <a href="cn-dns-http.html">DNS &amp; HTTP</a> &middot; <a href="cn-tls-https-certificates.html">TLS, HTTPS &amp; Certificates</a> &middot; <a href="../Scenarios/scenario-service-cannot-reach-database.html">Scenario: A Service Cannot Reach Its Database</a> &middot; <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-networking.html">Kubernetes Networking &amp; Services</a> &middot; <a href="../Operating-Systems/os-processes-threads-scheduling.html">Processes &amp; Scheduling</a></p>
     <p><a href="../cs-fundamentals-learn.html">Back to CS Fundamentals Learn</a></p>
   </nav>
 </main>

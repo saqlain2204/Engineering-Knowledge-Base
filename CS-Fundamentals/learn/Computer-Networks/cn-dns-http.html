@@ -420,6 +420,7 @@ HTTP/2 304</code></pre>
       <li>A <strong>CDN</strong> (content delivery network) is a big network of caching proxies in many cities. In the real <code>example.com</code> reply above, <code>server: cloudflare</code>, <code>cf-cache-status: HIT</code>, and <code>age: 7</code> mean a Cloudflare server near the client answered from its cache, and that copy was 7 seconds old.</li>
     </ul>
     <p>Because of these middle boxes, the app sees the proxy's IP, not the user's. Proxies add headers like <code>X-Forwarded-For</code> (the original client IP) and <code>X-Forwarded-Proto</code> (was it https?). Only trust these headers when they come from your own proxy, because clients can fake them.</p>
+    <p>Where the TLS connection ends (at the load balancer, again at the app, or only at the app) is a design choice with real trade-offs; see <a href="cn-tls-https-certificates.html#load-balancers">TLS at Load Balancers and Proxies</a>. What goes wrong when servers behind a load balancer start and stop is walked through in <a href="../Scenarios/scenario-errors-during-deploys.html">Scenario: Errors During Every Deploy</a>.</p>
   </section>
 
   <section id="scenario">
@@ -483,8 +484,8 @@ HTTP/2 304</code></pre>
   <!-- prev-next:start -->
   <nav class="prev-next" aria-label="Reading order">
     <a class="prev-next-prev" href="cn-tcp-deep-dive.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">TCP Deep Dive: From Handshake to Congestion Control</span></a>
-    <a class="prev-next-next" href="../Scenarios/scenario-slow-api-debugging.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">Scenario: Debugging a Slow API End to End</span></a>
-    <p class="prev-next-step">Page 10 of 12 in the suggested reading order</p>
+    <a class="prev-next-next" href="cn-tls-https-certificates.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">TLS, HTTPS &amp; Certificates</span></a>
+    <p class="prev-next-step">Page 11 of 15 in the suggested reading order</p>
   </nav>
   <!-- prev-next:end -->
 

@@ -57,7 +57,19 @@ Commit `assets/search-index.js` and `assets/search-index.json`. Then check links
 python3 scripts/check-links.py
 ```
 
-The `site-checks` GitHub Actions workflow runs both steps on every pull request and fails if the committed search index is stale or any internal link is broken.
+If you added a page to a track with a suggested reading order (CS Fundamentals Learn, Docker & Kubernetes Learn), add it to `TRACKS` in `scripts/update-prev-next.py` and to the hub's "Suggested reading order" list in the same position, then write the Previous / Next links:
+
+```bash
+python3 scripts/update-prev-next.py
+```
+
+Finally, check page basics (one `<title>`, a `<meta name="description">`, a viewport tag, one `<h1>`, no duplicate ids, no em dashes):
+
+```bash
+python3 scripts/check-pages.py
+```
+
+The `site-checks` GitHub Actions workflow runs all of these on every pull request. It fails if the committed search index is stale, any internal link is broken, a reading-order block or hub list is out of date (`update-prev-next.py --check`), or a page fails the basics check.
 
 ## Pull requests
 

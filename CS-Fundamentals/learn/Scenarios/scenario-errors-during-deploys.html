@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+  <title>Scenario: Errors During Every Deploy | CS Fundamentals</title>
+  <meta name="description" content="A real-world walkthrough: every release of a Kubernetes service causes a short burst of 502 errors. Reading 502, 503 and 504, drawing the request path, the race between SIGTERM and load balancer updates, a runnable lab that reproduces the problem and measures four fixes (30.6% of requests failed with no readiness check, 0 with readiness, graceful shutdown and a preStop sleep), keep-alive timeout races, safe retries, a blameless postmortem, a deploy check for CI, and practice problems.">
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body class="learn-page">
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../cs-fundamentals.html">CS Fundamentals</a> &rsaquo; <a href="../cs-fundamentals-learn.html">Learn</a> &rsaquo; Scenario: Errors During Every Deploy</p>
+  </nav>
+  <h1>Scenario: Errors During Every Deploy</h1>
+  <p>A team ships a new version of its orders API several times a day. Every single time, the error dashboard shows a short spike of <code>502 Bad Gateway</code> errors, then it goes quiet until the next release. Nobody changed the code that handles requests. This page follows the investigation the way an on-call engineer would, then <strong>reproduces the problem in a small program you can run</strong> and measures how much each fix helps. It uses ideas from <a href="../Computer-Networks/cn-tcp-deep-dive.html">TCP</a>, <a href="../Computer-Networks/cn-dns-http.html">HTTP</a>, <a href="../Operating-Systems/os-processes-threads-scheduling.html">processes and signals</a>, and <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-autoscaling-probes-rollouts.html">Kubernetes probes and rollouts</a>. The company and names are made up; the error types, the code, and the measured numbers are real.</p>
+</header>
+
+<nav class="article-toc" aria-label="Table of contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#situation">The Situation</a></li>
+    <li><a href="#codes">Read the Status Code: 502, 503, 504</a></li>
+    <li><a href="#path">Draw the Path a Request Takes</a></li>
+    <li><a href="#clues">Collect Clues: When, Where, How Many</a></li>
+    <li><a href="#race">The Root Cause: Two Things Happen at Once</a></li>
+    <li><a href="#lab">Reproduce It: a Lab You Can Run</a></li>
+    <li><a href="#results">The Results, Case by Case</a></li>
+    <li><a href="#fix">The Fix in Kubernetes Terms</a></li>
+    <li><a href="#app-code">Graceful Shutdown in the App</a></li>
+    <li><a href="#keepalive">The Second Cause: Keep-Alive Timeout Races</a></li>
+    <li><a href="#retries">Should the Load Balancer Retry?</a></li>
+    <li><a href="#postmortem">Blameless Postmortem</a></li>
+    <li><a href="#prevent">Preventing It: a Deploy Check in CI</a></li>
+    <li><a href="#practice">Practice Problems</a></li>
+    <li><a href="#pitfalls">Common Pitfalls</a></li>
+    <li><a href="#cheat-sheet">Cheat Sheet</a></li>
+  </ol>
+</nav>
+
+<main class="article">
+
+  <section id="situation">
+    <h2>1. The Situation</h2>
+    <p>The orders API runs on Kubernetes as a Deployment with 6 pods. Traffic comes in through a cloud load balancer, then an ingress controller (a proxy inside the cluster that routes HTTP requests to Services), then to the pods.</p>
+    <p>On Thursday at 15:10 IST, a release goes out. The dashboard shows:</p>
+    <pre><code>15:09   0 errors / min       (normal)
+15:10   release starts
+15:10   41 x 502 / min
+15:11   37 x 502 / min
+15:12   0 errors / min        (release finished)</code></pre>
+    <p>(These dashboard numbers are part of the story. The numbers measured by real code are in <a href="#results">section 7</a>.)</p>
+    <p>The same pattern shows up on every release, and also whenever the autoscaler removes pods at night. Customers sometimes see "Something went wrong" when they place an order. A few retried and were charged twice.</p>
+  </section>
+
+  <section id="codes">
+    <h2>2. Read the Status Code: 502, 503, 504</h2>
+    <p>Status codes in the 5xx range mean "the server side failed". But <em>which</em> server? When there is a proxy in front (and there almost always is), these three codes usually come from the <strong>proxy</strong>, describing what happened when it tried to talk to your app (the <strong>upstream</strong>):</p>
+    <table>
+      <thead><tr><th>Code</th><th>Name</th><th>What the proxy is saying</th><th>Usual causes</th></tr></thead>
+      <tbody>
+        <tr><td><strong>502</strong></td><td>Bad Gateway</td><td>"I reached for the upstream, and the connection failed or the answer was broken."</td><td>Connection refused (nothing listening), connection reset mid-request (the process died), upstream closed a keep-alive connection at the wrong moment</td></tr>
+        <tr><td><strong>503</strong></td><td>Service Unavailable</td><td>"I have no healthy upstream to send this to," or the app itself says "I am overloaded."</td><td>No ready pods in the Service, load shedding, maintenance</td></tr>
+        <tr><td><strong>504</strong></td><td>Gateway Timeout</td><td>"I sent the request, and the upstream did not answer in time."</td><td>Slow app, slow database, a firewall silently dropping packets (see <a href="scenario-service-cannot-reach-database.html#errors">the database scenario</a>)</td></tr>
+      </tbody>
+    </table>
+    <div class="callout callout-intuition">
+      <p><strong>Intuition.</strong> A 502 means the <em>connection</em> to the app went wrong, not that the app's logic returned an error. If your app had a bug, you would see 500s written by the app. A burst of 502s that matches the deploy time points at pods <em>starting or stopping</em>.</p>
+    </div>
+  </section>
+
+  <section id="path">
+    <h2>3. Draw the Path a Request Takes</h2>
+    <pre><code>  user
+   │ HTTPS
+   ▼
+  cloud load balancer ──► ingress controller pods (nginx)
+                                 │  picks a pod IP from the Service's
+                                 │  endpoint list (keeps its own copy)
+                 ┌───────────────┼───────────────┐
+                 ▼               ▼               ▼
+              orders-1        orders-2  ...   orders-6
+               (pod)           (pod)           (pod)</code></pre>
+    <p>The important detail: the ingress controller does not ask Kubernetes "which pods are ready?" on every request. It keeps its <strong>own copy</strong> of the list of pod IPs and updates it when Kubernetes tells it something changed. So does kube-proxy on every node, and so does the cloud load balancer if it sends traffic straight to pods. Each copy is updated a little later than the change.</p>
+  </section>
+
+  <section id="clues">
+    <h2>4. Collect Clues: When, Where, How Many</h2>
+    <p>The on-call engineer checks four things, changing one question at a time:</p>
+    <ol>
+      <li><strong>Which component wrote the 502?</strong> The ingress controller's access log has the line, with the upstream address and an upstream status of <code>-</code> (no answer). The app's own logs have nothing for those requests. So the proxy could not get an answer from a pod.</li>
+      <li><strong>Which pods?</strong> Every failing request went to a pod IP that was being shut down, or to one that had just been created.</li>
+      <li><strong>The error text.</strong> The ingress error log shows two kinds of message: <code>connect() failed (111: Connection refused) while connecting to upstream</code> and <code>upstream prematurely closed connection while reading response header from upstream</code>. Error 111 is "connection refused" (the port is closed). "Prematurely closed" means the process went away in the middle of a request.</li>
+      <li><strong>The pod spec.</strong> There is no readiness probe, no preStop hook, and the app is started by a small shell script.</li>
+    </ol>
+    <p>That last point hides another clue. When a container's main process is a shell script (<code>sh start.sh</code>), the shell is process number 1 in the container. The shell does not pass SIGTERM on to the real app. So the app never hears it, and after 30 seconds it is killed with SIGKILL, cutting every request in flight. (The fix is <code>exec python app.py</code> in the script, so the app replaces the shell, or a small init like <code>tini</code>.)</p>
+  </section>
+
+  <section id="race">
+    <h2>5. The Root Cause: Two Things Happen at Once</h2>
+    <p>When Kubernetes deletes a pod, it starts two things <strong>in parallel</strong> (see <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-autoscaling-probes-rollouts.html#shutdown">How a Pod Shuts Down</a>):</p>
+    <pre><code>t = 0 s    pod marked "terminating"
+           ├── kubelet sends SIGTERM to the app         ─► app exits at once
+           └── pod removed from the endpoint list ─► ...
+t ≈ 0-2 s       ingress, kube-proxy, LB each get the news at different times
+
+           Between "app exited" and "everyone has the news",
+           traffic still goes to a closed port:  502 Connection refused</code></pre>
+    <p>And at the start of the rollout, a similar gap happens the other way:</p>
+    <pre><code>new pod created, container starts, app still loading (no readiness probe)
+           ├── Kubernetes: "container running, so it is ready"
+           └── pod added to the endpoint list at once
+           traffic goes to a port that is not listening yet: 502</code></pre>
+    <p>And requests that were <em>already</em> running in the old pod are cut when it exits: 502 "prematurely closed".</p>
+    <p>So there are three separate holes: <strong>too early in</strong>, <strong>too early out</strong>, and <strong>cut mid-request</strong>. Each needs its own fix.</p>
+  </section>
+
+  <section id="lab">
+    <h2>6. Reproduce It: a Lab You Can Run</h2>
+    <p>A theory is good. A measurement is better. This single Python file (standard library only) builds a tiny version of the system: a round-robin load balancer, two "pods" (separate processes), 16 clients sending requests non-stop, and a rolling update that replaces both pods one at a time. It copies the real timing problems:</p>
+    <ul>
+      <li>a new pod needs <strong>2 s</strong> to load before it listens;</li>
+      <li>each request takes <strong>100 ms</strong>;</li>
+      <li>the load balancer hears "pod removed" <strong>1 s</strong> after SIGTERM is sent (the propagation delay).</li>
+    </ul>
+    <p>It runs four cases:</p>
+    <table>
+      <thead><tr><th>Case</th><th>Readiness check</th><th>On SIGTERM</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>No: new pod gets traffic at once</td><td>Exit immediately</td></tr>
+        <tr><td>B</td><td>Yes: traffic only after <code>/ready</code> says 200</td><td>Exit immediately</td></tr>
+        <tr><td>C</td><td>Yes</td><td>Stop accepting, finish requests in flight, exit</td></tr>
+        <tr><td>D</td><td>Yes</td><td>Keep serving 3 s (like a preStop sleep), then finish in-flight requests and exit</td></tr>
+      </tbody>
+    </table>
+    <pre><code>"""Rolling-deploy lab: why pods return errors while a new version rolls out.
+
+One file, standard library only. It starts a tiny load balancer and two
+"pods" (backend processes), sends steady traffic, then replaces both pods one
+by one, the way a Kubernetes rolling update does. It counts every response.
+
+Usage: python3 deploy_lab.py A|B|C|D
+  A = no readiness check, pod exits at once on SIGTERM
+  B = readiness check,    pod exits at once on SIGTERM
+  C = readiness check,    pod finishes in-flight requests, then exits
+  D = readiness check,    pod keeps serving for a few seconds (preStop sleep),
+      then finishes in-flight requests and exits
+"""
+import http.client, http.server, os, signal, subprocess, sys, threading, time
+from collections import Counter
+
+WORK = 0.1          # each request takes 100 ms of "work"
+STARTUP = 2.0       # a new pod needs 2 s before it can serve (loading)
+PROPAGATION = 1.0   # the load balancer hears "pod removed" 1 s after SIGTERM
+PRESTOP = 3.0       # case D: keep serving this long after SIGTERM
+
+def backend(port, mode):
+    time.sleep(STARTUP)                      # loading config, warming caches
+    state = {"draining": False}
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+        def do_GET(self):
+            if self.path == "/ready":
+                code = 503 if state["draining"] else 200
+            else:
+                time.sleep(WORK); code = 200
+            self.send_response(code); self.send_header("Content-Length", "2")
+            self.end_headers(); self.wfile.write(b"ok")
+    class Server(http.server.ThreadingHTTPServer):
+        def handle_error(self, *a): pass      # a client gave up; ignore
+    srv = Server(("127.0.0.1", port), H)
+    srv.daemon_threads = False                # so we can wait for in-flight work
+    def on_term(*_):
+        if mode in "AB":
+            os._exit(0)                       # die now, drop in-flight requests
+        def drain():
+            state["draining"] = True
+            if mode == "D":
+                time.sleep(PRESTOP)           # still serving while LB catches up
+            srv.shutdown()                    # stop accepting new connections
+            srv.server_close()                # wait for in-flight requests
+            os._exit(0)
+        threading.Thread(target=drain).start()
+    signal.signal(signal.SIGTERM, on_term)
+    srv.serve_forever()
+
+class LB:
+    def __init__(self):
+        self.pool, self.lock, self.i = [], threading.Lock(), 0
+    def pick(self):
+        with self.lock:
+            if not self.pool: return None
+            self.i += 1; return self.pool[self.i % len(self.pool)]
+    def add(self, p):
+        with self.lock: self.pool.append(p)
+    def remove(self, p):
+        with self.lock:
+            if p in self.pool: self.pool.remove(p)
+
+def send(port, path="/"):
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        c.request("GET", path); r = c.getresponse(); r.read(); return r.status
+    finally:
+        c.close()
+
+def main(mode):
+    lb, results, stop = LB(), Counter(), threading.Event()
+    count_lock = threading.Lock()
+    procs = {}
+    def start(port):
+        procs[port] = subprocess.Popen([sys.executable, __file__, "serve", str(port), mode])
+        if mode == "A":
+            lb.add(port)                      # no readiness check: add at once
+            return
+        while True:                           # readiness check every 100 ms
+            try:
+                if send(port, "/ready") == 200: break
+            except OSError: pass
+            time.sleep(0.1)
+        lb.add(port)
+    def terminate(port):
+        procs[port].send_signal(signal.SIGTERM)          # kubelet sends SIGTERM...
+        threading.Timer(PROPAGATION, lb.remove, [port]).start()  # ...LB learns later
+    def client():
+        while not stop.is_set():
+            port = lb.pick()
+            try:
+                outcome = send(port) if port else "no backend"
+            except ConnectionRefusedError:
+                outcome = "refused"               # nothing listening on that port
+            except (ConnectionResetError, http.client.HTTPException):
+                outcome = "reset"                 # connection cut mid-request
+            except OSError as e:
+                outcome = type(e).__name__
+            with count_lock:
+                results[outcome] += 1
+    start(9101); start(9102)
+    if mode == "A": time.sleep(STARTUP + 0.5)      # let the first pods load
+    threads = [threading.Thread(target=client) for _ in range(16)]
+    t0 = time.time()
+    for t in threads: t.start()
+    time.sleep(2)
+    for old, new in [(9101, 9103), (9102, 9104)]:  # rolling update, one at a time
+        start(new); terminate(old); time.sleep(PRESTOP + 2)
+    time.sleep(2); stop.set()
+    for t in threads: t.join()
+    for p in procs.values():
+        p.kill(); p.wait()                    # clean up before the next run
+    total = sum(results.values()); bad = total - results[200]
+    print(f"case {mode}: {total} requests in {time.time()-t0:.1f} s, "
+          f"{results[200]} ok, {bad} failed ({100*bad/total:.2f}%)  {dict(results)}")
+
+if __name__ == "__main__":
+    if sys.argv[1] == "serve": backend(int(sys.argv[2]), sys.argv[3])
+    else: main(sys.argv[1])</code></pre>
+    <p>Run it with <code>for m in A B C D; do python3 deploy_lab.py $m; done</code>.</p>
+    <div class="callout">
+      <p><strong>How the lab maps to the real thing.</strong> A real proxy turns "connection refused" and "connection reset" into a <code>502</code> for the user. Our clients talk to the pods directly through the load balancer's choice, so they see the raw errors instead. The lab's "LB" is a list of ports inside the client; removing a port from that list after 1 s plays the role of the endpoint update reaching the ingress controller.</p>
+    </div>
+  </section>
+
+  <section id="results">
+    <h2>7. The Results, Case by Case</h2>
+    <p>We ran all four cases three times on an 8-core Linux machine. Real output from one round:</p>
+    <pre><code>case A: 3184 requests in 14.1 s, 2210 ok, 974 failed (30.59%)  {200: 2210, 'reset': 16, 'refused': 958}
+case B: 3049 requests in 18.3 s, 2876 ok, 173 failed (5.67%)  {200: 2876, 'reset': 16, 'refused': 157}
+case C: 3032 requests in 18.3 s, 2880 ok, 152 failed (5.01%)  {200: 2880, 'reset': 2, 'refused': 150}
+case D: 2880 requests in 18.3 s, 2880 ok, 0 failed (0.00%)  {200: 2880}</code></pre>
+    <p>All three rounds:</p>
+    <table>
+      <thead><tr><th>Case</th><th>Failed (3 runs)</th><th>Refused</th><th>Reset</th></tr></thead>
+      <tbody>
+        <tr><td>A: no readiness, exit at once</td><td>30.59%, 30.66%, 30.71%</td><td>958, 957, 958</td><td>16, 16, 16</td></tr>
+        <tr><td>B: readiness, exit at once</td><td>5.67%, 5.62%, 5.75%</td><td>157, 156, 160</td><td>16, 16, 16</td></tr>
+        <tr><td>C: readiness, finish in-flight</td><td>5.01%, 5.26%, 5.26%</td><td>150, 158, 158</td><td>2, 2, 2</td></tr>
+        <tr><td>D: readiness, keep serving 3 s, finish in-flight</td><td>0.00%, 0.00%, 0.00%</td><td>0, 0, 0</td><td>0, 0, 0</td></tr>
+      </tbody>
+    </table>
+    <p>(Case A runs for less time because it does not wait for new pods to become ready.)</p>
+    <h3>What each number tells us</h3>
+    <ul>
+      <li><strong>A &rarr; B: the readiness check removed about 800 refusals per run.</strong> In case A, each new pod was in the list for 2 s before it listened. With round robin, a share of all requests went there and were refused.</li>
+      <li><strong>The 16 resets in A and B are requests in flight being cut.</strong> 16 clients spread over 2 pods means about 8 requests are running on each pod at any moment. Two pods were killed: 2 &times; 8 = 16. That matches exactly.</li>
+      <li><strong>B &rarr; C: graceful shutdown removed the cut requests</strong> (16 &rarr; 2). But the refusals stayed, because the pod stopped listening right away while the load balancer still had it in the list for 1 s.</li>
+      <li><strong>The 2 resets left in C</strong> are connections that had already reached the pod's waiting queue (the TCP accept backlog) when it closed its listening socket. They were accepted by the kernel but never handled.</li>
+      <li><strong>C &rarr; D: keeping on serving for 3 s, longer than the 1 s delay, removed everything.</strong> By the time the pod stopped listening, nobody was sending to it any more.</li>
+    </ul>
+    <div class="callout callout-intuition">
+      <p><strong>Why the percentages look so large.</strong> A refused connection fails in well under a millisecond, while a good request takes 100 ms. So during an error window, the clients fire many fast failures. Do not read "30%" as "30% of users". The better summary is: <em>case A had error windows of a few seconds per pod; case D had none.</em></p>
+    </div>
+  </section>
+
+  <section id="fix">
+    <h2>8. The Fix in Kubernetes Terms</h2>
+    <p>Each lab case maps to one setting:</p>
+    <table>
+      <thead><tr><th>Hole</th><th>Lab fix</th><th>Kubernetes fix</th></tr></thead>
+      <tbody>
+        <tr><td>Too early in</td><td>Wait for <code>/ready</code></td><td><code>readinessProbe</code> (and a <code>startupProbe</code> for slow starts)</td></tr>
+        <tr><td>Cut mid-request</td><td>Finish in-flight work on SIGTERM</td><td>Graceful shutdown in the app; make sure PID 1 gets SIGTERM; <code>terminationGracePeriodSeconds</code> long enough</td></tr>
+        <tr><td>Too early out</td><td>Keep serving 3 s</td><td><code>lifecycle.preStop.sleep</code> of a few seconds more than the slowest endpoint update</td></tr>
+        <tr><td>Rollout pace</td><td>One pod at a time</td><td><code>maxUnavailable: 0</code>, <code>maxSurge: 1</code></td></tr>
+      </tbody>
+    </table>
+    <pre><code>spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    spec:
+      terminationGracePeriodSeconds: 45     # &gt; preStop (10) + slowest request
+      containers:
+        - name: app
+          readinessProbe:
+            httpGet: { path: /ready, port: 8080 }
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 10</code></pre>
+    <p>The full, schema-checked manifest is on the <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-autoscaling-probes-rollouts.html#manifests">Autoscaling, Probes &amp; Rollouts</a> page. If the cloud load balancer sends traffic straight to pod IPs, also set its <strong>deregistration delay</strong> (also called connection draining), so it keeps old connections alive for a while after a pod is removed.</p>
+  </section>
+
+  <section id="app-code">
+    <h2>9. Graceful Shutdown in the App</h2>
+    <p>The order of steps on SIGTERM matters:</p>
+    <ol>
+      <li>Make <code>/ready</code> return 503 (so any remaining health checks stop sending traffic).</li>
+      <li>Keep serving normally for a few seconds (if you do not use a preStop hook).</li>
+      <li>Stop accepting new connections.</li>
+      <li>Wait for requests in flight to finish, with a time limit below the grace period.</li>
+      <li>Close database pools and flush logs. Exit with code 0.</li>
+    </ol>
+    <p>Most servers already know how to do steps 3 and 4:</p>
+    <table>
+      <thead><tr><th>Server</th><th>On SIGTERM</th></tr></thead>
+      <tbody>
+        <tr><td>Gunicorn (Python)</td><td>Graceful: workers finish current requests, up to <code>--graceful-timeout</code> (30 s by default)</td></tr>
+        <tr><td>Uvicorn (Python)</td><td>Graceful; use <code>--timeout-graceful-shutdown</code> to cap the wait</td></tr>
+        <tr><td>Go <code>net/http</code></td><td>Nothing by itself: you catch the signal and call <code>server.Shutdown(ctx)</code></td></tr>
+        <tr><td>Node.js <code>http</code></td><td>Nothing by itself: catch <code>SIGTERM</code> and call <code>server.close()</code></td></tr>
+        <tr><td>nginx</td><td>SIGTERM is a <em>fast</em> stop; SIGQUIT is the graceful one (so nginx images set <code>STOPSIGNAL SIGQUIT</code>)</td></tr>
+      </tbody>
+    </table>
+    <p>And the container must actually deliver the signal: in the Dockerfile, use the exec form <code>CMD ["python", "app.py"]</code>, not the shell form <code>CMD python app.py</code>, which wraps the app in a shell (see <a href="../../../Docker-Kubernetes/learn/Docker/docker-fundamentals.html">Docker Fundamentals</a>).</p>
+  </section>
+
+  <section id="keepalive">
+    <h2>10. The Second Cause: Keep-Alive Timeout Races</h2>
+    <p>After the fix, the deploy spikes are gone. But a few 502s a day remain, at random times. The ingress log says <code>upstream prematurely closed connection</code>, always on a connection that had been <strong>idle</strong> for a while.</p>
+    <p>The proxy keeps connections to pods open and reuses them (keep-alive, see <a href="../Computer-Networks/cn-tcp-deep-dive.html">TCP</a>) to skip new handshakes. The app's server closes idle connections after its own timeout. If the app's timeout is <em>shorter</em> than the proxy's, this can happen:</p>
+    <pre><code>proxy idle timeout: 60 s       app idle timeout: 5 s
+
+t = 0      last request on connection #7 finishes; both sides keep it open
+t = 5.000  app: "idle 5 s, closing #7"  ─► sends FIN
+t = 5.000  proxy, at the same moment: sends a new request on #7
+           (the FIN has not arrived yet)
+           app's kernel: connection is closed  ─► RST
+           proxy: "upstream prematurely closed"  ─► 502 to the user</code></pre>
+    <p><strong>Rule: the side that sends the request must time out idle connections first.</strong> Set the app's keep-alive timeout <em>longer</em> than the proxy's (and the proxy's longer than the cloud load balancer's, if that one reuses connections to the proxy). For example, Gunicorn's <code>--keep-alive</code> defaults to 2 seconds, which is shorter than most load balancers' idle timeouts.</p>
+  </section>
+
+  <section id="retries">
+    <h2>11. Should the Load Balancer Retry?</h2>
+    <p>Proxies can retry a failed request on another pod. It hides many 502s. But remember the customers who were charged twice.</p>
+    <ul>
+      <li><strong>Safe to retry</strong>: requests that failed with "connection refused" (the request never reached the app), and idempotent methods like <code>GET</code>, <code>PUT</code>, <code>DELETE</code> (see <a href="../Computer-Networks/cn-dns-http.html#methods">Methods and Idempotency</a>).</li>
+      <li><strong>Not safe by default</strong>: a <code>POST /orders</code> that was cut mid-request. The app might have created the order before dying. A retry creates a second one.</li>
+      <li><strong>The fix for POST</strong>: an <strong>idempotency key</strong>. The client sends a unique ID with the request (<code>Idempotency-Key: 6f1c...</code>). The server stores the result under that key; a repeat with the same key returns the stored result instead of acting twice.</li>
+    </ul>
+    <p>nginx, for example, does not retry non-idempotent requests on another upstream unless you allow it with <code>proxy_next_upstream ... non_idempotent</code>. Keep it that way unless the app uses idempotency keys. Also cap retries, or a struggling service gets a retry storm (see <a href="scenario-slow-api-debugging.html">Debugging a Slow API</a>).</p>
+  </section>
+
+  <section id="postmortem">
+    <h2>12. Blameless Postmortem</h2>
+    <p>A <strong>postmortem</strong> is a short written review after an incident. "Blameless" means it looks for the weak points in the system, not a person to blame.</p>
+    <table>
+      <tbody>
+        <tr><th>Summary</th><td>Every release, and every night-time scale-down, caused about 1-2 minutes of 502 errors on the orders API. Some customers who retried were charged twice.</td></tr>
+        <tr><th>Impact</th><td>Failed requests during each release; duplicate orders when a user retried after a cut <code>POST</code>.</td></tr>
+        <tr><th>Root causes</th><td>(1) No readiness probe: new pods got traffic before listening. (2) The app started from a shell script, so SIGTERM never reached it; it was SIGKILLed after 30 s, cutting requests. (3) No preStop delay: pods stopped listening before every proxy had removed them. (4) App keep-alive timeout (2 s) shorter than the proxy's.</td></tr>
+        <tr><th>What went well</th><td>The ingress log recorded the upstream address and error text, which pointed straight at pods starting and stopping.</td></tr>
+        <tr><th>Actions</th><td>Add startup and readiness probes; <code>exec</code> the app; handle SIGTERM gracefully; preStop sleep 10 s; grace period 45 s; app keep-alive 75 s (above the proxy's 60 s); idempotency keys on <code>POST /orders</code>; the CI check below.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="prevent">
+    <h2>13. Preventing It: a Deploy Check in CI</h2>
+    <p>The lab above is also a test. The same idea works against a real staging cluster: send steady traffic, do a rollout, and fail the pipeline if any request failed.</p>
+    <pre><code># sketch of a CI step (staging cluster)
+hey -z 120s -c 20 https://orders.staging.example.com/healthz-deep &gt; load.txt &amp;
+kubectl -n staging set image deployment/orders app=registry.example.com/orders:$GIT_SHA
+kubectl -n staging rollout status deployment/orders --timeout=300s
+wait
+grep -E "^\s+\[(5[0-9]{2})\]" load.txt &amp;&amp; { echo "errors during rollout"; exit 1; } || echo "clean rollout"</code></pre>
+    <p><code>hey</code> is a small load-testing tool; its report lists each status code with a count, like <code>[200] 23081 responses</code>. The script fails if any 5xx line appears. Run it on every change to the Deployment, the Dockerfile, or the app's server settings, since those are what break shutdown behavior. (See <a href="../../../Docker-Kubernetes/learn/DevOps/devops-cicd-mlops.html">CI/CD and MLOps</a> for wiring steps like this into a pipeline.)</p>
+  </section>
+
+  <section id="practice">
+    <h2>14. Practice Problems</h2>
+    <p>Answers follow each one.</p>
+
+    <h3>Problem 1: which code?</h3>
+    <p>For each, say whether a proxy would most likely return 502, 503 or 504: (a) every pod of the Service is failing readiness; (b) the app takes 90 s and the proxy timeout is 60 s; (c) the pod's process crashed while handling the request.</p>
+    <p><em>Answer:</em> (a) <strong>503</strong>, no healthy upstream. (b) <strong>504</strong>, upstream too slow. (c) <strong>502</strong>, the connection broke.</p>
+
+    <h3>Problem 2: predict the resets</h3>
+    <p>In the lab, change the number of clients from 16 to 32 and keep 2 pods. In case B, about how many "reset" errors do you expect? Why?</p>
+    <p><em>Answer:</em> About <strong>32</strong>. 32 clients over 2 pods is about 16 requests in flight per pod; two pods are killed: 2 &times; 16 = 32. (Each request takes 100 ms and clients send without pause, so nearly every client is always in the middle of a request.) We ran exactly this change: case B with 32 clients gave <code>'reset': 32</code>.</p>
+
+    <h3>Problem 3: how long a preStop?</h3>
+    <p>You measured that the slowest part of your system (a cloud load balancer) takes up to 8 s to stop sending to a removed pod. The slowest normal request is 12 s. Choose the preStop sleep and the grace period.</p>
+    <p><em>Answer:</em> preStop a bit more than 8 s, say <strong>10 s</strong>. The grace period must cover preStop + the slowest request + margin: 10 + 12 = 22, so <strong>30 s or more</strong> (the default 30 s just fits; 40 s is safer).</p>
+
+    <h3>Problem 4: the keep-alive rule</h3>
+    <p>A cloud load balancer has an idle timeout of 350 s and reuses connections to your nginx ingress. nginx keeps upstream connections to pods for 60 s. The app's server times out idle connections after 5 s. Which settings are wrong, and what would you change?</p>
+    <p><em>Answer:</em> Each side that <em>receives</em> requests must keep idle connections longer than the side that <em>sends</em> them. nginx's client-side keep-alive must be over 350 s, and the app's must be over 60 s. Set the app to, say, <strong>75 s</strong> and nginx's client keep-alive to, say, <strong>360 s</strong> (or lower the load balancer's idle timeout below nginx's).</p>
+
+    <h3>Problem 5: is it safe to retry?</h3>
+    <p>The proxy got "connection refused" for a <code>POST /payments</code>. Is it safe to retry on another pod? What if it got "upstream prematurely closed connection while reading response header"?</p>
+    <p><em>Answer:</em> Connection refused means no TCP connection was made, so the app never saw the request: <strong>safe to retry</strong>. "Prematurely closed while reading the response" means the request was sent and the app may have acted on it: <strong>not safe</strong> unless the request carries an idempotency key.</p>
+  </section>
+
+  <section id="pitfalls">
+    <h2>15. Common Pitfalls</h2>
+    <ul>
+      <li><strong>Blaming the code change.</strong> If errors appear on every deploy regardless of what changed, look at how pods start and stop, not at the diff.</li>
+      <li><strong>Shell as PID 1.</strong> <code>CMD python app.py</code> (shell form) or a start script without <code>exec</code>: the app never sees SIGTERM.</li>
+      <li><strong>Readiness that always says yes.</strong> A <code>/ready</code> that returns 200 before the app has loaded is the same as no probe.</li>
+      <li><strong>preStop longer than the grace period.</strong> The pod is SIGKILLed during the sleep.</li>
+      <li><strong>Only testing with no traffic.</strong> A rollout on an idle staging cluster always looks perfect.</li>
+      <li><strong>Retrying non-idempotent requests</strong> at the proxy to hide errors. It turns 502s into duplicate orders.</li>
+      <li><strong>App keep-alive shorter than the proxy's.</strong> Rare, random 502s that are very hard to find.</li>
+    </ul>
+  </section>
+
+  <section id="cheat-sheet">
+    <h2>16. Cheat Sheet</h2>
+    <table>
+      <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>502 "connection refused" right after a new pod starts</td><td>No (or weak) readiness probe</td><td>readinessProbe, startupProbe</td></tr>
+        <tr><td>502 "prematurely closed" when a pod stops</td><td>App exits without finishing requests, or never gets SIGTERM</td><td>Graceful shutdown; exec form CMD; long enough grace period</td></tr>
+        <tr><td>502 "connection refused" right after a pod stops</td><td>App stops listening before every proxy removed it</td><td>preStop sleep</td></tr>
+        <tr><td>Random rare 502 on idle connections</td><td>App keep-alive shorter than the proxy's</td><td>App idle timeout &gt; proxy's</td></tr>
+        <tr><td>503 "no healthy upstream"</td><td>All pods not ready (maybe readiness checks a shared dependency)</td><td>Check readiness logic; maxUnavailable 0</td></tr>
+        <tr><td>504</td><td>Slow upstream</td><td>See the slow API scenario</td></tr>
+      </tbody>
+    </table>
+    <pre><code>kubectl get events --sort-by=.lastTimestamp | grep -i -E "unhealthy|killing|probe"
+kubectl describe pod &lt;pod&gt;                      # probe failures, last exit code
+kubectl get pod &lt;pod&gt; -o jsonpath='{.status.containerStatuses[0].lastState}'
+                                               # exit code 137 = SIGKILL (128 + 9)
+kubectl exec &lt;pod&gt; -- cat /proc/1/cmdline | tr '\0' ' '   # what is PID 1?
+kubectl logs -n ingress-nginx deploy/ingress-nginx-controller | grep -E "upstream|111"</code></pre>
+    <p class="refer-link"><small>Refer: <a href="https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination" rel="noopener noreferrer">Kubernetes: Pod termination</a> &middot; <a href="https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/" rel="noopener noreferrer">Container lifecycle hooks</a> &middot; <a href="https://www.rfc-editor.org/rfc/rfc9110#name-502-bad-gateway" rel="noopener noreferrer">RFC 9110: 502, 503, 504</a> &middot; <a href="https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_next_upstream" rel="noopener noreferrer">nginx proxy_next_upstream</a> &middot; <a href="https://docs.gunicorn.org/en/stable/settings.html" rel="noopener noreferrer">Gunicorn settings</a></small></p>
+  </section>
+
+  <!-- prev-next:start -->
+  <nav class="prev-next" aria-label="Reading order">
+    <a class="prev-next-prev" href="scenario-service-cannot-reach-database.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">Scenario: A Service Cannot Reach Its Database</span></a>
+    <p class="prev-next-step">Page 15 of 15 in the suggested reading order</p>
+  </nav>
+  <!-- prev-next:end -->
+
+  <nav class="page-footer-nav">
+    <p>Related: <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-autoscaling-probes-rollouts.html">Autoscaling, Probes &amp; Rollouts</a> &middot; <a href="scenario-slow-api-debugging.html">Scenario: Debugging a Slow API</a> &middot; <a href="scenario-service-cannot-reach-database.html">Scenario: A Service Cannot Reach Its Database</a> &middot; <a href="../Computer-Networks/cn-tcp-deep-dive.html">TCP Deep Dive</a> &middot; <a href="../Computer-Networks/cn-dns-http.html">DNS &amp; HTTP</a></p>
+    <p><a href="../cs-fundamentals-learn.html">Back to CS Fundamentals Learn</a></p>
+  </nav>
+</main>
+
+<footer>
+  <p><small><a href="../../cs-fundamentals.html">Back to CS Fundamentals</a> &middot; <a href="../../../index.html">Home</a></small></p>
+</footer>
+
+<script src="../../../assets/site.js"></script>
+<script src="../../../assets/search.js" defer></script>
+</body>
+</html>

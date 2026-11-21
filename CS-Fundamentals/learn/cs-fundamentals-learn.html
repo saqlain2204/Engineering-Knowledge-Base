@@ -31,11 +31,14 @@
       <li><a href="Databases/dbms-normalization-schema-design.html">Normalization &amp; Schema Design</a>: which tables a database should have</li>
       <li><a href="Databases/dbms-transactions-isolation-mvcc.html">Transactions, Isolation Levels &amp; MVCC</a>: the same problems inside a database</li>
       <li><a href="Databases/dbms-indexing-btrees-query-plans.html">Indexing, B+ Trees &amp; Query Plans</a>: how databases find data fast</li>
+      <li><a href="Databases/dbms-replication-sharding-cap.html">Replication, Sharding &amp; the CAP Theorem</a>: when one database server is not enough</li>
       <li><a href="Computer-Networks/cn-ip-addressing-subnetting-routing.html">IP Addressing, Subnetting &amp; Routing</a>: how packets find their way</li>
       <li><a href="Computer-Networks/cn-tcp-deep-dive.html">TCP Deep Dive</a>: how bytes cross the network reliably</li>
       <li><a href="Computer-Networks/cn-dns-http.html">DNS &amp; HTTP</a>: from a name to a web page</li>
+      <li><a href="Computer-Networks/cn-tls-https-certificates.html">TLS, HTTPS &amp; Certificates</a>: how strangers talk privately and prove who they are</li>
       <li><a href="Scenarios/scenario-slow-api-debugging.html">Scenario: Debugging a Slow API End to End</a>: everything above, used together</li>
       <li><a href="Scenarios/scenario-service-cannot-reach-database.html">Scenario: A Service Cannot Reach Its Database</a>: a network mystery solved layer by layer</li>
+      <li><a href="Scenarios/scenario-errors-during-deploys.html">Scenario: Errors During Every Deploy</a>: why releases cause 502s, measured and fixed</li>
     </ol>
   </section>
 
@@ -54,6 +57,7 @@
       <li><a href="Databases/dbms-normalization-schema-design.html"><strong>Normalization &amp; Schema Design</strong></a>  -  update, insert and delete anomalies, keys, functional dependencies, closure and finding keys by hand, 1NF to BCNF and 4NF worked step by step, lossless splits, ER diagrams to tables, when to denormalize, a runnable SQL lab</li>
       <li><a href="Databases/dbms-transactions-isolation-mvcc.html"><strong>Transactions, Isolation Levels &amp; MVCC</strong></a>  -  ACID, write-ahead logging, anomalies as timelines, PostgreSQL vs MySQL isolation, MVCC internals, locking and deadlocks, a hands-on lab</li>
       <li><a href="Databases/dbms-indexing-btrees-query-plans.html"><strong>Indexing, B+ Trees &amp; Query Plans</strong></a>  -  pages and full scans, B+ trees built by hand with splits, tree height math, hash, clustered and covering indexes, the leftmost-prefix rule, reading real PostgreSQL EXPLAIN output, write cost, LSM trees</li>
+      <li><a href="Databases/dbms-replication-sharding-cap.html"><strong>Replication, Sharding &amp; the CAP Theorem</strong></a>  -  leaders and followers, sync vs async commits, replication lag and stale reads, failover and split brain, quorums (W + R &gt; N), range and hash sharding, a consistent hashing experiment, hot keys, CAP and PACELC</li>
     </ul>
   </section>
 
@@ -63,6 +67,7 @@
       <li><a href="Computer-Networks/cn-ip-addressing-subnetting-routing.html"><strong>IP Addressing, Subnetting &amp; Routing</strong></a>  -  binary, CIDR and masks, network and broadcast by hand, subnetting and VLSM, private ranges, ARP and gateways, longest prefix match, NAT, IPv6, cloud VPC and Kubernetes address planning</li>
       <li><a href="Computer-Networks/cn-tcp-deep-dive.html"><strong>TCP Deep Dive</strong></a>  -  handshake with real sequence numbers, retransmission, flow and congestion control (CUBIC, BBR), TIME_WAIT, TLS 1.3 and HTTP/3 latency budgets, debugging recipes</li>
       <li><a href="Computer-Networks/cn-dns-http.html"><strong>DNS &amp; HTTP: From a Name to a Web Page</strong></a>  -  the DNS tree, a lookup traced step by step, record types with real answers, TTL math, Kubernetes ndots, HTTP messages, idempotency, status codes, cookies, caching with ETag and 304, a zero-downtime DNS move</li>
+      <li><a href="Computer-Networks/cn-tls-https-certificates.html"><strong>TLS, HTTPS &amp; Certificates</strong></a>  -  symmetric and public-key crypto, Diffie-Hellman by hand, signatures, the chain of trust, the TLS 1.3 handshake from real openssl output, resumption and 0-RTT, a lab that breaks certificates on purpose, mTLS, TLS at load balancers</li>
     </ul>
   </section>
 
@@ -71,6 +76,7 @@
     <ul>
       <li><a href="Scenarios/scenario-slow-api-debugging.html"><strong>Debugging a Slow API End to End</strong></a>  -  percentiles, RED and USE, splitting time with curl, uptime and vmstat, Little's law for connection pools, pg_stat_statements and EXPLAIN, retry storms, load shedding, a blameless postmortem, practice problems</li>
       <li><a href="Scenarios/scenario-service-cannot-reach-database.html"><strong>A Service Cannot Reach Its Database</strong></a>  -  what each connection error means, DNS, TCP and firewall checks, ip route get and tcpdump, an overlapping pod range, a proxy workaround, TLS and connection-limit errors, a CIDR overlap check for CI</li>
+      <li><a href="Scenarios/scenario-errors-during-deploys.html"><strong>Errors During Every Deploy</strong></a>  -  502 vs 503 vs 504, the race between SIGTERM and load balancer updates, a runnable lab measuring four fixes, graceful shutdown, keep-alive timeout races, safe retries and idempotency keys, a deploy check for CI</li>
     </ul>
   </section>
 

@@ -347,6 +347,7 @@ kubectl create job manual-backup --from=cronjob/nightly-backup</code></pre>
   <section id="probes">
     <h2>7. Probes</h2>
     <p>Probes tell kubelet whether a container is alive, ready to receive traffic, or still starting up. Misconfigured probes are a top cause of CrashLoopBackOff and flapping Deployments.</p>
+    <p>For timing math, what each endpoint should check, and how probes make rolling updates safe, see <a href="kubernetes-autoscaling-probes-rollouts.html#probes">Autoscaling, Probes &amp; Rollouts</a>.</p>
     <table>
       <thead><tr><th>Probe</th><th>Purpose</th><th>Failure action</th></tr></thead>
       <tbody>
@@ -404,6 +405,7 @@ kubectl create job manual-backup --from=cronjob/nightly-backup</code></pre>
   <section id="hpa">
     <h2>8. Horizontal Pod Autoscaler (HPA)</h2>
     <p>The <strong>HPA</strong> automatically scales Deployment (or StatefulSet) replicas based on observed metrics. Requires <strong>metrics-server</strong> (CPU/memory) or custom/external metrics (Prometheus adapter).</p>
+    <p>The scaling formula worked step by step, scaling speed and stabilization, the VPA, and adding nodes with the Cluster Autoscaler or Karpenter are covered in <a href="kubernetes-autoscaling-probes-rollouts.html#hpa">Autoscaling, Probes &amp; Rollouts</a>.</p>
     <pre><code>apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -554,9 +556,16 @@ spec:
     </table>
     <p>Full cheat sheet: <a href="../../cheatsheets/kubectl-cheatsheet.html">kubectl Cheat Sheet</a></p>
 
+    <!-- prev-next:start -->
+    <nav class="prev-next" aria-label="Reading order">
+      <a class="prev-next-prev" href="kubernetes-architecture.html" rel="prev"><span class="prev-next-label">&larr; Previous</span><span class="prev-next-title">Kubernetes Architecture</span></a>
+      <a class="prev-next-next" href="kubernetes-autoscaling-probes-rollouts.html" rel="next"><span class="prev-next-label">Next &rarr;</span><span class="prev-next-title">Autoscaling, Probes &amp; Rollouts</span></a>
+      <p class="prev-next-step">Page 5 of 12 in the suggested reading order</p>
+    </nav>
+    <!-- prev-next:end -->
+
     <div class="page-footer-nav">
-      <p>Next topic:</p>
-      <a class="interview-link" href="kubernetes-networking.html">Networking &amp; Services →</a>
+      <p><a href="../docker-kubernetes-learn.html">Back to Docker &amp; Kubernetes Learn</a></p>
       <p>Go deeper: <a href="../../../CS-Fundamentals/learn/Operating-Systems/os-processes-threads-scheduling.html#containers">how CPU limits throttle containers</a> &middot; <a href="../../../CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html#linux-practice">why containers get OOMKilled</a> &middot; <a href="kubernetes-gpu-scheduling.html">GPU Scheduling</a></p>
     </div>
   </section>
