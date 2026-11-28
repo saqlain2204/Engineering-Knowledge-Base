@@ -3,101 +3,159 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Engineering Knowledge Base</title>
-  <meta name="description" content="Engineering Knowledge Base: deep, beginner-friendly guides to AI engineering, Docker and Kubernetes, CS fundamentals, and graph machine learning, with worked examples, labs, and cheat sheets.">
+  <title>Engineering Knowledge Base: Free Guides to AI, Kubernetes and CS Fundamentals</title>
+  <meta name="description" content="Free, beginner-friendly guides to AI engineering, LLMs, Docker and Kubernetes, operating systems, databases, networks and graph ML, with worked examples, diagrams and interactive labs.">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Engineering Knowledge Base: Free Guides to AI, Kubernetes and CS Fundamentals">
+  <meta property="og:description" content="Free, beginner-friendly guides to AI engineering, LLMs, Docker and Kubernetes, operating systems, databases, networks and graph ML, with worked examples, diagrams and interactive labs.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Engineering Knowledge Base: Free Guides to AI, Kubernetes and CS Fundamentals">
+  <meta name="twitter:description" content="Free, beginner-friendly guides to AI engineering, LLMs, Docker and Kubernetes, operating systems, databases, networks and graph ML, with worked examples, diagrams and interactive labs.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/","description":"Free, beginner-friendly guides to AI engineering, LLMs, Docker and Kubernetes, operating systems, databases, networks and graph ML, with worked examples, diagrams and interactive labs.","inLanguage":"en","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"}]}]}</script>
+  <!-- layout:head:end -->
 </head>
-<body>
-
-<header>
-  <div class="site-brand">
-    <img src="assets/logo.svg" alt="Engineering Knowledge Base logo" class="site-logo" width="72" height="72">
-    <h1>Engineering Knowledge Base</h1>
+<body class="home">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="index.html" aria-label="Engineering Knowledge Base home"><img src="assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="AI Engineer/ai-engineering.html">AI Engineering</a>
+      <a href="CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a>
+      <a href="Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a>
+      <a href="Graph ML/graph-ml.html">Graph ML</a>
+      <a href="Interactive Labs/index.html">Labs</a>
+      <a href="AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
   </div>
-  <p>Structured notes, revision guides, and interview prep across engineering disciplines.</p>
-  <p class="maintainer">Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a></p>
+</div>
+<!-- layout:topbar:end -->
+
+<header class="home-hero">
+  <p class="eyebrow">Free and open source &middot; new pages every day</p>
+  <h1>Learn how real systems work, from first principles.</h1>
+  <p class="lede">Deep, beginner-friendly guides to AI engineering, Kubernetes and computer science. Every idea is explained in plain words, worked by hand, and tied to what happens in production.</p>
+  <div class="hero-cta">
+    <a class="btn btn-primary" href="#subjects">Start learning &rarr;</a>
+    <a class="btn" href="Interactive Labs/index.html">Try the interactive labs</a>
+  </div>
+  <ul class="hero-stats" aria-label="Site at a glance">
+    <li><b>90+</b>in-depth guides</li>
+    <li><b>6</b>interactive labs</li>
+    <li><b>4</b>learning tracks</li>
+    <li><b>0</b>paywalls</li>
+  </ul>
 </header>
 
-<main>
+<main class="wide">
 
-  <section>
-    <h2>Subjects</h2>
-    <p>Pick a subject to explore learn notes and interview prep.</p>
-
-    <ul>
-      <li>
-        <a href="AI Engineer/ai-engineering.html"><strong>AI Engineering</strong></a>
-        <br>
-        Classical ML basics, trees, clustering and PCA, LLMs, pretraining, fine-tuning, RAG, vector databases, inference and quantization, deployment, and agents.
-      </li>
-      <li>
-        <a href="Docker-Kubernetes/docker-kubernetes.html"><strong>Docker &amp; Kubernetes</strong></a>
-        <br>
-        Containers, Docker Compose, image security, Kubernetes architecture, workloads, probes, rollouts and autoscaling, networking, storage, RBAC, Helm, observability, debugging pods, operators and custom resources, GPU scheduling, infrastructure as code, and CI/CD with MLOps.
-      </li>
-      <li>
-        <a href="CS-Fundamentals/cs-fundamentals.html"><strong>CS Fundamentals</strong></a>
-        <br>
-        Operating systems, databases, and computer networks from zero: processes and scheduling, system calls, virtual memory, memory allocation and garbage collection, CPU caches, file systems, I/O and event loops, concurrency and deadlocks, normalization, transactions, indexing, joins, aggregation and window functions, replication and sharding, IP addressing and subnetting, TCP, DNS and HTTP, TLS and certificates, QUIC, load balancing, and real debugging scenarios.
-      </li>
-      <li>
-        <a href="Graph ML/graph-ml.html"><strong>Graph Machine Learning</strong></a>
-        <br>
-        Graphs, message passing, GCN, GraphSAGE, GAT, graph transformers, training, data prep, GNNs with LLMs, and recent research.
-      </li>
+  <section id="subjects">
+    <p class="section-kicker">Learning tracks</p>
+    <h2>Pick a subject</h2>
+    <ul class="card-grid">
+      <li><a class="card" href="AI Engineer/ai-engineering.html">
+        <span class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></span>
+        <span class="card-title">AI Engineering</span>
+        <span class="card-text">Classical ML, trees and clustering, transformers, LLMs, pretraining, fine-tuning, RAG, inference and quantization, evaluation, and agents.</span>
+        <span class="card-go">34 guides</span>
+      </a></li>
+      <li><a class="card" href="CS-Fundamentals/cs-fundamentals.html">
+        <span class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span>
+        <span class="card-title">CS Fundamentals</span>
+        <span class="card-text">Operating systems, databases and networks from zero, plus seven real debugging scenarios like retry storms, lock waits and full disks.</span>
+        <span class="card-go">27 guides</span>
+      </a></li>
+      <li><a class="card" href="Docker-Kubernetes/docker-kubernetes.html">
+        <span class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8.5 4.9v9.8L12 22l-8.5-5.3V6.9z"/><path d="M12 22V12M20.5 6.9L12 12 3.5 6.9"/></svg></span>
+        <span class="card-title">Docker &amp; Kubernetes</span>
+        <span class="card-text">Containers under the hood, Compose, cluster architecture, scheduling, autoscaling, networking, storage, security, operators, GPUs, IaC and MLOps.</span>
+        <span class="card-go">18 guides + cheat sheets</span>
+      </a></li>
+      <li><a class="card" href="Graph ML/graph-ml.html">
+        <span class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7l7.2.3M7.3 8.2l3.6 7.6M16.9 9.3l-3.7 6.6"/></svg></span>
+        <span class="card-title">Graph Machine Learning</span>
+        <span class="card-text">Graphs, message passing, GCN, GraphSAGE, GAT, graph transformers, training at scale, GNNs with LLMs, and recent research.</span>
+        <span class="card-go">13 guides</span>
+      </a></li>
     </ul>
+  </section>
 
-    <h3>Featured book</h3>
-    <ul>
-      <li>
-        <a href="AI Engineer/research/post-training-mastery.html"><strong>Post-Training Mastery</strong></a>
-        <br>
-        RLHF, DPO, reward modeling, and alignment - read in-browser or download the PDF (~600 pages, Mohammed Saqlain).
-      </li>
+  <section id="labs">
+    <div class="band">
+      <p class="section-kicker">Interactive labs</p>
+      <h2>Don't just read it. Play with it.</h2>
+      <p>Move a slider and watch attention weights, sampling odds, Gantt charts and p99 latency change in real time. Every lab runs in your browser.</p>
+      <ul class="card-grid">
+        <li><a class="card" href="Interactive Labs/attention.html"><span class="card-title">Self-Attention</span><span class="card-text">Q, K, V and softmax, one step at a time.</span><span class="card-go">Open lab</span></a></li>
+        <li><a class="card" href="Interactive Labs/sampling.html"><span class="card-title">LLM Sampling</span><span class="card-text">Temperature, top-k, top-p and min-p.</span><span class="card-go">Open lab</span></a></li>
+        <li><a class="card" href="Interactive Labs/cpu-scheduling.html"><span class="card-title">CPU Scheduling</span><span class="card-text">FCFS, SJF, SRTF, Round Robin, Priority.</span><span class="card-go">Open lab</span></a></li>
+        <li><a class="card" href="Interactive Labs/load-balancing.html"><span class="card-title">Load Balancing</span><span class="card-text">Why least connections beats round robin.</span><span class="card-go">Open lab</span></a></li>
+      </ul>
+      <p style="margin:1.25rem 0 0"><a href="Interactive Labs/index.html"><strong>See all 6 labs &rarr;</strong></a></p>
+    </div>
+  </section>
+
+  <section id="how">
+    <p class="section-kicker">How the guides are written</p>
+    <h2>Built to make things click</h2>
+    <ul class="card-grid">
+      <li><div class="card"><span class="card-title">From zero</span><span class="card-text">Every term is defined in plain words before it is used. Short sentences. No hand-waving.</span></div></li>
+      <li><div class="card"><span class="card-title">Worked by hand</span><span class="card-text">Scheduling charts, address translations, attention scores and latency budgets are solved step by step and checked with code.</span></div></li>
+      <li><div class="card"><span class="card-title">Measured, not guessed</span><span class="card-text">Numbers come from real labs: timings, fault counts and p99s you can reproduce on your own machine.</span></div></li>
+      <li><div class="card"><span class="card-title">Kept current</span><span class="card-text">Pages are checked against recent releases, from Kubernetes versions to new LLM serving tricks.</span></div></li>
     </ul>
+  </section>
 
-    <p><a href="Interactive Labs/index.html"><strong>Open Interactive Labs</strong></a></p>
+  <section id="book">
+    <div class="band">
+      <p class="section-kicker">Featured book</p>
+      <h2>Post-Training Mastery</h2>
+      <p>RLHF, DPO, reward modeling and alignment in one place. Read it in the browser or download the PDF (about 600 pages, by Mohammed Saqlain).</p>
+      <a class="btn" href="AI Engineer/research/post-training-mastery.html">Read the book &rarr;</a>
+    </div>
   </section>
 
   <section id="contributing">
-    <h2>Contributing</h2>
-    <p>This project is static HTML and CSS with optional client-side search. Contributions are welcome via GitHub pull request.</p>
-    <p>Full documentation: <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/README.md" rel="noopener noreferrer">README.md</a></p>
-
-    <h3>What to contribute</h3>
-    <ul>
-      <li><strong>New subjects:</strong> subject folder, hub page, and <code>learn/</code> / <code>interview/</code> tracks.</li>
-      <li><strong>Learn pages:</strong> concepts, tradeoffs, and short code examples where useful.</li>
-      <li><strong>Interview Q&amp;A:</strong> expandable <code>&lt;details&gt;</code> questions paired with learn topics.</li>
-      <li><strong>Fixes:</strong> typos, broken links, outdated facts, and clearer explanations.</li>
-    </ul>
-
-    <h3>Workflow</h3>
-    <ol>
-      <li>Fork <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">Engineering-Knowledge-Base</a> on GitHub.</li>
-      <li>Create a branch (for example <code>add-rag-interview-questions</code>).</li>
-      <li>Make changes and open a pull request against <code>main</code>.</li>
-      <li>Describe what changed and why in the PR.</li>
-    </ol>
-
-    <h3>Conventions</h3>
-    <ul>
-      <li>Shared root files: <code>index.html</code>, <code>styles.css</code>, <code>assets/</code>, <code>scripts/</code>.</li>
-      <li>One folder per subject (for example <code>AI Engineer/</code>).</li>
-      <li>Match existing layout: breadcrumbs, <code>learn-page</code> on learn articles, footer hub links.</li>
-      <li>After adding or renaming pages, run <code>python3 scripts/build-search-index.py</code>, commit the updated index files, and run <code>python3 scripts/check-links.py</code>.</li>
-      <li>Use relative paths for styles and links (see README for depth table).</li>
-      <li>Use <code>refer-link</code> for external diagram and paper citations.</li>
-    </ul>
-
-    <p>Questions or bugs: open a <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/issues" rel="noopener noreferrer">GitHub issue</a>.</p>
+    <p class="section-kicker">Open source</p>
+    <h2>Contribute</h2>
+    <p>The whole site is plain HTML, CSS and a little JavaScript, with no build step. Fixes, new pages and new labs are welcome through a GitHub pull request. Read the <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">contributing guide</a> to get started, or <a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/issues" rel="noopener noreferrer">open an issue</a> if you spot a mistake.</p>
   </section>
 
 </main>
 
 <footer>
-  <p><small><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">Engineering-Knowledge-Base</a> &middot; <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a> &middot; <a href="#contributing">Contribute</a></small></p>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="index.html"><img src="assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="Interactive Labs/index.html">Labs</a></li>
+      <li><a href="AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
 </footer>
 
   <script src="assets/site.js"></script>

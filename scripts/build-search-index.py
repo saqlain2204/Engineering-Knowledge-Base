@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate assets/search-index.json, assets/search-index.js, sitemap.xml, and robots.txt.
+"""Regenerate assets/search-index.json, assets/search-index.js, sitemap.xml, robots.txt and llms.txt.
 
 Cross-platform port of scripts/build-search-index.ps1 (Python 3.8+, standard library only).
 Run from anywhere:  python3 scripts/build-search-index.py
@@ -7,26 +7,28 @@ Run from anywhere:  python3 scripts/build-search-index.py
 import html as htmllib
 import json
 import re
+import subprocess
+from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 
 TITLE_SUFFIXES = [
-    r"\s*\|\s*Interview Prep\s*$",
     r"\s*\|\s*AI Engineering\s*$",
     r"\s*\|\s*Docker & Kubernetes\s*$",
     r"\s*\|\s*Docker &amp; Kubernetes\s*$",
     r"\s*\|\s*Graph Machine Learning\s*$",
     r"\s*\|\s*CS Fundamentals\s*$",
     r"\s*-\s*AI Engineering\s*$",
+    r"\s*\|\s*Interactive Labs\s*$",
+    r"\s*\|\s*Engineering Knowledge Base\s*$",
 ]
 
 HUB_PATTERNS = [
     r"index\.html$", r"ai-engineering\.html$", r"docker-kubernetes\.html$", r"graph-ml\.html$",
     r"cs-fundamentals\.html$", r"research-hub\.html$", r"papers-hub\.html$",
-    r"ai-engineering-interview\.html$", r"docker-kubernetes-interview\.html$",
-    r"graph-ml-interview\.html$", r"docker-kubernetes-cheatsheets\.html$", r"graph-ml-formulas\.html$",
+    r"docker-kubernetes-cheatsheets\.html$", r"graph-ml-formulas\.html$",
 ]
 
 # Extra search keywords for pages whose path matches a pattern.
@@ -145,8 +147,8 @@ def page_entry(path: Path) -> dict:
 
     if "/learn/" in rel:
         page_type = "learn"
-    elif "/interview/" in rel:
-        page_type = "interview"
+    elif rel.startswith("Interactive Labs/") and not rel.endswith("index.html"):
+        page_type = "lab"
     elif "/research/" in rel:
         page_type = "research"
     elif any(re.search(p, rel) for p in HUB_PATTERNS):
@@ -156,8 +158,6 @@ def page_entry(path: Path) -> dict:
 
     joined = " ".join([title, desc] + headings + details + [main_text])
     keywords = []
-    if 'class="badge-interview"' in html:
-        keywords.append("interview")
     for pattern, words in KEYWORDS:
         if re.search(pattern, rel):
             keywords.extend(words)
@@ -176,22 +176,49 @@ def page_entry(path: Path) -> dict:
 SITE_URL = "https://engineering.msaqlain.com"
 
 
+def git_lastmod(rel: str) -> str:
+    """Last change date (YYYY-MM-DD) of a page.
+
+    A page with uncommitted edits gets today's date. Otherwise the date of the
+    last commit that touched it. CI ignores <lastmod> lines when it checks that
+    generated files are fresh, because shallow clones see other dates.
+    """
+    try:
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", rel], cwd=ROOT,
+                               capture_output=True, text=True, check=True).stdout.strip()
+        if dirty:
+            return date.today().isoformat()
+        out = subprocess.run(["git", "log", "-1", "--format=%cs", "--", rel], cwd=ROOT,
+                             capture_output=True, text=True, check=True).stdout.strip()
+        return out or date.today().isoformat()
+    except (OSError, subprocess.CalledProcessError):
+        return date.today().isoformat()
+
+
+def page_url(rel: str) -> str:
+    if rel == "index.html":
+        return SITE_URL + "/"
+    return SITE_URL + "/" + quote(rel, safe="/")
+
+
+# Crawlers named explicitly so the policy is clear. Everything is allowed.
+CRAWLERS = [
+    "Googlebot", "Bingbot", "DuckDuckBot", "Applebot", "Google-Extended", "Applebot-Extended",
+    "GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-SearchBot", "Claude-User",
+    "PerplexityBot", "Perplexity-User", "CCBot", "Meta-ExternalAgent", "Amazonbot", "cohere-ai",
+    "MistralAI-User", "YouBot",
+]
+
+
 def write_sitemap_and_robots(pages: list) -> None:
     """Write sitemap.xml and robots.txt for the public site.
 
     Paths match the generated search index (redirect stubs and 404 are omitted).
     index.html is listed as the site root. Spaces in folder names are encoded.
     """
-    urls = []
-    for page in pages:
-        rel = page["path"]
-        if rel == "index.html":
-            loc = SITE_URL + "/"
-        else:
-            loc = SITE_URL + "/" + quote(rel, safe="/")
-        urls.append(loc)
     body = "\n".join(
-        f"  <url>\n    <loc>{loc}</loc>\n  </url>" for loc in urls
+        f"  <url>\n    <loc>{page_url(page['path'])}</loc>\n    <lastmod>{git_lastmod(page['path'])}</lastmod>\n  </url>"
+        for page in pages
     )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -200,13 +227,56 @@ def write_sitemap_and_robots(pages: list) -> None:
         + "\n</urlset>\n"
     )
     (ROOT / "sitemap.xml").write_text(xml, encoding="utf-8")
-    robots = (
-        "User-agent: *\n"
-        "Allow: /\n"
-        "\n"
-        f"Sitemap: {SITE_URL}/sitemap.xml\n"
-    )
+    robots = "# Search engines and AI assistants are welcome to read and cite this site.\n\n"
+    robots += "".join(f"User-agent: {bot}\n" for bot in CRAWLERS)
+    robots += "Allow: /\n\nUser-agent: *\nAllow: /\n\n"
+    robots += f"Sitemap: {SITE_URL}/sitemap.xml\n"
     (ROOT / "robots.txt").write_text(robots, encoding="utf-8")
+
+
+LLMS_SECTIONS = [
+    ("Start here", lambda r: r in ("index.html", "Interactive Labs/index.html") or r.endswith(("ai-engineering.html", "cs-fundamentals.html", "docker-kubernetes.html", "graph-ml.html"))),
+    ("Interactive labs", lambda r: r.startswith("Interactive Labs/")),
+    ("AI Engineering", lambda r: r.startswith("AI Engineer/") and "/research/" not in r),
+    ("Research and books", lambda r: "/research/" in r),
+    ("CS Fundamentals", lambda r: r.startswith("CS-Fundamentals/")),
+    ("Docker and Kubernetes", lambda r: r.startswith("Docker-Kubernetes/")),
+    ("Graph Machine Learning", lambda r: r.startswith("Graph ML/")),
+    ("Other", lambda r: True),
+]
+
+
+def write_llms_txt(pages: list) -> None:
+    """Write llms.txt (https://llmstxt.org): a short map of the site for AI tools."""
+    groups = {name: [] for name, _ in LLMS_SECTIONS}
+    for page in pages:
+        for name, match in LLMS_SECTIONS:
+            if match(page["path"]):
+                groups[name].append(page)
+                break
+    out = [
+        "# Engineering Knowledge Base",
+        "",
+        "> Free, beginner-friendly guides to AI engineering, computer science fundamentals, "
+        "Docker and Kubernetes, and graph machine learning. Every page explains ideas in plain "
+        "words, works examples by hand, and links to in-browser interactive labs. "
+        "Written and maintained by Mohammed Saqlain (https://github.com/saqlain2204).",
+        "",
+        "Content is plain HTML with no paywall or login. Citations with a link to the page are welcome. "
+        f"Full page list: {SITE_URL}/sitemap.xml",
+        "",
+    ]
+    for name, _ in LLMS_SECTIONS:
+        items = groups[name]
+        if not items:
+            continue
+        out.append(f"## {name}")
+        out.append("")
+        for page in items:
+            desc = page["description"].replace("\n", " ").strip()
+            out.append(f"- [{page['title']}]({page_url(page['path'])})" + (f": {desc}" if desc else ""))
+        out.append("")
+    (ROOT / "llms.txt").write_text("\n".join(out), encoding="utf-8")
 
 
 def main() -> None:
@@ -226,8 +296,9 @@ def main() -> None:
         encoding="utf-8",
     )
     write_sitemap_and_robots(pages)
+    write_llms_txt(pages)
     print(f"Wrote {len(pages)} pages to assets/search-index.json and assets/search-index.js")
-    print(f"Wrote sitemap.xml and robots.txt ({len(pages)} URLs)")
+    print(f"Wrote sitemap.xml, robots.txt and llms.txt ({len(pages)} URLs)")
 
 
 if __name__ == "__main__":

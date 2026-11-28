@@ -7,8 +7,45 @@
   <title>Virtual Memory &amp; Paging | CS Fundamentals</title>
   <meta name="description" content="Virtual memory from zero: address translation worked in hex, page tables, multi-level paging, TLBs, page faults, page replacement (FIFO, LRU, OPT) traced step by step, thrashing, huge pages, OOM kills, and how LLM servers reuse paging for the KV cache.">
   <link rel="stylesheet" href="../../../styles.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Virtual Memory &amp; Paging | CS Fundamentals">
+  <meta property="og:description" content="Virtual memory from zero: address translation worked in hex, page tables, multi-level paging, TLBs, page faults, page replacement (FIFO, LRU, OPT) traced step by step, thrashing, huge pages, OOM kills, and how LLM servers reuse paging for the KV cache.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Virtual Memory &amp; Paging | CS Fundamentals">
+  <meta name="twitter:description" content="Virtual memory from zero: address translation worked in hex, page tables, multi-level paging, TLBs, page faults, page replacement (FIFO, LRU, OPT) traced step by step, thrashing, huge pages, OOM kills, and how LLM servers reuse paging for the KV cache.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Virtual Memory & Paging","name":"Virtual Memory & Paging | CS Fundamentals","description":"Virtual memory from zero: address translation worked in hex, page tables, multi-level paging, TLBs, page faults, page replacement (FIFO, LRU, OPT) traced step by step, thrashing, huge pages, OOM kills, and how LLM servers reuse paging for the KV cache.","url":"https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html","mainEntityOfPage":"https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html","inLanguage":"en","image":"https://engineering.msaqlain.com/assets/og-image.png","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"publisher":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"isPartOf":{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"},{"@type":"ListItem","position":2,"name":"CS Fundamentals","item":"https://engineering.msaqlain.com/CS-Fundamentals/cs-fundamentals.html"},{"@type":"ListItem","position":3,"name":"Learn","item":"https://engineering.msaqlain.com/CS-Fundamentals/learn/cs-fundamentals-learn.html"},{"@type":"ListItem","position":4,"name":"Virtual Memory & Paging","item":"https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html"}]}]}</script>
+  <!-- layout:head:end -->
 </head>
 <body class="learn-page">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="../../../index.html" aria-label="Engineering Knowledge Base home"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="../../../AI Engineer/ai-engineering.html">AI Engineering</a>
+      <a href="../../../CS-Fundamentals/cs-fundamentals.html" aria-current="true">CS Fundamentals</a>
+      <a href="../../../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a>
+      <a href="../../../Graph ML/graph-ml.html">Graph ML</a>
+      <a href="../../../Interactive Labs/index.html">Labs</a>
+      <a href="../../../AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</div>
+<!-- layout:topbar:end -->
 
 <header>
   <nav aria-label="Breadcrumb">
@@ -119,6 +156,56 @@ Each level: 9 bits -&gt; 512 entries x 8 bytes = 4096 bytes = exactly one page.<
       <li><strong>TLB miss:</strong> the hardware walks the page table (on x86), then stores the result in the TLB.</li>
     </ul>
     <p>Programs touch memory with strong <strong>locality</strong>: the same and nearby addresses again and again. So hit rates above 99% are normal.</p>
+    <!-- diagram:vm-translate:start -->
+<figure class="diagram" id="fig-vm-translate">
+<div class="dg-scroll">
+<svg viewBox="0 0 760 344" width="760" height="344" role="img" aria-labelledby="dg-vm-translate-t dg-vm-translate-d" xmlns="http://www.w3.org/2000/svg">
+<title id="dg-vm-translate-t">How a virtual address becomes a physical address</title>
+<desc id="dg-vm-translate-d">The CPU sends a virtual address to the TLB. On a hit, the physical address goes straight to RAM. On a miss, the hardware walks the page table. If the page is present, the TLB is filled and the access continues. If not, a page fault traps to the OS, which loads the page from disk and runs the instruction again.</desc>
+<defs>
+<marker id="dg-vm-translate-h" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="dg-vm-translate-hh" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head-hl" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="dg-box" x="20" y="40" width="130" height="60" rx="10"/>
+<text class="dg-t" x="85" y="67" text-anchor="middle">CPU</text>
+<text class="dg-s" x="85" y="85" text-anchor="middle">virtual address</text>
+<rect class="dg-hl" x="200" y="40" width="170" height="60" rx="10"/>
+<text class="dg-t" x="285" y="67" text-anchor="middle">TLB lookup</text>
+<text class="dg-s" x="285" y="85" text-anchor="middle">inside the MMU</text>
+<rect class="dg-box" x="430" y="40" width="172" height="60" rx="10"/>
+<text class="dg-t" x="516" y="67" text-anchor="middle">Physical address</text>
+<text class="dg-s" x="516" y="85" text-anchor="middle">frame + offset</text>
+<rect class="dg-box" x="640" y="40" width="100" height="60" rx="10"/>
+<text class="dg-t" x="690" y="75" text-anchor="middle">RAM</text>
+<rect class="dg-box" x="200" y="150" width="170" height="60" rx="10"/>
+<text class="dg-t" x="285" y="177" text-anchor="middle">Page table walk</text>
+<text class="dg-s" x="285" y="195" text-anchor="middle">4 levels on x86-64</text>
+<rect class="dg-hl-3" x="200" y="262" width="170" height="60" rx="10"/>
+<text class="dg-t" x="285" y="289" text-anchor="middle">Page fault</text>
+<text class="dg-s" x="285" y="307" text-anchor="middle">trap into the kernel</text>
+<rect class="dg-box" x="440" y="262" width="300" height="60" rx="10"/>
+<text class="dg-t" x="590" y="289" text-anchor="middle">OS loads the page from disk</text>
+<text class="dg-s" x="590" y="307" text-anchor="middle">updates the page table, retries</text>
+<path class="dg-a" d="M150,70 L200,70" marker-end="url(#dg-vm-translate-h)"/>
+<path class="dg-a-hl" d="M370,70 L430,70" marker-end="url(#dg-vm-translate-hh)"/>
+<rect class="dg-lbg" x="387.5" y="61" width="25" height="18" rx="5"/>
+<text class="dg-l" x="400" y="74" text-anchor="middle">hit</text>
+<path class="dg-a-hl" d="M602,70 L640,70" marker-end="url(#dg-vm-translate-hh)"/>
+<path class="dg-a" d="M285,100 L285,150" marker-end="url(#dg-vm-translate-h)"/>
+<rect class="dg-lbg" x="266.8" y="116" width="36.4" height="18" rx="5"/>
+<text class="dg-l" x="285" y="129" text-anchor="middle">miss</text>
+<path class="dg-a" d="M370,180 L516,180 L516,100" marker-end="url(#dg-vm-translate-h)"/>
+<rect class="dg-lbg" x="392.9" y="171" width="100.1" height="18" rx="5"/>
+<text class="dg-l" x="443" y="184" text-anchor="middle">present: fill TLB</text>
+<path class="dg-a" d="M285,210 L285,262" marker-end="url(#dg-vm-translate-h)"/>
+<rect class="dg-lbg" x="248.8" y="227" width="72.4" height="18" rx="5"/>
+<text class="dg-l" x="285" y="240" text-anchor="middle">not in RAM</text>
+<path class="dg-a" d="M370,292 L440,292" marker-end="url(#dg-vm-translate-h)"/>
+</svg>
+</div>
+<figcaption>Most accesses take the top path. A page fault costs microseconds to milliseconds, so it must be rare.</figcaption>
+</figure>
+<!-- diagram:vm-translate:end -->
     <h3>Worked example: effective access time</h3>
     <p>Memory access takes 100 ns. TLB lookup time is negligible. The TLB hit ratio is 98%. A miss needs a 4-level walk (4 memory reads) plus the real access.</p>
     <pre><code>hit cost  = 100 ns                       (just the data access)
@@ -212,6 +299,10 @@ For &lt;10% slowdown: 110 &gt; 100 + 7,999,900p  -&gt;  p &lt; 0.0000013  (about
     <p>With FIFO, adding frames can <em>increase</em> faults. Reference string <code>1 2 3 4 1 2 5 1 2 3 4 5</code> gives <strong>9 faults with 3 frames but 10 faults with 4 frames</strong>. LRU and OPT never do this (they are "stack algorithms": the pages kept with n frames are always a subset of those kept with n + 1).</p>
     <h3>What real kernels do: approximate LRU</h3>
     <p>Tracking exact recency for every memory access is too expensive. Instead, the hardware sets the <strong>accessed bit</strong> in the PTE when a page is used. The <strong>clock (second-chance) algorithm</strong> sweeps pages in a circle: if the accessed bit is 1, clear it and move on (second chance); if it is 0, evict. Linux keeps active and inactive lists, and since kernel 6.1 offers <strong>MGLRU</strong> (multi-generational LRU), which sorts pages into age generations and is used by default on Android, ChromeOS, and several Linux distributions.</p>
+  <div class="lab-cta">
+    <p><strong>Try it live:</strong> Step through FIFO, LRU and OPT side by side and find Belady's anomaly yourself.</p>
+    <a href="../../../Interactive Labs/page-replacement.html">Open the Page Replacement Lab lab &rarr;</a>
+  </div>
   </section>
 
   <section id="thrashing">
@@ -308,7 +399,22 @@ full avg10=18.40 avg60=11.73 avg300=4.02 total=31277120</code></pre>
 </main>
 
 <footer>
-  <p><small><a href="../../cs-fundamentals.html">Back to CS Fundamentals</a> &middot; <a href="../../../index.html">Home</a></small></p>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="../../../AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="../../../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="../../../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="../../../Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="../../../Interactive Labs/index.html">Labs</a></li>
+      <li><a href="../../../AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
 </footer>
 
 <script src="../../../assets/site.js"></script>

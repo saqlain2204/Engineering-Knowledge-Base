@@ -9,10 +9,10 @@
 
   function isSubjectOnlyDeployment() {
     var path = decodeURIComponent(window.location.pathname).replace(/\\/g, '/');
-    if (/\/Interview-Preparations\//.test(path) || /\/Engineering-Knowledge-Base\//.test(path)) {
+    if (/\/Engineering-Knowledge-Base\//.test(path)) {
       return false;
     }
-    return /\/AI Engineer\/(learn|interview|research)\//.test(path);
+    return /\/AI Engineer\/(learn|research)\//.test(path);
   }
 
   function siteRootPrefix() {
@@ -388,5 +388,91 @@
     document.addEventListener('DOMContentLoaded', initTocSpy);
   } else {
     initTocSpy();
+  }
+})();
+
+// Theme toggle (dark / light). The inline script in <head> already set
+// data-theme before the first paint; this button flips it and remembers the
+// choice in localStorage. With no saved choice the page follows the system.
+(function () {
+  'use strict';
+  var root = document.documentElement;
+
+  function current() {
+    return root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function label(btn) {
+    var next = current() === 'light' ? 'dark' : 'light';
+    btn.setAttribute('aria-label', 'Switch to ' + next + ' theme');
+    btn.setAttribute('title', 'Switch to ' + next + ' theme');
+    btn.setAttribute('aria-pressed', current() === 'light' ? 'true' : 'false');
+  }
+
+  function set(theme, save) {
+    root.setAttribute('data-theme', theme);
+    if (save) {
+      try { localStorage.setItem('ekb-theme', theme); } catch (e) { /* private mode */ }
+    }
+    document.querySelectorAll('.theme-toggle').forEach(label);
+    try {
+      document.dispatchEvent(new CustomEvent('ekb:themechange', { detail: { theme: theme } }));
+    } catch (e) { /* old browsers */ }
+  }
+
+  function init() {
+    document.querySelectorAll('.theme-toggle').forEach(function (btn) {
+      label(btn);
+      btn.addEventListener('click', function () {
+        set(current() === 'light' ? 'dark' : 'light', true);
+      });
+    });
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: light)');
+      var onChange = function (e) {
+        var saved = null;
+        try { saved = localStorage.getItem('ekb-theme'); } catch (err) { /* ignore */ }
+        if (saved !== 'light' && saved !== 'dark') set(e.matches ? 'light' : 'dark', false);
+      };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+// Mobile menu in the top bar.
+(function () {
+  'use strict';
+
+  function init() {
+    var bar = document.querySelector('.topbar');
+    var btn = bar && bar.querySelector('.topbar-menu');
+    if (!btn) return;
+    function setOpen(open) {
+      bar.classList.toggle('is-open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    }
+    btn.addEventListener('click', function () {
+      setOpen(!bar.classList.contains('is-open'));
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && bar.classList.contains('is-open')) {
+        setOpen(false);
+        btn.focus();
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 })();

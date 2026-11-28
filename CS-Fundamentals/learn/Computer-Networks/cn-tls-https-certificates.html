@@ -7,8 +7,45 @@
   <title>TLS, HTTPS &amp; Certificates | CS Fundamentals</title>
   <meta name="description" content="TLS from zero: what HTTPS protects, symmetric and public-key encryption in plain words, Diffie-Hellman with small numbers you can check by hand, digital signatures, certificates and the chain of trust, the TLS 1.3 handshake read from real openssl output, session resumption and 0-RTT, a hands-on lab that makes a CA and breaks certificates on purpose (wrong name, unknown issuer, expired, missing intermediate), Let's Encrypt and certificate expiry, mutual TLS, TLS at load balancers, practice problems, and a cheat sheet.">
   <link rel="stylesheet" href="../../../styles.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-tls-https-certificates.html">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="TLS, HTTPS &amp; Certificates | CS Fundamentals">
+  <meta property="og:description" content="TLS from zero: what HTTPS protects, symmetric and public-key encryption in plain words, Diffie-Hellman with small numbers you can check by hand, digital signatures, certificates and the chain of trust, the TLS 1.3 handshake read from real openssl output, session resumption and 0-RTT, a hands-on lab that makes a CA and breaks certificates on purpose (wrong name, unknown issuer, expired, missing intermediate), Let's Encrypt and certificate expiry, mutual TLS, TLS at load balancers, practice problems, and a cheat sheet.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-tls-https-certificates.html">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="TLS, HTTPS &amp; Certificates | CS Fundamentals">
+  <meta name="twitter:description" content="TLS from zero: what HTTPS protects, symmetric and public-key encryption in plain words, Diffie-Hellman with small numbers you can check by hand, digital signatures, certificates and the chain of trust, the TLS 1.3 handshake read from real openssl output, session resumption and 0-RTT, a hands-on lab that makes a CA and breaks certificates on purpose (wrong name, unknown issuer, expired, missing intermediate), Let's Encrypt and certificate expiry, mutual TLS, TLS at load balancers, practice problems, and a cheat sheet.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"TLS, HTTPS & Certificates","name":"TLS, HTTPS & Certificates | CS Fundamentals","description":"TLS from zero: what HTTPS protects, symmetric and public-key encryption in plain words, Diffie-Hellman with small numbers you can check by hand, digital signatures, certificates and the chain of trust, the TLS 1.3 handshake read from real openssl output, session resumption and 0-RTT, a hands-on lab that makes a CA and breaks certificates on purpose (wrong name, unknown issuer, expired, missing intermediate), Let's Encrypt and certificate expiry, mutual TLS, TLS at load balancers, practice problems, and a cheat sheet.","url":"https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-tls-https-certificates.html","mainEntityOfPage":"https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-tls-https-certificates.html","inLanguage":"en","image":"https://engineering.msaqlain.com/assets/og-image.png","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"publisher":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"isPartOf":{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"},{"@type":"ListItem","position":2,"name":"CS Fundamentals","item":"https://engineering.msaqlain.com/CS-Fundamentals/cs-fundamentals.html"},{"@type":"ListItem","position":3,"name":"Learn","item":"https://engineering.msaqlain.com/CS-Fundamentals/learn/cs-fundamentals-learn.html"},{"@type":"ListItem","position":4,"name":"TLS, HTTPS & Certificates","item":"https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-tls-https-certificates.html"}]}]}</script>
+  <!-- layout:head:end -->
 </head>
 <body class="learn-page">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="../../../index.html" aria-label="Engineering Knowledge Base home"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="../../../AI Engineer/ai-engineering.html">AI Engineering</a>
+      <a href="../../../CS-Fundamentals/cs-fundamentals.html" aria-current="true">CS Fundamentals</a>
+      <a href="../../../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a>
+      <a href="../../../Graph ML/graph-ml.html">Graph ML</a>
+      <a href="../../../Interactive Labs/index.html">Labs</a>
+      <a href="../../../AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</div>
+<!-- layout:topbar:end -->
 
 <header>
   <nav aria-label="Breadcrumb">
@@ -176,20 +213,47 @@ X509v3 Extended Key Usage:
 &gt;&gt;&gt; TLS 1.3, ChangeCipherSpec [length 0001]
      (then the client's Finished and the first HTTP request)</code></pre>
     <p>(<code>&gt;&gt;&gt;</code> is client to server, <code>&lt;&lt;&lt;</code> is server to client. Lengths are in hex: <code>05f8</code> = 1,528 bytes. The ClientHello is big here because the post-quantum key share is large.)</p>
-    <pre><code>client                                              server
-  │  ClientHello: versions, ciphers, key share,          │
-  │               SNI = "shop.test"  ───────────────────►│
-  │                                                      │ picks cipher, makes
-  │◄──────────── ServerHello: its key share              │ its own key share
-  │     (both sides can now compute the shared secret;   │
-  │      everything below is ENCRYPTED)                  │
-  │◄──────────── EncryptedExtensions                     │
-  │◄──────────── Certificate (leaf + intermediates)      │
-  │◄──────────── CertificateVerify (signature)           │
-  │◄──────────── Finished                                │
-  │ check chain, name, dates, signature                  │
-  │  Finished + GET / ──────────────────────────────────►│
-  │◄───────────────────────────────────── HTTP response  │</code></pre>
+    <!-- diagram:tls13:start -->
+<figure class="diagram" id="fig-tls13">
+<div class="dg-scroll">
+<svg viewBox="0 0 760 440" width="760" height="440" role="img" aria-labelledby="dg-tls13-t dg-tls13-d" xmlns="http://www.w3.org/2000/svg">
+<title id="dg-tls13-t">TLS 1.3 handshake</title>
+<desc id="dg-tls13-d">The client sends ClientHello with its key share and SNI. The server answers with ServerHello and its key share. Both sides now share a secret, so the server&#x27;s EncryptedExtensions, Certificate, CertificateVerify and Finished are encrypted. The client checks the certificate, then sends Finished together with its first HTTP request. One round trip in total.</desc>
+<defs>
+<marker id="dg-tls13-h" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="dg-tls13-hh" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head-hl" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<line class="dg-group" x1="115" y1="62" x2="115" y2="424"/>
+<line class="dg-group" x1="645" y1="62" x2="645" y2="424"/>
+<rect class="dg-box" x="40" y="16" width="150" height="46" rx="10"/>
+<text class="dg-t" x="115" y="44" text-anchor="middle">Client</text>
+<rect class="dg-box" x="570" y="16" width="150" height="46" rx="10"/>
+<text class="dg-t" x="645" y="44" text-anchor="middle">Server</text>
+<path class="dg-a" d="M115,100 L645,100" marker-end="url(#dg-tls13-h)"/>
+<rect class="dg-lbg" x="273.9" y="78" width="212.1" height="18" rx="5"/>
+<text class="dg-l" x="380" y="91" text-anchor="middle">ClientHello: key share, SNI, ciphers</text>
+<path class="dg-a" d="M645,150 L115,150" marker-end="url(#dg-tls13-h)"/>
+<rect class="dg-lbg" x="289.6" y="128" width="180.8" height="18" rx="5"/>
+<text class="dg-l" x="380" y="141" text-anchor="middle">ServerHello: server key share</text>
+<path class="dg-a-hl" d="M645,236 L115,236" marker-end="url(#dg-tls13-hh)"/>
+<rect class="dg-lbg" x="289.9" y="214" width="180.1" height="18" rx="5"/>
+<text class="dg-l" x="380" y="227" text-anchor="middle">Certificate + CertificateVerify</text>
+<path class="dg-a-hl" d="M645,282 L115,282" marker-end="url(#dg-tls13-hh)"/>
+<rect class="dg-lbg" x="351" y="260" width="58" height="18" rx="5"/>
+<text class="dg-l" x="380" y="273" text-anchor="middle">Finished</text>
+<path class="dg-a-hl" d="M115,358 L645,358" marker-end="url(#dg-tls13-hh)"/>
+<rect class="dg-lbg" x="327.2" y="336" width="105.6" height="18" rx="5"/>
+<text class="dg-l" x="380" y="349" text-anchor="middle">Finished + GET /</text>
+<path class="dg-a-hl" d="M645,404 L115,404" marker-end="url(#dg-tls13-hh)"/>
+<rect class="dg-lbg" x="332.1" y="382" width="95.8" height="18" rx="5"/>
+<text class="dg-l" x="380" y="395" text-anchor="middle">HTTP response</text>
+<text class="dg-s" x="380" y="194" text-anchor="middle">from here on, everything is encrypted</text>
+<text class="dg-s" x="124" y="318" text-anchor="start">client checks chain, name, dates</text>
+</svg>
+</div>
+<figcaption>Colored arrows carry encrypted data. The client can send its request after one round trip.</figcaption>
+</figure>
+<!-- diagram:tls13:end -->
     <ol>
       <li><strong>ClientHello.</strong> The client lists the TLS versions and cipher suites it supports, sends its DH key share (it guesses which group the server likes), and names the site it wants in the <strong>SNI</strong> field (Server Name Indication). SNI lets one IP address host many HTTPS sites: the server reads the name and picks the matching certificate.</li>
       <li><strong>ServerHello.</strong> The server picks the cipher suite and sends its key share. Now both sides do the DH math and get the same secret. From here on, all handshake messages are encrypted.</li>
@@ -467,7 +531,22 @@ curl -so /dev/null -w 'tcp=%{time_connect} tls=%{time_appconnect}\n' https://HOS
 </main>
 
 <footer>
-  <p><small><a href="../../cs-fundamentals.html">Back to CS Fundamentals</a> &middot; <a href="../../../index.html">Home</a></small></p>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="../../../AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="../../../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="../../../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="../../../Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="../../../Interactive Labs/index.html">Labs</a></li>
+      <li><a href="../../../AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
 </footer>
 
 <script src="../../../assets/site.js"></script>

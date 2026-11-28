@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+  <title>Subnet Calculator Lab: CIDR, Masks and Bits Explained | Interactive Labs</title>
+  <meta name="description" content="Interactive subnet calculator that shows its work. Type an IPv4 address and prefix to see the network, broadcast, host range and mask, bit by bit, and split a network into smaller subnets.">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../assets/labs.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/Interactive%20Labs/subnet-calculator.html">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Subnet Calculator Lab: CIDR, Masks and Bits Explained | Interactive Labs">
+  <meta property="og:description" content="Interactive subnet calculator that shows its work. Type an IPv4 address and prefix to see the network, broadcast, host range and mask, bit by bit, and split a network into smaller subnets.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/Interactive%20Labs/subnet-calculator.html">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Subnet Calculator Lab: CIDR, Masks and Bits Explained | Interactive Labs">
+  <meta name="twitter:description" content="Interactive subnet calculator that shows its work. Type an IPv4 address and prefix to see the network, broadcast, host range and mask, bit by bit, and split a network into smaller subnets.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","headline":"Subnet Calculator, Bit by Bit","name":"Subnet Calculator Lab: CIDR, Masks and Bits Explained | Interactive Labs","description":"Interactive subnet calculator that shows its work. Type an IPv4 address and prefix to see the network, broadcast, host range and mask, bit by bit, and split a network into smaller subnets.","url":"https://engineering.msaqlain.com/Interactive%20Labs/subnet-calculator.html","mainEntityOfPage":"https://engineering.msaqlain.com/Interactive%20Labs/subnet-calculator.html","inLanguage":"en","image":"https://engineering.msaqlain.com/assets/og-image.png","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"publisher":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"isPartOf":{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/"},"learningResourceType":"Interactive lab","isAccessibleForFree":true},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"},{"@type":"ListItem","position":2,"name":"Labs","item":"https://engineering.msaqlain.com/Interactive%20Labs/index.html"},{"@type":"ListItem","position":3,"name":"Subnet Calculator","item":"https://engineering.msaqlain.com/Interactive%20Labs/subnet-calculator.html"}]}]}</script>
+  <!-- layout:head:end -->
+</head>
+<body class="lab-page">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="../index.html" aria-label="Engineering Knowledge Base home"><img src="../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="../AI Engineer/ai-engineering.html">AI Engineering</a>
+      <a href="../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a>
+      <a href="../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a>
+      <a href="../Graph ML/graph-ml.html">Graph ML</a>
+      <a href="../Interactive Labs/index.html" aria-current="true">Labs</a>
+      <a href="../AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</div>
+<!-- layout:topbar:end -->
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../index.html">Home</a> &rsaquo; <a href="index.html">Labs</a> &rsaquo; Subnet Calculator</p>
+  </nav>
+  <h1>Subnet Calculator, Bit by Bit</h1>
+  <p>An IPv4 address is 32 bits. The prefix length says how many of them name the network. The rest name a host. Change the address or the prefix and watch the bits move.</p>
+</header>
+
+<main>
+  <div class="lab" id="sn-lab">
+    <div class="lab-controls">
+      <div class="lab-panel">
+        <h2>Input</h2>
+        <label class="field">
+          <span>IPv4 address</span>
+          <input type="text" id="sn-ip" value="192.168.10.77" inputmode="decimal" autocomplete="off" spellcheck="false" aria-describedby="sn-err">
+          <small id="sn-err" aria-live="polite"></small>
+        </label>
+        <label class="field">
+          <span>Prefix length <output id="sn-p-out">/24</output></span>
+          <input type="range" id="sn-p" min="0" max="32" step="1" value="24">
+        </label>
+        <div class="field">
+          <span class="field-label">Examples</span>
+          <div class="seg" id="sn-presets">
+            <button type="button" data-ip="192.168.10.77" data-p="24">Home /24</button>
+            <button type="button" data-ip="10.20.37.200" data-p="20">Cloud /20</button>
+            <button type="button" data-ip="172.16.5.9" data-p="30">Link /30</button>
+          </div>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <h2>Split it</h2>
+        <label class="field">
+          <span>New prefix <output id="sn-s-out">/26</output></span>
+          <input type="range" id="sn-s" min="24" max="32" step="1" value="26">
+          <small>Borrow host bits to make smaller subnets.</small>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <div class="lab-panel">
+        <h2>Result</h2>
+        <div class="stats" id="sn-stats"></div>
+        <div class="lab-table-wrap">
+          <table id="sn-table"><tbody></tbody></table>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <h2>The bits</h2>
+        <p class="muted" style="font-size:0.9rem">Network bits are <span style="color:var(--accent);font-weight:700">colored</span>. Host bits are plain. The network address keeps the network bits and sets every host bit to 0. The broadcast address sets every host bit to 1.</p>
+        <div class="lab-table-wrap"><div id="sn-bits"></div></div>
+      </div>
+      <div class="lab-panel">
+        <h2 id="sn-split-title">Subnets</h2>
+        <div class="lab-table-wrap">
+          <table id="sn-split">
+            <thead><tr><th>#</th><th>Network</th><th>Usable hosts</th><th>Broadcast</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted" id="sn-split-note" style="font-size:0.88rem;margin:0.75rem 0 0"></p>
+      </div>
+    </div>
+  </div>
+
+  <section class="lab-notes" id="how-it-works">
+    <h2>How it works</h2>
+    <ul>
+      <li>The <strong>mask</strong> has 1s for network bits and 0s for host bits. A /24 mask is 255.255.255.0.</li>
+      <li><strong>Network address</strong> = address AND mask. <strong>Broadcast</strong> = network OR (NOT mask).</li>
+      <li>Usable hosts = 2<sup>host bits</sup> &minus; 2, because the network and broadcast addresses are reserved. A /31 is a special case (RFC 3021): both addresses are usable on a point-to-point link. A /32 is one single host.</li>
+      <li>Cloud providers reserve more. AWS keeps 5 addresses in every VPC subnet, so a /24 gives 251 usable addresses there, not 254.</li>
+    </ul>
+    <h2>Things to try</h2>
+    <ul>
+      <li>Move the prefix from /24 to /25. Half the hosts disappear, and one more bit turns colored.</li>
+      <li>Load "Cloud /20" and split it into /24s. You get 16 subnets of 254 hosts each.</li>
+      <li>Load "Link /30". Only 2 usable hosts: perfect for a router-to-router link.</li>
+    </ul>
+    <h2>Read more</h2>
+    <ul>
+      <li><a href="../CS-Fundamentals/learn/Computer-Networks/cn-ip-addressing-subnetting-routing.html">IP Addressing, Subnetting &amp; Routing</a></li>
+      <li><a href="../CS-Fundamentals/learn/Scenarios/scenario-service-cannot-reach-database.html">Scenario: a service cannot reach its database</a></li>
+      <li><a href="load-balancing.html">Lab: load balancing</a></li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="../index.html"><img src="../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="../AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="../Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="../Interactive Labs/index.html">Labs</a></li>
+      <li><a href="../AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="../assets/site.js"></script>
+<script src="../assets/search.js" defer></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function parseIp(s) {
+    var m = /^\s*(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\s*$/.exec(s);
+    if (!m) return null;
+    var parts = m.slice(1).map(Number);
+    if (parts.some(function (x) { return x > 255; })) return null;
+    return ((parts[0] << 24) >>> 0) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
+  }
+  function ipStr(n) { return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.'); }
+  function maskOf(p) { return p === 0 ? 0 : (0xFFFFFFFF << (32 - p)) >>> 0; }
+  function info(ip, p) {
+    var mask = maskOf(p), net = (ip & mask) >>> 0, bc = (net | (~mask >>> 0)) >>> 0;
+    var size = Math.pow(2, 32 - p);
+    var usable = p === 32 ? 1 : p === 31 ? 2 : size - 2;
+    var first = p >= 31 ? net : net + 1, last = p >= 31 ? bc : bc - 1;
+    return { mask: mask, net: net, bc: bc, size: size, usable: usable, first: first >>> 0, last: last >>> 0 };
+  }
+  function cls(ip) {
+    var a = ip >>> 24, b = (ip >>> 16) & 255;
+    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return 'Private (RFC 1918)';
+    if (a === 100 && b >= 64 && b <= 127) return 'Carrier-grade NAT (100.64.0.0/10)';
+    if (a === 127) return 'Loopback';
+    if (a === 169 && b === 254) return 'Link-local';
+    if (a >= 224 && a <= 239) return 'Multicast';
+    if (a >= 240) return 'Reserved';
+    return 'Public';
+  }
+
+  function bitsRow(label, n, p, hostColor) {
+    var html = '<div style="display:grid;grid-template-columns:6.5rem repeat(4, auto);gap:0.4rem;align-items:center;margin-bottom:0.35rem;min-width:36rem">';
+    html += '<span style="font-size:0.82rem;font-weight:700">' + label + '</span>';
+    for (var o = 0; o < 4; o++) {
+      html += '<span class="mono" style="display:flex;gap:1px">';
+      for (var b = 0; b < 8; b++) {
+        var i = o * 8 + b, bit = (n >>> (31 - i)) & 1, isNet = i < p;
+        html += '<span style="display:inline-grid;place-items:center;width:1.05rem;height:1.5rem;border-radius:4px;font-size:0.8rem;' +
+          (isNet ? 'background:var(--inline-code-bg);color:var(--accent);font-weight:800;border:1px solid var(--border-strong)' :
+            'border:1px solid var(--border);color:' + (hostColor || 'var(--text)')) + '">' + bit + '</span>';
+      }
+      html += '</span>';
+    }
+    return html + '</div>';
+  }
+
+  function render() {
+    var p = +$('sn-p').value;
+    $('sn-p-out').textContent = '/' + p;
+    var s = $('sn-s');
+    s.min = p; if (+s.value < p) s.value = Math.min(32, p + 2);
+    if (+s.value < p) s.value = p;
+    $('sn-s-out').textContent = '/' + s.value;
+    var ip = parseIp($('sn-ip').value);
+    var input = $('sn-ip');
+    if (ip === null) {
+      $('sn-err').textContent = 'Type four numbers from 0 to 255, like 10.0.0.1.';
+      $('sn-err').style.color = 'var(--bad)';
+      input.setAttribute('aria-invalid', 'true');
+      return;
+    }
+    input.removeAttribute('aria-invalid');
+    $('sn-err').textContent = cls(ip) + ' address';
+    $('sn-err').style.color = '';
+    var r = info(ip, p);
+    $('sn-stats').innerHTML =
+      '<div class="stat"><b>' + ipStr(r.net) + '/' + p + '</b><span>network (CIDR)</span></div>' +
+      '<div class="stat"><b>' + r.usable.toLocaleString() + '</b><span>usable hosts</span></div>' +
+      '<div class="stat"><b>' + (32 - p) + '</b><span>host bits</span></div>';
+    var rows = [
+      ['Subnet mask', ipStr(r.mask)], ['Wildcard (inverse mask)', ipStr(~r.mask >>> 0)],
+      ['Network address', ipStr(r.net)], ['First usable host', ipStr(r.first)], ['Last usable host', ipStr(r.last)],
+      ['Broadcast address', p >= 31 ? 'none (/' + p + ')' : ipStr(r.bc)], ['Total addresses', r.size.toLocaleString()]
+    ];
+    document.querySelector('#sn-table tbody').innerHTML = rows.map(function (x) {
+      return '<tr><th scope="row" style="width:45%">' + x[0] + '</th><td class="mono">' + x[1] + '</td></tr>';
+    }).join('');
+    $('sn-bits').innerHTML = bitsRow('Address', ip, p) + bitsRow('Mask', r.mask, p, 'var(--text-muted)') +
+      bitsRow('Network', r.net, p) + bitsRow('Broadcast', r.bc, p);
+    var np = +s.value, count = Math.pow(2, np - p), shown = Math.min(count, 16);
+    $('sn-split-title').textContent = 'Split /' + p + ' into /' + np + ' subnets: ' + count.toLocaleString();
+    var tb = document.querySelector('#sn-split tbody');
+    tb.innerHTML = '';
+    var step = Math.pow(2, 32 - np);
+    for (var i = 0; i < shown; i++) {
+      var sub = info((r.net + i * step) >>> 0, np);
+      var tr = document.createElement('tr');
+      var mine = ip >= sub.net && ip <= sub.bc;
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td class="mono">' + ipStr(sub.net) + '/' + np + (mine ? ' <span style="color:var(--accent);font-weight:700">(yours)</span>' : '') + '</td><td>' + sub.usable.toLocaleString() + '</td><td class="mono">' + (np >= 31 ? '-' : ipStr(sub.bc)) + '</td>';
+      tb.appendChild(tr);
+    }
+    $('sn-split-note').textContent = count > shown ? 'Showing the first ' + shown + ' of ' + count.toLocaleString() + ' subnets.' : 'Each new prefix bit doubles the number of subnets and halves their size.';
+  }
+
+  ['sn-ip', 'sn-p', 'sn-s'].forEach(function (id) { $(id).addEventListener('input', render); });
+  $('sn-presets').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    $('sn-ip').value = b.dataset.ip;
+    $('sn-p').value = b.dataset.p;
+    $('sn-s').min = b.dataset.p;
+    $('sn-s').value = Math.min(32, +b.dataset.p + (b.dataset.p === '20' ? 4 : 2));
+    render();
+  });
+  render();
+})();
+</script>
+</body>
+</html>

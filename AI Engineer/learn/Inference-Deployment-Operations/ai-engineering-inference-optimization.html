@@ -7,8 +7,45 @@
   <title>Inference Optimization | AI Engineering</title>
   <meta name="description" content="LLM inference from zero: prefill vs decode, why decoding is memory-bound, KV cache memory math, PagedAttention, continuous batching, chunked prefill, prefix caching, speculative decoding, quantization, disaggregated serving, latency metrics, and GPU capacity planning with worked numbers.">
   <link rel="stylesheet" href="../../../styles.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Inference Optimization | AI Engineering">
+  <meta property="og:description" content="LLM inference from zero: prefill vs decode, why decoding is memory-bound, KV cache memory math, PagedAttention, continuous batching, chunked prefill, prefix caching, speculative decoding, quantization, disaggregated serving, latency metrics, and GPU capacity planning with worked numbers.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Inference Optimization | AI Engineering">
+  <meta name="twitter:description" content="LLM inference from zero: prefill vs decode, why decoding is memory-bound, KV cache memory math, PagedAttention, continuous batching, chunked prefill, prefix caching, speculative decoding, quantization, disaggregated serving, latency metrics, and GPU capacity planning with worked numbers.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Inference Optimization","name":"Inference Optimization | AI Engineering","description":"LLM inference from zero: prefill vs decode, why decoding is memory-bound, KV cache memory math, PagedAttention, continuous batching, chunked prefill, prefix caching, speculative decoding, quantization, disaggregated serving, latency metrics, and GPU capacity planning with worked numbers.","url":"https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html","mainEntityOfPage":"https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html","inLanguage":"en","image":"https://engineering.msaqlain.com/assets/og-image.png","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"publisher":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"isPartOf":{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"},{"@type":"ListItem","position":2,"name":"AI Engineering","item":"https://engineering.msaqlain.com/AI%20Engineer/ai-engineering.html"},{"@type":"ListItem","position":3,"name":"Learn","item":"https://engineering.msaqlain.com/AI%20Engineer/learn/ai-engineering-learn.html"},{"@type":"ListItem","position":4,"name":"Inference Optimization","item":"https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html"}]}]}</script>
+  <!-- layout:head:end -->
 </head>
 <body class="learn-page">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="../../../index.html" aria-label="Engineering Knowledge Base home"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="../../../AI Engineer/ai-engineering.html" aria-current="true">AI Engineering</a>
+      <a href="../../../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a>
+      <a href="../../../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a>
+      <a href="../../../Graph ML/graph-ml.html">Graph ML</a>
+      <a href="../../../Interactive Labs/index.html">Labs</a>
+      <a href="../../../AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</div>
+<!-- layout:topbar:end -->
 <header>
   <nav aria-label="Breadcrumb">
     <p><a href="../../../index.html">Home</a> &rsaquo; <a href="../../ai-engineering.html">AI Engineering</a> &rsaquo; <a href="../ai-engineering-learn.html">Learn</a> &rsaquo; Inference Optimization</p>
@@ -53,6 +90,51 @@ decode:   ... + "TCP"                       -&gt; "is"         1 pass
 decode:   ... + "is"                        -&gt; "a"          1 pass
 decode:   ... + "a"                         -&gt; "reliable"   1 pass
 ...until an end-of-sequence token or max_tokens</code></pre>
+    <!-- diagram:llm-serving:start -->
+<figure class="diagram" id="fig-llm-serving">
+<div class="dg-scroll">
+<svg viewBox="0 0 760 300" width="760" height="300" role="img" aria-labelledby="dg-llm-serving-t dg-llm-serving-d" xmlns="http://www.w3.org/2000/svg">
+<title id="dg-llm-serving-t">How an LLM server handles a request</title>
+<desc id="dg-llm-serving-d">Requests enter a scheduler that does continuous batching. Prefill reads the whole prompt in one pass, writes keys and values to the paged KV cache, and makes the first token. Decode then makes one token per step, reading and appending to the KV cache, and streams tokens back to the user.</desc>
+<defs>
+<marker id="dg-llm-serving-h" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="dg-llm-serving-hh" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head-hl" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="dg-box" x="20" y="40" width="130" height="60" rx="10"/>
+<text class="dg-t" x="85" y="67" text-anchor="middle">Requests</text>
+<text class="dg-s" x="85" y="85" text-anchor="middle">prompts arrive</text>
+<rect class="dg-box" x="200" y="40" width="170" height="60" rx="10"/>
+<text class="dg-t" x="285" y="67" text-anchor="middle">Scheduler</text>
+<text class="dg-s" x="285" y="85" text-anchor="middle">continuous batching</text>
+<rect class="dg-hl" x="420" y="40" width="160" height="60" rx="10"/>
+<text class="dg-t" x="500" y="67" text-anchor="middle">Prefill</text>
+<text class="dg-s" x="500" y="85" text-anchor="middle">whole prompt, 1 pass</text>
+<rect class="dg-hl" x="420" y="190" width="160" height="60" rx="10"/>
+<text class="dg-t" x="500" y="217" text-anchor="middle">Decode</text>
+<text class="dg-s" x="500" y="235" text-anchor="middle">1 token per step</text>
+<rect class="dg-hl-2" x="626" y="110" width="120" height="70" rx="10"/>
+<text class="dg-t" x="686" y="142" text-anchor="middle">KV cache</text>
+<text class="dg-s" x="686" y="160" text-anchor="middle">paged blocks</text>
+<rect class="dg-box" x="200" y="190" width="170" height="60" rx="10"/>
+<text class="dg-t" x="285" y="217" text-anchor="middle">Token stream</text>
+<text class="dg-s" x="285" y="235" text-anchor="middle">sent to the user</text>
+<path class="dg-a" d="M150,70 L200,70" marker-end="url(#dg-llm-serving-h)"/>
+<path class="dg-a" d="M370,70 L420,70" marker-end="url(#dg-llm-serving-h)"/>
+<path class="dg-a" d="M500,100 L500,190" marker-end="url(#dg-llm-serving-h)"/>
+<rect class="dg-lbg" x="465.7" y="136" width="68.7" height="18" rx="5"/>
+<text class="dg-l" x="500" y="149" text-anchor="middle">first token</text>
+<path class="dg-a" d="M580,70 L686,70 L686,110" marker-end="url(#dg-llm-serving-h)"/>
+<rect class="dg-lbg" x="600.4" y="61" width="65.3" height="18" rx="5"/>
+<text class="dg-l" x="633" y="74" text-anchor="middle">write K, V</text>
+<path class="dg-a" d="M580,220 L686,220 L686,180" marker-start="url(#dg-llm-serving-h)" marker-end="url(#dg-llm-serving-h)"/>
+<rect class="dg-lbg" x="584.8" y="211" width="96.4" height="18" rx="5"/>
+<text class="dg-l" x="633" y="224" text-anchor="middle">read + append</text>
+<path class="dg-a-hl" d="M420,220 L370,220" marker-end="url(#dg-llm-serving-hh)"/>
+</svg>
+</div>
+<figcaption>Prefill is compute-bound. Decode is memory-bound: every step reads the weights and the whole KV cache.</figcaption>
+</figure>
+<!-- diagram:llm-serving:end -->
     <div class="callout callout-intuition">
       <strong>Intuition:</strong> prefill is reading the question; decode is writing the answer one word at a time while re-checking everything written so far. Reading is fast because you can scan many words at once. Writing is slow because each word waits for the previous one.
     </div>
@@ -144,7 +226,7 @@ Waste: at most one partially filled block per request.</code></pre>
     <h3>Static batching (the old way)</h3>
     <p>Collect N requests, run them together until <em>all</em> finish. A 20-token answer waits for a 1,000-token answer in the same batch, and new arrivals wait for the whole batch. GPU slots sit empty.</p>
     <h3>Continuous batching (iteration-level scheduling)</h3>
-    <p>Introduced by the Orca paper (2022): the scheduler decides batch membership <strong>at every decode step</strong>. When a sequence finishes, its slot is filled by a waiting request in the very next step. All modern servers (vLLM, SGLang, TensorRT-LLM, TGI) do this. Typical gain over static batching: several times higher throughput.</p>
+    <p>Introduced by the Orca paper (2022): the scheduler decides batch membership <strong>at every decode step</strong>. When a sequence finishes, its slot is filled by a waiting request in the very next step. All modern servers (vLLM, SGLang, TensorRT-LLM) do this. Hugging Face TGI did too, but it moved to maintenance mode in December 2025, and Hugging Face now points users to vLLM or SGLang. Typical gain over static batching: several times higher throughput.</p>
     <pre><code>step:      1    2    3    4    5    6    7
 slot 1:   A    A    A    A(done) D  D    D
 slot 2:   B    B(done) E    E    E    E   E
@@ -253,7 +335,7 @@ vllm serve meta-llama/Llama-3.1-8B-Instruct \
 
   <section id="frameworks">
     <h2>12. Kernels and Frameworks</h2>
-    <p>FlashAttention (2 and 3) computes attention in tiles that stay in fast on-chip memory, avoiding writing the full attention matrix to HBM. Fused kernels, CUDA graphs, and optimized attention backends reduce overhead per decode step. Serving frameworks (vLLM, SGLang, TensorRT-LLM, TGI, llama.cpp, Ollama) implement these optimizations out of the box, compared with a naive PyTorch <code>generate</code> loop.</p>
+    <p>FlashAttention (2 and 3) computes attention in tiles that stay in fast on-chip memory, avoiding writing the full attention matrix to HBM. Fused kernels, CUDA graphs, and optimized attention backends reduce overhead per decode step. Serving frameworks (vLLM, SGLang, TensorRT-LLM, llama.cpp, Ollama) implement these optimizations out of the box, compared with a naive PyTorch <code>generate</code> loop.</p>
     <p>Pick a framework matching your hardware (CUDA vs ROCm vs Apple vs CPU), need for an OpenAI-compatible API, LoRA adapter hot-swapping, structured output, and multimodal inputs.</p>
   </section>
 
@@ -293,13 +375,27 @@ vllm serve meta-llama/Llama-3.1-8B-Instruct \
   <!-- prev-next:end -->
 
   <nav class="page-footer-nav">
-    <p><a class="interview-link" href="../../interview/Inference-Deployment-Operations/ai-engineering-interview-inference-optimization.html">Interview questions on Inference Optimization</a></p>
     <p>Related: <a href="ai-engineering-deployment.html">Deployment</a> &middot; <a href="ai-engineering-llmops-monitoring.html">LLMOps &amp; Monitoring</a> &middot; <a href="../../../Docker-Kubernetes/learn/Kubernetes/kubernetes-gpu-scheduling.html">GPU Scheduling on Kubernetes</a> &middot; <a href="../../../CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html">Virtual Memory &amp; Paging</a></p>
     <p><a href="../../ai-engineering.html">Back to AI Engineering</a></p>
   </nav>
 </main>
 <footer>
-  <p><small><a href="../../ai-engineering.html">Back to AI Engineering</a> &middot; <a href="../../../index.html">Home</a></small></p>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="../../../AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="../../../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="../../../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="../../../Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="../../../Interactive Labs/index.html">Labs</a></li>
+      <li><a href="../../../AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
 </footer>
   <script src="../../../assets/site.js"></script>
   <script src="../../../assets/search.js" defer></script>

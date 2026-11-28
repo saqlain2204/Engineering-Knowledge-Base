@@ -295,9 +295,9 @@
 
   function badgeLabel(type) {
     if (type === 'learn') return 'Learn';
-    if (type === 'interview') return 'Interview';
     if (type === 'research') return 'Research';
     if (type === 'hub') return 'Hub';
+    if (type === 'lab') return 'Lab';
     return 'Page';
   }
 
@@ -311,11 +311,13 @@
     wrap.innerHTML =
       '<label class="site-search-label" for="site-search-input">Search</label>' +
       '<div class="site-search-field">' +
-      '<input type="search" id="site-search-input" class="site-search-input" placeholder="Search topics, pages, sections (fuzzy matching)…" autocomplete="off" spellcheck="false" aria-controls="site-search-results" aria-expanded="false">' +
+      '<input type="search" id="site-search-input" class="site-search-input" placeholder="Search topics and pages…" autocomplete="off" spellcheck="false" aria-controls="site-search-results" aria-expanded="false">' +
       '<div id="site-search-results" class="site-search-results" aria-label="Search results" hidden></div>' +
       '</div>';
 
-    header.appendChild(wrap);
+    var heroCta = header.querySelector('.hero-cta');
+    if (heroCta && heroCta.parentNode === header) header.insertBefore(wrap, heroCta.nextSibling);
+    else header.appendChild(wrap);
 
     var input = wrap.querySelector('#site-search-input');
     var results = wrap.querySelector('#site-search-results');

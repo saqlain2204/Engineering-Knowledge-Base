@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+  <title>Self-Attention Lab: Step Through Q, K, V and Softmax | Interactive Labs</title>
+  <meta name="description" content="Interactive self-attention lab. Pick a token and step through query-key scores, scaling by the square root of d, the causal mask, softmax and the weighted sum of values, with a live attention heatmap.">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../assets/labs.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/Interactive%20Labs/attention.html">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Self-Attention Lab: Step Through Q, K, V and Softmax | Interactive Labs">
+  <meta property="og:description" content="Interactive self-attention lab. Pick a token and step through query-key scores, scaling by the square root of d, the causal mask, softmax and the weighted sum of values, with a live attention heatmap.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/Interactive%20Labs/attention.html">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Self-Attention Lab: Step Through Q, K, V and Softmax | Interactive Labs">
+  <meta name="twitter:description" content="Interactive self-attention lab. Pick a token and step through query-key scores, scaling by the square root of d, the causal mask, softmax and the weighted sum of values, with a live attention heatmap.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","headline":"Self-Attention, Step by Step","name":"Self-Attention Lab: Step Through Q, K, V and Softmax | Interactive Labs","description":"Interactive self-attention lab. Pick a token and step through query-key scores, scaling by the square root of d, the causal mask, softmax and the weighted sum of values, with a live attention heatmap.","url":"https://engineering.msaqlain.com/Interactive%20Labs/attention.html","mainEntityOfPage":"https://engineering.msaqlain.com/Interactive%20Labs/attention.html","inLanguage":"en","image":"https://engineering.msaqlain.com/assets/og-image.png","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"publisher":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"isPartOf":{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/"},"learningResourceType":"Interactive lab","isAccessibleForFree":true},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"},{"@type":"ListItem","position":2,"name":"Labs","item":"https://engineering.msaqlain.com/Interactive%20Labs/index.html"},{"@type":"ListItem","position":3,"name":"Self-Attention","item":"https://engineering.msaqlain.com/Interactive%20Labs/attention.html"}]}]}</script>
+  <!-- layout:head:end -->
+</head>
+<body class="lab-page">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="../index.html" aria-label="Engineering Knowledge Base home"><img src="../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="../AI Engineer/ai-engineering.html">AI Engineering</a>
+      <a href="../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a>
+      <a href="../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a>
+      <a href="../Graph ML/graph-ml.html">Graph ML</a>
+      <a href="../Interactive Labs/index.html" aria-current="true">Labs</a>
+      <a href="../AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</div>
+<!-- layout:topbar:end -->
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../index.html">Home</a> &rsaquo; <a href="index.html">Labs</a> &rsaquo; Self-Attention</p>
+  </nav>
+  <h1>Self-Attention, Step by Step</h1>
+  <p>Pick a word. Watch how it scores every other word, turns the scores into weights, and mixes their values into one new vector. This is the core move inside every transformer.</p>
+</header>
+
+<main>
+  <div class="lab" id="attn-lab">
+    <div class="lab-controls">
+      <div class="lab-panel">
+        <h2>Setup</h2>
+        <label class="field">
+          <span>Sentence</span>
+          <input type="text" id="attn-text" value="the cat sat on the mat" maxlength="60" aria-describedby="attn-text-help">
+          <small id="attn-text-help">Up to 8 words. Each word is one token here.</small>
+        </label>
+        <div class="field">
+          <span class="field-label">Examples</span>
+          <div class="seg" id="attn-presets">
+            <button type="button" data-text="the cat sat on the mat">cat</button>
+            <button type="button" data-text="i went to the river bank">bank</button>
+            <button type="button" data-text="she gave him the red book">book</button>
+          </div>
+        </div>
+        <label class="field">
+          <span><span>Head size d<sub>k</sub></span> <output id="attn-d-out">4</output></span>
+          <input type="range" id="attn-d" min="2" max="8" step="2" value="4">
+          <small>Bigger d<sub>k</sub> makes raw dot products bigger. Scaling fixes that.</small>
+        </label>
+        <label class="check"><input type="checkbox" id="attn-scale" checked> <span>Divide scores by &radic;d<sub>k</sub></span></label>
+        <label class="check"><input type="checkbox" id="attn-causal"> Causal mask (GPT style: no peeking ahead)</label>
+      </div>
+      <div class="lab-panel">
+        <h2>Steps</h2>
+        <div class="btn-row">
+          <button type="button" class="lab-btn" id="attn-prev">&larr; Back</button>
+          <button type="button" class="lab-btn primary" id="attn-next">Next step &rarr;</button>
+          <button type="button" class="lab-btn" id="attn-all">Show all</button>
+        </div>
+        <p class="muted" id="attn-step-label" aria-live="polite" style="margin:0.5rem 0 0;font-size:0.9rem"></p>
+      </div>
+    </div>
+
+    <div>
+      <div class="lab-panel">
+        <h2>1. Pick the query token</h2>
+        <div class="tokens" id="attn-tokens" role="group" aria-label="Tokens"></div>
+      </div>
+      <div class="lab-panel">
+        <h2 id="attn-table-title">2. Score every key</h2>
+        <div class="explain" id="attn-explain" aria-live="polite"></div>
+        <div class="lab-table-wrap">
+          <table id="attn-table">
+            <thead>
+              <tr><th>Key token</th><th>q &middot; k</th><th>&divide; &radic;d</th><th>Mask</th><th>Weight (softmax)</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h3 style="margin:1.25rem 0 0.5rem;font-size:1rem">Output vector for this token</h3>
+        <p class="mono" id="attn-output" style="margin:0"></p>
+      </div>
+      <div class="lab-panel">
+        <h2>Full attention map</h2>
+        <p class="muted" style="font-size:0.9rem">Each row is a query token. Each column is a key token. Darker cells get more weight. Every row adds up to 1. Click a row label to pick that query.</p>
+        <div class="lab-table-wrap"><div class="heat" id="attn-heat"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="lab-notes" id="how-it-works">
+    <h2>How it works</h2>
+    <ol>
+      <li>Each token has an embedding vector <code>x</code>. The model multiplies it by three learned matrices to get a <strong>query</strong> <code>q = x·W<sub>Q</sub></code>, a <strong>key</strong> <code>k = x·W<sub>K</sub></code> and a <strong>value</strong> <code>v = x·W<sub>V</sub></code>.</li>
+      <li>The query of one token is compared with the key of every token using a dot product. A big dot product means "this key matches what I am looking for".</li>
+      <li>Scores are divided by <code>&radic;d<sub>k</sub></code>. Without this, scores grow with the head size, softmax becomes almost one-hot, and training gets unstable.</li>
+      <li>In a decoder (GPT style), the causal mask sets future positions to minus infinity, so their weight becomes exactly 0.</li>
+      <li>Softmax turns scores into weights that are positive and sum to 1. The output is the weighted sum of the value vectors.</li>
+    </ol>
+    <p>The numbers here are small random toy vectors, so the pattern is not what a trained model would learn. The math is exactly the same. Real models run many heads in parallel (for example 32 or more) and stack dozens of layers.</p>
+    <h2>Things to try</h2>
+    <ul>
+      <li>Set d<sub>k</sub> to 8 and untick scaling. Watch the weights collapse onto one token.</li>
+      <li>Turn on the causal mask. The first token can only look at itself, so its weight on itself is 1.</li>
+      <li>Use a sentence with a repeated word, like "the". Both copies get the same key, so they get the same score. Only position information (not shown here) can tell them apart.</li>
+    </ul>
+    <h2>Read more</h2>
+    <ul>
+      <li><a href="../AI Engineer/learn/Foundations-and-Architecture/ai-engineering-transformers.html">Transformers: attention and the blocks inside every LLM</a></li>
+      <li><a href="../AI Engineer/research/attention-is-all-you-need.html">Paper breakdown: Attention Is All You Need</a></li>
+      <li><a href="../AI Engineer/learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html">LLM inference: the KV cache stores these keys and values</a></li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="../index.html"><img src="../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="../AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="../Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="../Interactive Labs/index.html">Labs</a></li>
+      <li><a href="../AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="../assets/site.js"></script>
+<script src="../assets/search.js" defer></script>
+<script>
+(function () {
+  'use strict';
+  var STEPS = [
+    'Step 1 of 5: raw scores. Dot product of the query with each key.',
+    'Step 2 of 5: scale. Divide each score by the square root of d.',
+    'Step 3 of 5: mask. Future tokens are blocked (only if the causal mask is on).',
+    'Step 4 of 5: softmax. Turn scores into weights that sum to 1.',
+    'Step 5 of 5: mix. Output = weighted sum of the value vectors.'
+  ];
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { tokens: [], q: 0, step: 0, d: 4 };
+
+  // Small deterministic random numbers, so a word always gets the same vector.
+  function hash(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function rng(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function vec(word, salt, d) {
+    var r = rng(hash(word + '|' + salt));
+    var v = [];
+    for (var i = 0; i < d; i++) v.push(Math.round((r() * 2 - 1) * 10) / 10);
+    return v;
+  }
+  function dot(a, b) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+  function fmt(x) { return (x >= 0 ? ' ' : '') + x.toFixed(2); }
+
+  function compute(qi) {
+    var d = state.d, t = state.tokens;
+    var q = vec(t[qi], 'q', d);
+    var rows = t.map(function (w, j) {
+      var k = vec(w, 'k', d);
+      var raw = dot(q, k);
+      var scaled = $('attn-scale').checked ? raw / Math.sqrt(d) : raw;
+      var masked = $('attn-causal').checked && j > qi;
+      return { word: w, raw: raw, scaled: scaled, masked: masked, v: vec(w, 'v', d) };
+    });
+    var max = -Infinity;
+    rows.forEach(function (r) { if (!r.masked && r.scaled > max) max = r.scaled; });
+    var sum = 0;
+    rows.forEach(function (r) { r.e = r.masked ? 0 : Math.exp(r.scaled - max); sum += r.e; });
+    rows.forEach(function (r) { r.w = r.e / sum; });
+    var out = [];
+    for (var i = 0; i < d; i++) {
+      var s = 0;
+      rows.forEach(function (r) { s += r.w * r.v[i]; });
+      out.push(s);
+    }
+    return { q: q, rows: rows, out: out };
+  }
+
+  function heatColor(w) {
+    var light = document.documentElement.getAttribute('data-theme') === 'light';
+    var a = Math.max(0.04, Math.min(1, w));
+    return light ? 'rgba(79, 70, 229,' + (a * 0.85).toFixed(3) + ')' : 'rgba(94, 234, 212,' + (a * 0.85).toFixed(3) + ')';
+  }
+
+  function renderTokens() {
+    var box = $('attn-tokens');
+    box.innerHTML = '';
+    state.tokens.forEach(function (w, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'token';
+      b.textContent = w;
+      b.setAttribute('aria-pressed', i === state.q ? 'true' : 'false');
+      b.setAttribute('aria-label', 'Query token ' + (i + 1) + ': ' + w);
+      b.addEventListener('click', function () { state.q = i; render(); });
+      box.appendChild(b);
+    });
+  }
+
+  function renderTable(res) {
+    var tb = document.querySelector('#attn-table tbody');
+    var s = state.step;
+    var causal = $('attn-causal').checked;
+    tb.innerHTML = '';
+    res.rows.forEach(function (r, j) {
+      var tr = document.createElement('tr');
+      var weightCell;
+      if (s >= 3) {
+        weightCell = '<div class="bar-row" style="grid-template-columns:minmax(4rem,1fr) 3.5rem"><div class="bar-track"><div class="bar-fill" style="width:' +
+          (r.w * 100).toFixed(1) + '%"></div></div><span class="bar-value">' + (r.w * 100).toFixed(1) + '%</span></div>';
+      } else {
+        weightCell = '<span class="muted">later</span>';
+      }
+      tr.innerHTML =
+        '<td class="mono"><b>' + r.word + '</b>' + (j === state.q ? ' <span class="muted">(self)</span>' : '') + '</td>' +
+        '<td class="mono">' + fmt(r.raw) + '</td>' +
+        '<td class="mono">' + (s >= 1 ? fmt(r.scaled) : '<span class="muted">later</span>') + '</td>' +
+        '<td class="mono">' + (s >= 2 ? (r.masked ? '<span style="color:var(--bad)">&minus;&infin;</span>' : (causal ? 'keep' : 'off')) : '<span class="muted">later</span>') + '</td>' +
+        '<td style="min-width:11rem">' + weightCell + '</td>';
+      tb.appendChild(tr);
+    });
+    var tokens = $('attn-tokens').querySelectorAll('.token');
+    res.rows.forEach(function (r, j) { if (tokens[j]) { tokens[j].classList.toggle('is-masked', s >= 2 && r.masked); tokens[j].title = (s >= 2 && r.masked) ? 'Hidden from the current query by the causal mask' : ''; } });
+
+    var best = res.rows.reduce(function (a, b) { return b.w > a.w ? b : a; });
+    var q = state.tokens[state.q];
+    var msgs = [
+      'The query for <b>' + q + '</b> is <span class="mono">[' + res.q.map(fmt).join(',') + ']</span>. Each score is its dot product with one key vector.',
+      $('attn-scale').checked ? 'Divide by &radic;' + state.d + ' = ' + Math.sqrt(state.d).toFixed(2) + '. Scores shrink, so softmax stays smooth.' : 'Scaling is off, so the scores stay large. Softmax will be very peaky.',
+      causal ? 'Tokens after <b>' + q + '</b> get &minus;&infin;. After softmax their weight is exactly 0.' : 'The causal mask is off (encoder style, like BERT). Every token can see every other token.',
+      'Softmax: exp(score) divided by the sum of all exps. <b>' + q + '</b> pays most attention to <b>' + best.word + '</b> (' + (best.w * 100).toFixed(1) + '%).',
+      'The new vector for <b>' + q + '</b> is mostly the value of <b>' + best.word + '</b>, plus a little of each other value, by weight.'
+    ];
+    $('attn-explain').innerHTML = msgs[s];
+    $('attn-output').innerHTML = s >= 4 ? '[' + res.out.map(fmt).join(', ') + ']' : '<span class="muted">Finish the steps to see it.</span>';
+  }
+
+  function renderHeat() {
+    var n = state.tokens.length;
+    var box = $('attn-heat');
+    box.style.gridTemplateColumns = '4.5rem repeat(' + n + ', minmax(2.4rem, 1fr))';
+    box.style.minWidth = (4.5 + n * 2.6) + 'rem';
+    box.innerHTML = '';
+    var corner = document.createElement('div');
+    corner.className = 'heat-head';
+    corner.textContent = 'q \\ k';
+    box.appendChild(corner);
+    state.tokens.forEach(function (w) {
+      var h = document.createElement('div');
+      h.className = 'heat-head';
+      h.textContent = w;
+      box.appendChild(h);
+    });
+    state.tokens.forEach(function (w, i) {
+      var res = compute(i);
+      var h = document.createElement('button');
+      h.type = 'button';
+      h.className = 'heat-head token';
+      h.style.padding = '0.2rem';
+      h.textContent = w;
+      h.setAttribute('aria-pressed', i === state.q ? 'true' : 'false');
+      h.setAttribute('aria-label', 'Pick query row ' + (i + 1) + ': ' + w);
+      h.addEventListener('click', function () { state.q = i; render(); });
+      box.appendChild(h);
+      res.rows.forEach(function (r) {
+        var c = document.createElement('div');
+        c.className = 'heat-cell';
+        c.style.background = heatColor(r.w);
+        if (i === state.q) c.style.borderColor = 'var(--accent)';
+        if (r.w > 0.5) c.style.color = document.documentElement.getAttribute('data-theme') === 'light' ? '#fff' : '#04121a';
+        c.textContent = r.w < 0.005 ? '0' : r.w.toFixed(2);
+        c.title = w + ' \u2192 ' + r.word + ': ' + (r.w * 100).toFixed(1) + '%';
+        box.appendChild(c);
+      });
+    });
+  }
+
+  function render() {
+    state.d = +$('attn-d').value;
+    $('attn-d-out').textContent = state.d;
+    renderTokens();
+    var res = compute(state.q);
+    renderTable(res);
+    renderHeat();
+    $('attn-step-label').textContent = STEPS[state.step];
+    $('attn-prev').disabled = state.step === 0;
+    $('attn-next').disabled = state.step === STEPS.length - 1;
+  }
+
+  function setText(text) {
+    var words = text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 8);
+    if (!words.length) words = ['hello'];
+    state.tokens = words;
+    if (state.q >= words.length) state.q = words.length - 1;
+    render();
+  }
+
+  $('attn-text').addEventListener('input', function (e) { setText(e.target.value); });
+  $('attn-presets').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    $('attn-text').value = b.getAttribute('data-text');
+    state.q = 1;
+    setText(b.getAttribute('data-text'));
+  });
+  ['attn-d', 'attn-scale', 'attn-causal'].forEach(function (id) { $(id).addEventListener('input', render); });
+  $('attn-prev').addEventListener('click', function () { if (state.step > 0) { state.step--; render(); } });
+  $('attn-next').addEventListener('click', function () { if (state.step < STEPS.length - 1) { state.step++; render(); } });
+  $('attn-all').addEventListener('click', function () { state.step = STEPS.length - 1; render(); });
+  document.addEventListener('ekb:themechange', renderHeat);
+  state.q = 1;
+  setText($('attn-text').value);
+})();
+</script>
+</body>
+</html>

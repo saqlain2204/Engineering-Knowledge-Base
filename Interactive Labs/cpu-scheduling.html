@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+  <title>CPU Scheduling Simulator: FCFS, SJF, SRTF, Round Robin, Priority | Interactive Labs</title>
+  <meta name="description" content="Interactive CPU scheduling simulator. Edit processes, pick FCFS, SJF, SRTF, Round Robin or Priority, and get a Gantt chart with waiting, turnaround and response times, plus a side-by-side comparison.">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../assets/labs.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/Interactive%20Labs/cpu-scheduling.html">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="CPU Scheduling Simulator: FCFS, SJF, SRTF, Round Robin, Priority | Interactive Labs">
+  <meta property="og:description" content="Interactive CPU scheduling simulator. Edit processes, pick FCFS, SJF, SRTF, Round Robin or Priority, and get a Gantt chart with waiting, turnaround and response times, plus a side-by-side comparison.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/Interactive%20Labs/cpu-scheduling.html">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="CPU Scheduling Simulator: FCFS, SJF, SRTF, Round Robin, Priority | Interactive Labs">
+  <meta name="twitter:description" content="Interactive CPU scheduling simulator. Edit processes, pick FCFS, SJF, SRTF, Round Robin or Priority, and get a Gantt chart with waiting, turnaround and response times, plus a side-by-side comparison.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LearningResource","headline":"CPU Scheduling Simulator","name":"CPU Scheduling Simulator: FCFS, SJF, SRTF, Round Robin, Priority | Interactive Labs","description":"Interactive CPU scheduling simulator. Edit processes, pick FCFS, SJF, SRTF, Round Robin or Priority, and get a Gantt chart with waiting, turnaround and response times, plus a side-by-side comparison.","url":"https://engineering.msaqlain.com/Interactive%20Labs/cpu-scheduling.html","mainEntityOfPage":"https://engineering.msaqlain.com/Interactive%20Labs/cpu-scheduling.html","inLanguage":"en","image":"https://engineering.msaqlain.com/assets/og-image.png","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"publisher":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"isPartOf":{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/"},"learningResourceType":"Interactive lab","isAccessibleForFree":true},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"},{"@type":"ListItem","position":2,"name":"Labs","item":"https://engineering.msaqlain.com/Interactive%20Labs/index.html"},{"@type":"ListItem","position":3,"name":"CPU Scheduling","item":"https://engineering.msaqlain.com/Interactive%20Labs/cpu-scheduling.html"}]}]}</script>
+  <!-- layout:head:end -->
+</head>
+<body class="lab-page">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="../index.html" aria-label="Engineering Knowledge Base home"><img src="../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="../AI Engineer/ai-engineering.html">AI Engineering</a>
+      <a href="../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a>
+      <a href="../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a>
+      <a href="../Graph ML/graph-ml.html">Graph ML</a>
+      <a href="../Interactive Labs/index.html" aria-current="true">Labs</a>
+      <a href="../AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</div>
+<!-- layout:topbar:end -->
+
+<header>
+  <nav aria-label="Breadcrumb">
+    <p><a href="../index.html">Home</a> &rsaquo; <a href="index.html">Labs</a> &rsaquo; CPU Scheduling</p>
+  </nav>
+  <h1>CPU Scheduling Simulator</h1>
+  <p>One CPU, many processes. The scheduler decides who runs next. Edit the processes, switch the algorithm, and watch the Gantt chart and waiting times change.</p>
+</header>
+
+<main>
+  <div class="lab" id="cpu-lab">
+    <div class="lab-controls">
+      <div class="lab-panel">
+        <h2>Algorithm</h2>
+        <div class="seg" id="cpu-algos" role="group" aria-label="Scheduling algorithm"></div>
+        <label class="field" id="cpu-q-field" style="margin-top:1rem">
+          <span>Time quantum <output id="cpu-q-out">2</output></span>
+          <input type="range" id="cpu-q" min="1" max="8" step="1" value="2">
+          <small>Round Robin only. How long a process runs before it goes to the back of the queue.</small>
+        </label>
+        <p class="explain" id="cpu-desc" style="margin-top:1rem"></p>
+      </div>
+      <div class="lab-panel">
+        <h2>Processes</h2>
+        <div class="lab-table-wrap">
+          <table id="cpu-input" class="compact">
+            <thead><tr><th>ID</th><th>Arrival</th><th>Burst</th><th>Priority</th><th><span class="sr-only">Remove</span></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="btn-row" style="margin-top:0.75rem">
+          <button type="button" class="lab-btn" id="cpu-add">+ Add</button>
+          <button type="button" class="lab-btn" id="cpu-random">Random</button>
+          <button type="button" class="lab-btn" id="cpu-convoy">Convoy example</button>
+        </div>
+        <small class="muted">Lower priority number = more important.</small>
+      </div>
+    </div>
+
+    <div>
+      <div class="lab-panel">
+        <h2 id="cpu-gantt-title">Gantt chart</h2>
+        <div class="stats" id="cpu-stats"></div>
+        <div class="gantt" id="cpu-gantt" role="img" aria-label="Gantt chart"></div>
+        <div class="gantt-axis" id="cpu-axis" aria-hidden="true"></div>
+      </div>
+      <div class="lab-panel">
+        <h2>Per-process results</h2>
+        <div class="lab-table-wrap">
+          <table id="cpu-results">
+            <thead><tr><th>ID</th><th>Arrival</th><th>Burst</th><th>Finish</th><th>Turnaround</th><th>Waiting</th><th>Response</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted" style="font-size:0.88rem;margin:0.75rem 0 0">Turnaround = finish &minus; arrival. Waiting = turnaround &minus; burst. Response = first run &minus; arrival.</p>
+      </div>
+      <div class="lab-panel">
+        <h2>Compare all algorithms</h2>
+        <div class="lab-table-wrap">
+          <table id="cpu-compare">
+            <thead><tr><th>Algorithm</th><th>Avg waiting</th><th>Avg turnaround</th><th>Avg response</th><th>Context switches</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="muted" style="font-size:0.88rem;margin:0.75rem 0 0">Green marks the best value in each column for these processes.</p>
+      </div>
+    </div>
+  </div>
+
+  <section class="lab-notes" id="how-it-works">
+    <h2>How it works</h2>
+    <ul>
+      <li><strong>FCFS</strong> (first come, first served) runs processes in arrival order until each one finishes. Simple, but one long job makes everyone wait (the convoy effect).</li>
+      <li><strong>SJF</strong> (shortest job first) picks the shortest waiting job when the CPU is free. It gives the lowest average waiting time when nothing can be interrupted, but long jobs can starve.</li>
+      <li><strong>SRTF</strong> is SJF that can interrupt: a new job with less remaining time takes the CPU right away.</li>
+      <li><strong>Round Robin</strong> gives each process one time quantum, then moves it to the back of the queue. Response time is good. A tiny quantum means many context switches.</li>
+      <li><strong>Priority</strong> (non-preemptive here) picks the most important waiting job. Low-priority jobs can starve. Real systems fix this with aging.</li>
+    </ul>
+    <p>Rules used here: ties go to the earlier arrival, then the lower ID. In Round Robin, a process that arrives at the same moment another one is preempted joins the queue first. Context switch cost is taken as zero, but the count is shown. Real Linux uses the EEVDF scheduler (since kernel 6.6), which mixes fairness with latency goals.</p>
+    <h2>Things to try</h2>
+    <ul>
+      <li>Click "Convoy example" and compare FCFS with SJF. One long job first makes the average wait jump.</li>
+      <li>In Round Robin, set the quantum to 1, then to 8. Watch context switches and response time move in opposite directions.</li>
+      <li>Give one process a high priority number (low importance) and a late arrival. See how long it waits under Priority.</li>
+    </ul>
+    <h2>Read more</h2>
+    <ul>
+      <li><a href="../CS-Fundamentals/learn/Operating-Systems/os-processes-threads-scheduling.html">Processes, Threads &amp; CPU Scheduling</a></li>
+      <li><a href="../CS-Fundamentals/learn/Operating-Systems/os-concurrency-synchronization-deadlocks.html">Concurrency, Synchronization &amp; Deadlocks</a></li>
+      <li><a href="page-replacement.html">Lab: page replacement</a></li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="../index.html"><img src="../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="../AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="../Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="../Interactive Labs/index.html">Labs</a></li>
+      <li><a href="../AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="../assets/site.js"></script>
+<script src="../assets/search.js" defer></script>
+<script>
+(function () {
+  'use strict';
+  var COLORS = ['#5eead4', '#a5b4fc', '#f9a8d4', '#fcd34d', '#86efac', '#fdba74', '#93c5fd', '#c4b5fd'];
+  var ALGOS = [
+    { id: 'fcfs', name: 'FCFS', desc: 'Run jobs in arrival order. No interruptions.' },
+    { id: 'sjf', name: 'SJF', desc: 'When the CPU is free, run the shortest waiting job. No interruptions.' },
+    { id: 'srtf', name: 'SRTF', desc: 'Always run the job with the least time left. A shorter new job interrupts.' },
+    { id: 'rr', name: 'Round Robin', desc: 'Each job runs for one quantum, then goes to the back of the queue.' },
+    { id: 'prio', name: 'Priority', desc: 'When the CPU is free, run the most important job (lowest number). No interruptions.' }
+  ];
+  var $ = function (id) { return document.getElementById(id); };
+  var procs = [];
+  var algo = 'fcfs';
+
+  function convoy() {
+    return [
+      { id: 'P1', at: 0, bt: 10, pr: 3 }, { id: 'P2', at: 1, bt: 2, pr: 1 },
+      { id: 'P3', at: 2, bt: 1, pr: 4 }, { id: 'P4', at: 3, bt: 3, pr: 2 }
+    ];
+  }
+  function sample() {
+    return [
+      { id: 'P1', at: 0, bt: 5, pr: 2 }, { id: 'P2', at: 1, bt: 3, pr: 1 },
+      { id: 'P3', at: 2, bt: 8, pr: 4 }, { id: 'P4', at: 3, bt: 2, pr: 3 }, { id: 'P5', at: 6, bt: 4, pr: 2 }
+    ];
+  }
+
+  function schedule(list, kind, q) {
+    var ps = list.map(function (p, i) { return { id: p.id, at: p.at, bt: p.bt, pr: p.pr, idx: i, left: p.bt, start: -1, end: 0 }; })
+      .filter(function (p) { return p.bt > 0; });
+    var t = 0, done = 0, n = ps.length, segs = [], ready = [], arrived = {}, running = null, sliceLeft = 0;
+    function push(id, a, b) {
+      var last = segs[segs.length - 1];
+      if (last && last.id === id && last.end === a) last.end = b; else segs.push({ id: id, start: a, end: b });
+    }
+    function admit(time) {
+      ps.filter(function (p) { return !arrived[p.idx] && p.at <= time; })
+        .sort(function (a, b) { return a.at - b.at || a.idx - b.idx; })
+        .forEach(function (p) { arrived[p.idx] = true; ready.push(p); });
+    }
+    function cmp(key) {
+      return function (a, b) { return key(a) - key(b) || a.at - b.at || a.idx - b.idx; };
+    }
+    var guard = 0;
+    while (done < n && guard++ < 10000) {
+      admit(t);
+      if (kind === 'rr') {
+        if (running && sliceLeft === 0) { ready.push(running); running = null; }
+        if (!running && ready.length) { running = ready.shift(); sliceLeft = q; }
+      } else if (kind === 'srtf') {
+        var prev = running;
+        if (running) { ready.push(running); running = null; }
+        if (ready.length) {
+          // least time left wins; on a tie the job already on the CPU keeps it
+          ready.sort(function (a, b) {
+            return a.left - b.left || (a === prev ? -1 : b === prev ? 1 : 0) || a.at - b.at || a.idx - b.idx;
+          });
+          running = ready.shift();
+        }
+      } else if (!running && ready.length) {
+        var key = kind === 'sjf' ? function (p) { return p.bt; } : kind === 'prio' ? function (p) { return p.pr; } : function (p) { return p.at; };
+        ready.sort(cmp(key));
+        running = ready.shift();
+      }
+      if (!running) { push('idle', t, t + 1); t++; continue; }
+      if (running.start < 0) running.start = t;
+      push(running.id, t, t + 1);
+      running.left--; t++; sliceLeft--;
+      if (running.left === 0) { running.end = t; done++; running = null; admit(t); }
+      else if (kind === 'rr' && sliceLeft === 0) { admit(t); }
+    }
+    var switches = 0;
+    for (var i = 1; i < segs.length; i++) if (segs[i].id !== 'idle' && segs[i - 1].id !== 'idle' && segs[i].id !== segs[i - 1].id) switches++;
+    ps.forEach(function (p) { p.tat = p.end - p.at; p.wt = p.tat - p.bt; p.rt = p.start - p.at; });
+    function avg(k) { return ps.length ? ps.reduce(function (a, p) { return a + p[k]; }, 0) / ps.length : 0; }
+    return { segs: segs, ps: ps, end: t, switches: switches, wt: avg('wt'), tat: avg('tat'), rt: avg('rt') };
+  }
+
+  function colorOf(id) {
+    var i = procs.findIndex(function (p) { return p.id === id; });
+    return COLORS[(i < 0 ? 0 : i) % COLORS.length];
+  }
+
+  function renderInput() {
+    var tb = document.querySelector('#cpu-input tbody');
+    tb.innerHTML = '';
+    procs.forEach(function (p, i) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td><span style="display:inline-block;width:0.7rem;height:0.7rem;border-radius:3px;margin-right:0.35rem;background:' + colorOf(p.id) + '"></span><b>' + p.id + '</b></td>' +
+        '<td><input type="number" min="0" max="30" value="' + p.at + '" data-i="' + i + '" data-k="at" aria-label="' + p.id + ' arrival time"></td>' +
+        '<td><input type="number" min="1" max="20" value="' + p.bt + '" data-i="' + i + '" data-k="bt" aria-label="' + p.id + ' burst time"></td>' +
+        '<td><input type="number" min="1" max="9" value="' + p.pr + '" data-i="' + i + '" data-k="pr" aria-label="' + p.id + ' priority"></td>' +
+        '<td><button type="button" class="lab-btn" data-del="' + i + '" aria-label="Remove ' + p.id + '" style="padding:0.2rem 0.55rem">&times;</button></td>';
+      tb.appendChild(tr);
+    });
+    $('cpu-add').disabled = procs.length >= 8;
+  }
+
+  function renderAxis(res) {
+    var axis = $('cpu-axis'), w = axis.clientWidth || 600, last = -999;
+    axis.innerHTML = '';
+    var marks = [0];
+    res.segs.forEach(function (s) { marks.push(s.end); });
+    marks.forEach(function (m, i) {
+      var x = m / res.end * w;
+      var isEnd = i === marks.length - 1;
+      if (!isEnd && x - last < 26) return;
+      if (isEnd && x - last < 26 && axis.lastChild && axis.childNodes.length > 1) axis.removeChild(axis.lastChild);
+      var s = document.createElement('span');
+      s.textContent = m;
+      s.style.left = (m / res.end * 100) + '%';
+      if (isEnd) s.className = 'end';
+      axis.appendChild(s);
+      last = x;
+    });
+  }
+
+  function render() {
+    var q = +$('cpu-q').value;
+    $('cpu-q-out').textContent = q;
+    $('cpu-q-field').style.display = algo === 'rr' ? '' : 'none';
+    var meta = ALGOS.filter(function (a) { return a.id === algo; })[0];
+    $('cpu-desc').textContent = meta.desc;
+    document.querySelectorAll('#cpu-algos button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.id === algo ? 'true' : 'false'); });
+    var res = schedule(procs, algo, q);
+    $('cpu-gantt-title').textContent = 'Gantt chart: ' + meta.name + (algo === 'rr' ? ' (quantum ' + q + ')' : '');
+    $('cpu-stats').innerHTML =
+      '<div class="stat"><b>' + res.wt.toFixed(2) + '</b><span>avg waiting time</span></div>' +
+      '<div class="stat"><b>' + res.tat.toFixed(2) + '</b><span>avg turnaround</span></div>' +
+      '<div class="stat"><b>' + res.rt.toFixed(2) + '</b><span>avg response</span></div>' +
+      '<div class="stat"><b>' + res.switches + '</b><span>context switches</span></div>';
+    var g = $('cpu-gantt');
+    g.innerHTML = '';
+    var label = [];
+    res.segs.forEach(function (s, i) {
+      var d = document.createElement('div');
+      d.className = 'gantt-seg' + (s.id === 'idle' ? ' idle' : '');
+      d.style.flex = (s.end - s.start) + ' 1 0';
+      d.style.animationDelay = Math.min(i * 40, 800) + 'ms';
+      if (s.id !== 'idle') d.style.background = colorOf(s.id);
+      d.textContent = s.id === 'idle' ? '' : s.id;
+      d.title = (s.id === 'idle' ? 'CPU idle' : s.id) + ': ' + s.start + ' to ' + s.end;
+      g.appendChild(d);
+      label.push((s.id === 'idle' ? 'idle' : s.id) + ' ' + s.start + '-' + s.end);
+    });
+    g.setAttribute('aria-label', 'Gantt chart: ' + label.join(', '));
+    renderAxis(res);
+    var tb = document.querySelector('#cpu-results tbody');
+    tb.innerHTML = '';
+    res.ps.slice().sort(function (a, b) { return a.idx - b.idx; }).forEach(function (p) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td><b>' + p.id + '</b></td><td>' + p.at + '</td><td>' + p.bt + '</td><td>' + p.end + '</td><td>' + p.tat + '</td><td>' + p.wt + '</td><td>' + p.rt + '</td>';
+      tb.appendChild(tr);
+    });
+    var all = ALGOS.map(function (a) { return { a: a, r: schedule(procs, a.id, q) }; });
+    var best = {};
+    ['wt', 'tat', 'rt', 'switches'].forEach(function (k) { best[k] = Math.min.apply(null, all.map(function (x) { return x.r[k]; })); });
+    var cb = document.querySelector('#cpu-compare tbody');
+    cb.innerHTML = '';
+    all.forEach(function (x) {
+      var tr = document.createElement('tr');
+      function cell(k, v) { return '<td' + (x.r[k] === best[k] ? ' style="color:var(--ok);font-weight:800"' : '') + '>' + v + '</td>'; }
+      tr.innerHTML = '<td><b>' + x.a.name + (x.a.id === 'rr' ? ' (q=' + q + ')' : '') + '</b></td>' +
+        cell('wt', x.r.wt.toFixed(2)) + cell('tat', x.r.tat.toFixed(2)) + cell('rt', x.r.rt.toFixed(2)) + cell('switches', x.r.switches);
+      if (x.a.id === algo) tr.style.outline = '2px solid var(--accent)';
+      cb.appendChild(tr);
+    });
+  }
+
+  ALGOS.forEach(function (a) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = a.name;
+    b.dataset.id = a.id;
+    b.addEventListener('click', function () { algo = a.id; render(); });
+    $('cpu-algos').appendChild(b);
+  });
+  document.querySelector('#cpu-input tbody').addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el.dataset.k) return;
+    var v = Math.round(+el.value);
+    var lim = { at: [0, 30], bt: [1, 20], pr: [1, 9] }[el.dataset.k];
+    if (isNaN(v)) v = lim[0];
+    v = Math.max(lim[0], Math.min(lim[1], v));
+    el.value = v;
+    procs[+el.dataset.i][el.dataset.k] = v;
+    render();
+  });
+  document.querySelector('#cpu-input tbody').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-del]');
+    if (!b || procs.length <= 1) return;
+    procs.splice(+b.dataset.del, 1);
+    procs.forEach(function (p, i) { p.id = 'P' + (i + 1); });
+    renderInput(); render();
+  });
+  $('cpu-add').addEventListener('click', function () {
+    if (procs.length >= 8) return;
+    var lastAt = procs.length ? procs[procs.length - 1].at : 0;
+    procs.push({ id: 'P' + (procs.length + 1), at: lastAt + 1, bt: 3, pr: 2 });
+    renderInput(); render();
+  });
+  $('cpu-random').addEventListener('click', function () {
+    var n = 4 + Math.floor(Math.random() * 3), at = 0;
+    procs = [];
+    for (var i = 0; i < n; i++) {
+      procs.push({ id: 'P' + (i + 1), at: at, bt: 1 + Math.floor(Math.random() * 9), pr: 1 + Math.floor(Math.random() * 5) });
+      at += Math.floor(Math.random() * 4);
+    }
+    renderInput(); render();
+  });
+  $('cpu-convoy').addEventListener('click', function () { procs = convoy(); renderInput(); render(); });
+  $('cpu-q').addEventListener('input', render);
+  window.addEventListener('resize', function () { render(); });
+  procs = sample();
+  renderInput();
+  render();
+  window.__cpuSchedule = schedule;
+})();
+</script>
+</body>
+</html>

@@ -7,8 +7,45 @@
   <title>Kubernetes Architecture | Docker &amp; Kubernetes</title>
   <meta name="description" content="Kubernetes architecture: control plane, worker nodes, etcd, API server, scheduler, controllers, kubelet, kube-proxy, kubectl, and reconciliation.">
   <link rel="stylesheet" href="../../../styles.css">
+  <!-- layout:head:start -->
+  <script>(function(){var d=document.documentElement,t;d.classList.add('js');try{t=localStorage.getItem('ekb-theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}d.setAttribute('data-theme',t)})();</script>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-architecture.html">
+  <meta property="og:site_name" content="Engineering Knowledge Base">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Kubernetes Architecture | Docker &amp; Kubernetes">
+  <meta property="og:description" content="Kubernetes architecture: control plane, worker nodes, etcd, API server, scheduler, controllers, kubelet, kube-proxy, kubectl, and reconciliation.">
+  <meta property="og:url" content="https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-architecture.html">
+  <meta property="og:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Kubernetes Architecture | Docker &amp; Kubernetes">
+  <meta name="twitter:description" content="Kubernetes architecture: control plane, worker nodes, etcd, API server, scheduler, controllers, kubelet, kube-proxy, kubectl, and reconciliation.">
+  <meta name="twitter:image" content="https://engineering.msaqlain.com/assets/og-image.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Kubernetes Architecture","name":"Kubernetes Architecture | Docker & Kubernetes","description":"Kubernetes architecture: control plane, worker nodes, etcd, API server, scheduler, controllers, kubelet, kube-proxy, kubectl, and reconciliation.","url":"https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-architecture.html","mainEntityOfPage":"https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-architecture.html","inLanguage":"en","image":"https://engineering.msaqlain.com/assets/og-image.png","author":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"publisher":{"@type":"Person","name":"Mohammed Saqlain","url":"https://github.com/saqlain2204"},"isPartOf":{"@type":"WebSite","name":"Engineering Knowledge Base","url":"https://engineering.msaqlain.com/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://engineering.msaqlain.com/"},{"@type":"ListItem","position":2,"name":"Docker & Kubernetes","item":"https://engineering.msaqlain.com/Docker-Kubernetes/docker-kubernetes.html"},{"@type":"ListItem","position":3,"name":"Learn","item":"https://engineering.msaqlain.com/Docker-Kubernetes/learn/docker-kubernetes-learn.html"},{"@type":"ListItem","position":4,"name":"Architecture","item":"https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-architecture.html"}]}]}</script>
+  <!-- layout:head:end -->
 </head>
 <body class="learn-page">
+<!-- layout:topbar:start -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="topbar-brand" href="../../../index.html" aria-label="Engineering Knowledge Base home"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+    <button class="icon-btn topbar-menu" type="button" aria-expanded="false" aria-controls="topbar-nav" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <nav class="topbar-nav" id="topbar-nav" aria-label="Main">
+      <a href="../../../AI Engineer/ai-engineering.html">AI Engineering</a>
+      <a href="../../../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a>
+      <a href="../../../Docker-Kubernetes/docker-kubernetes.html" aria-current="true">Docker &amp; K8s</a>
+      <a href="../../../Graph ML/graph-ml.html">Graph ML</a>
+      <a href="../../../Interactive Labs/index.html">Labs</a>
+      <a href="../../../AI Engineer/research/research-hub.html">Research</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme"><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
+</div>
+<!-- layout:topbar:end -->
 
 <header>
   <nav aria-label="Breadcrumb">
@@ -65,27 +102,79 @@
   <section id="cluster-overview">
     <h2>2. Cluster Overview</h2>
     <p>A Kubernetes <strong>cluster</strong> consists of at least one <strong>control plane</strong> and one or more <strong>worker nodes</strong>. The control plane makes global decisions (scheduling, API, state storage). Worker nodes run your workloads.</p>
-    <pre><code>┌──────────────────────────────────────────────────────────────────────┐
-│                        CONTROL PLANE                                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  ┌────────────┐  │
-│  │ API Server  │  │  Scheduler  │  │  Controller  │  │   etcd     │  │
-│  │  (REST)     │  │             │  │   Manager    │  │ (key-value)│  │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘  └─────┬──────┘  │
-│         └────────────────┴────────────────┴─────────────────┘         │
-│                    all components talk to API server                   │
-└──────────────────────────────────────────────────────────────────────┘
-         │                           │                           │
-         ▼                           ▼                           ▼
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│  Worker Node 1  │       │  Worker Node 2  │       │  Worker Node N  │
-│  kubelet        │       │  kubelet        │       │  kubelet        │
-│  kube-proxy     │       │  kube-proxy     │       │  kube-proxy     │
-│  container rt   │       │  container rt   │       │  container rt   │
-│  CNI plugin     │       │  CNI plugin     │       │  CNI plugin     │
-│  ┌────┐ ┌────┐  │       │  ┌────┐ ┌────┐  │       │  ┌────┐         │
-│  │Pod │ │Pod │  │       │  │Pod │ │Pod │  │       │  │Pod │ ...     │
-│  └────┘ └────┘  │       │  └────┘ └────┘  │       │  └────┘         │
-└─────────────────┘       └─────────────────┘       └─────────────────┘</code></pre>
+    <!-- diagram:k8s-arch:start -->
+<figure class="diagram" id="fig-k8s-arch">
+<div class="dg-scroll">
+<svg viewBox="0 0 760 514" width="760" height="514" role="img" aria-labelledby="dg-k8s-arch-t dg-k8s-arch-d" xmlns="http://www.w3.org/2000/svg">
+<title id="dg-k8s-arch-t">Kubernetes cluster architecture</title>
+<desc id="dg-k8s-arch-d">kubectl talks to the API server. The scheduler and controller manager watch the API server. Only the API server reads and writes etcd. On each worker node the kubelet watches the API server and starts pods through the container runtime. kube-proxy programs Service rules.</desc>
+<defs>
+<marker id="dg-k8s-arch-h" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="dg-k8s-arch-hh" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="dg-head-hl" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="dg-group" x="20" y="86" width="720" height="176" rx="14"/>
+<text class="dg-g" x="34" y="106">CONTROL PLANE</text>
+<rect class="dg-group" x="20" y="312" width="350" height="186" rx="14"/>
+<text class="dg-g" x="34" y="332">WORKER NODE 1</text>
+<rect class="dg-group" x="390" y="312" width="350" height="186" rx="14"/>
+<text class="dg-g" x="404" y="332">WORKER NODE 2</text>
+<rect class="dg-box" x="290" y="16" width="180" height="46" rx="10"/>
+<text class="dg-t" x="380" y="44" text-anchor="middle">kubectl / CI</text>
+<rect class="dg-box" x="44" y="118" width="200" height="56" rx="10"/>
+<text class="dg-t" x="144" y="143" text-anchor="middle">kube-scheduler</text>
+<text class="dg-s" x="144" y="161" text-anchor="middle">picks a node for each pod</text>
+<rect class="dg-box" x="44" y="190" width="200" height="56" rx="10"/>
+<text class="dg-t" x="144" y="215" text-anchor="middle">controller-manager</text>
+<text class="dg-s" x="144" y="233" text-anchor="middle">reconcile loops</text>
+<rect class="dg-hl" x="290" y="146" width="180" height="64" rx="10"/>
+<text class="dg-t" x="380" y="175" text-anchor="middle">kube-apiserver</text>
+<text class="dg-s" x="380" y="193" text-anchor="middle">the only front door</text>
+<rect class="dg-hl-2" x="540" y="146" width="180" height="64" rx="10"/>
+<text class="dg-t" x="630" y="175" text-anchor="middle">etcd</text>
+<text class="dg-s" x="630" y="193" text-anchor="middle">cluster state (key-value)</text>
+<rect class="dg-box" x="40" y="344" width="144" height="56" rx="10"/>
+<text class="dg-t" x="112" y="369" text-anchor="middle">kube-proxy</text>
+<text class="dg-s" x="112" y="387" text-anchor="middle">Service rules</text>
+<rect class="dg-box" x="200" y="344" width="150" height="56" rx="10"/>
+<text class="dg-t" x="275" y="369" text-anchor="middle">kubelet</text>
+<text class="dg-s" x="275" y="387" text-anchor="middle">node agent</text>
+<rect class="dg-hl-3" x="40" y="426" width="144" height="56" rx="10"/>
+<text class="dg-t" x="112" y="451" text-anchor="middle">Pods</text>
+<text class="dg-s" x="112" y="469" text-anchor="middle">your containers</text>
+<rect class="dg-box" x="200" y="426" width="150" height="56" rx="10"/>
+<text class="dg-t" x="275" y="451" text-anchor="middle">containerd</text>
+<text class="dg-s" x="275" y="469" text-anchor="middle">runtime + CNI</text>
+<rect class="dg-box" x="410" y="344" width="144" height="56" rx="10"/>
+<text class="dg-t" x="482" y="369" text-anchor="middle">kube-proxy</text>
+<text class="dg-s" x="482" y="387" text-anchor="middle">Service rules</text>
+<rect class="dg-box" x="570" y="344" width="150" height="56" rx="10"/>
+<text class="dg-t" x="645" y="369" text-anchor="middle">kubelet</text>
+<text class="dg-s" x="645" y="387" text-anchor="middle">node agent</text>
+<rect class="dg-hl-3" x="410" y="426" width="144" height="56" rx="10"/>
+<text class="dg-t" x="482" y="451" text-anchor="middle">Pods</text>
+<text class="dg-s" x="482" y="469" text-anchor="middle">your containers</text>
+<rect class="dg-box" x="570" y="426" width="150" height="56" rx="10"/>
+<text class="dg-t" x="645" y="451" text-anchor="middle">containerd</text>
+<text class="dg-s" x="645" y="469" text-anchor="middle">runtime + CNI</text>
+<path class="dg-a" d="M380,62 L380,146" marker-end="url(#dg-k8s-arch-h)"/>
+<rect class="dg-lbg" x="335" y="95" width="90" height="18" rx="5"/>
+<text class="dg-l" x="380" y="108" text-anchor="middle">HTTPS + auth</text>
+<path class="dg-a" d="M244,146 L267,146 L267,164 L290,164" marker-start="url(#dg-k8s-arch-h)" marker-end="url(#dg-k8s-arch-h)"/>
+<path class="dg-a" d="M244,218 L267,218 L267,192 L290,192" marker-start="url(#dg-k8s-arch-h)" marker-end="url(#dg-k8s-arch-h)"/>
+<path class="dg-a-hl" d="M470,178 L540,178" marker-start="url(#dg-k8s-arch-hh)" marker-end="url(#dg-k8s-arch-hh)"/>
+<path class="dg-a" d="M200,454 L184,454" marker-end="url(#dg-k8s-arch-h)"/>
+<path class="dg-a" d="M570,454 L554,454" marker-end="url(#dg-k8s-arch-h)"/>
+<path class="dg-a" d="M356,210 L356,277 L275,277 L275,344" marker-start="url(#dg-k8s-arch-h)" marker-end="url(#dg-k8s-arch-h)"/>
+<rect class="dg-lbg" x="107.2" y="281" width="157.6" height="18" rx="5"/>
+<text class="dg-l" x="186" y="294" text-anchor="middle">watch pods, report status</text>
+<path class="dg-a" d="M404,210 L404,277 L645,277 L645,344" marker-start="url(#dg-k8s-arch-h)" marker-end="url(#dg-k8s-arch-h)"/>
+<path class="dg-a" d="M275,400 L275,426" marker-end="url(#dg-k8s-arch-h)"/>
+<path class="dg-a" d="M645,400 L645,426" marker-end="url(#dg-k8s-arch-h)"/>
+</svg>
+</div>
+<figcaption>Everything goes through the API server. Components watch it for changes and write their results back.</figcaption>
+</figure>
+<!-- diagram:k8s-arch:end -->
     <p>High-availability control planes run multiple API server instances behind a load balancer, with etcd deployed as a 3- or 5-node quorum cluster. Worker nodes are cattle  -  add or remove them without manual reconfiguration.</p>
     <h3>Namespaces</h3>
     <p>Logical partitions inside a cluster. Resources in different namespaces can share the same physical nodes but are isolated by RBAC and naming.</p>
@@ -460,7 +549,22 @@ kubectl get pods -A</code></pre>
 </main>
 
 <footer>
-  <p><small><a href="../docker-kubernetes-learn.html">Back to Learn</a> &middot; <a href="../../docker-kubernetes.html">Docker &amp; Kubernetes</a> &middot; <a href="../../../index.html">Home</a></small></p>
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="topbar-brand" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="30" height="30"><span>Engineering<b>KB</b></span></a>
+      <p>Free, beginner-friendly guides to AI, systems, and infrastructure, with worked examples and interactive labs. Maintained by <a href="https://github.com/saqlain2204" rel="noopener noreferrer">@saqlain2204</a>.</p>
+    </div>
+    <ul class="site-footer-links">
+      <li><a href="../../../AI Engineer/ai-engineering.html">AI Engineering</a></li>
+      <li><a href="../../../CS-Fundamentals/cs-fundamentals.html">CS Fundamentals</a></li>
+      <li><a href="../../../Docker-Kubernetes/docker-kubernetes.html">Docker &amp; K8s</a></li>
+      <li><a href="../../../Graph ML/graph-ml.html">Graph ML</a></li>
+      <li><a href="../../../Interactive Labs/index.html">Labs</a></li>
+      <li><a href="../../../AI Engineer/research/research-hub.html">Research</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base" rel="noopener noreferrer">GitHub</a></li>
+      <li><a href="https://github.com/saqlain2204/Engineering-Knowledge-Base/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contribute</a></li>
+    </ul>
+  </div>
 </footer>
 
 <script src="../../../assets/site.js"></script>

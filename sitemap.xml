@@ -2,476 +2,470 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/ai-engineering.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Agents-and-Protocols/ai-engineering-interview-agents.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Agents-and-Protocols/ai-engineering-interview-mcp.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Agents-and-Protocols/ai-engineering-interview-memory.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Foundations-and-Architecture/ai-engineering-interview-foundations.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Foundations-and-Architecture/ai-engineering-interview-llms.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Foundations-and-Architecture/ai-engineering-interview-slms.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Foundations-and-Architecture/ai-engineering-interview-tokenization.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Foundations-and-Architecture/ai-engineering-interview-transformers.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Inference-Deployment-Operations/ai-engineering-interview-deployment.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Inference-Deployment-Operations/ai-engineering-interview-evaluation.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Inference-Deployment-Operations/ai-engineering-interview-inference-optimization.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Inference-Deployment-Operations/ai-engineering-interview-llmops-monitoring.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Inference-Deployment-Operations/ai-engineering-interview-metrics.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Prompting-and-Retrieval/ai-engineering-interview-embeddings.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Prompting-and-Retrieval/ai-engineering-interview-prompt-engineering.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Prompting-and-Retrieval/ai-engineering-interview-rag.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Prompting-and-Retrieval/ai-engineering-interview-vector-databases.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Safety-and-System-Design/ai-engineering-interview-safety.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Safety-and-System-Design/ai-engineering-interview-system-design.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Training-Pipeline/ai-engineering-interview-distributed-training.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Training-Pipeline/ai-engineering-interview-fine-tuning.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Training-Pipeline/ai-engineering-interview-post-training.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Training-Pipeline/ai-engineering-interview-pretraining.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/Training-Pipeline/ai-engineering-interview-reinforcement-learning.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/AI%20Engineer/interview/ai-engineering-interview.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Agents-and-Protocols/ai-engineering-agents.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Agents-and-Protocols/ai-engineering-mcp.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Agents-and-Protocols/ai-engineering-memory.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-classical-ml.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-decoding-sampling.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-foundations.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-llms.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-slms.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-tokenization.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-transformers.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-trees-ensembles.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Foundations-and-Architecture/ai-engineering-unsupervised-learning.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Frameworks/ai-engineering-frameworks-langchain.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Frameworks/ai-engineering-frameworks-langfuse.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Frameworks/ai-engineering-frameworks-langgraph.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-deployment.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-evaluation.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-inference-optimization.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-llmops-monitoring.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-metrics.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-quantization.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Inference-Deployment-Operations/ai-engineering-reasoning-test-time-compute.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Prompting-and-Retrieval/ai-engineering-embeddings.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Prompting-and-Retrieval/ai-engineering-prompt-compression.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Prompting-and-Retrieval/ai-engineering-prompt-engineering.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Prompting-and-Retrieval/ai-engineering-rag.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Prompting-and-Retrieval/ai-engineering-vector-databases.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Safety-and-System-Design/ai-engineering-safety.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Safety-and-System-Design/ai-engineering-system-design.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Training-Pipeline/ai-engineering-distributed-training.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Training-Pipeline/ai-engineering-fine-tuning.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Training-Pipeline/ai-engineering-post-training.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Training-Pipeline/ai-engineering-pretraining.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/Training-Pipeline/ai-engineering-reinforcement-learning.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/learn/ai-engineering-learn.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/research/attention-is-all-you-need.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/research/post-training-mastery.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/AI%20Engineer/research/research-hub.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/cs-fundamentals.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-dns-http.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-ip-addressing-subnetting-routing.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-load-balancing-reverse-proxies.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-quic-http3.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-tcp-deep-dive.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Computer-Networks/cn-tls-https-certificates.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Databases/dbms-indexing-btrees-query-plans.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Databases/dbms-joins-execution.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Databases/dbms-normalization-schema-design.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Databases/dbms-replication-sharding-cap.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Databases/dbms-sql-aggregation-window-functions.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Databases/dbms-transactions-isolation-mvcc.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-concurrency-synchronization-deadlocks.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-cpu-caches-memory-hierarchy.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-file-systems-io.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-io-models-event-loops.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-memory-allocation-gc.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-processes-threads-scheduling.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-system-calls.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Operating-Systems/os-virtual-memory-paging.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Scenarios/scenario-database-lock-waits.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Scenarios/scenario-disk-full.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Scenarios/scenario-errors-during-deploys.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Scenarios/scenario-pod-oomkilled-memory-leak.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Scenarios/scenario-retry-storm.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Scenarios/scenario-service-cannot-reach-database.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/Scenarios/scenario-slow-api-debugging.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/CS-Fundamentals/learn/cs-fundamentals-learn.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/cheatsheets/docker-cli-cheatsheet.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/cheatsheets/docker-kubernetes-cheatsheets.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/cheatsheets/kubectl-cheatsheet.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/cheatsheets/yaml-recipes-cheatsheet.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/docker-kubernetes.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Docker/docker-kubernetes-interview-docker-advanced.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Docker/docker-kubernetes-interview-docker-compose.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Docker/docker-kubernetes-interview-docker-fundamentals.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Kubernetes/docker-kubernetes-interview-kubernetes-architecture.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Kubernetes/docker-kubernetes-interview-kubernetes-config-security.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Kubernetes/docker-kubernetes-interview-kubernetes-helm-observability.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Kubernetes/docker-kubernetes-interview-kubernetes-networking.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Kubernetes/docker-kubernetes-interview-kubernetes-storage.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/Kubernetes/docker-kubernetes-interview-kubernetes-workloads.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Docker-Kubernetes/interview/docker-kubernetes-interview.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/DevOps/devops-cicd-mlops.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/DevOps/devops-infrastructure-as-code.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/DevOps/mlops-tracking-registry-feature-stores.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Docker/containers-under-the-hood.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Docker/docker-advanced.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Docker/docker-compose.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Docker/docker-fundamentals.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-architecture.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-autoscaling-probes-rollouts.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-config-security.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-gpu-scheduling.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-helm-observability.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-networking.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-operators-crds.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-scheduling.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-storage.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-troubleshooting.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/Kubernetes/kubernetes-workloads.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Docker-Kubernetes/learn/docker-kubernetes-learn.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/formulas/graph-ml-formulas.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/graph-ml.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Advanced/graph-ml-interview-deep-gnns.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Advanced/graph-ml-interview-graph-transformers.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Advanced/graph-ml-interview-heterogeneous.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Core/graph-ml-interview-classic-architectures.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Core/graph-ml-interview-message-passing.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Foundations/graph-ml-interview-foundations.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Foundations/graph-ml-interview-representation-data.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Practice/graph-ml-interview-gnns-llms.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Practice/graph-ml-interview-training.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/Practice/graph-ml-interview-when-to-use.html</loc>
-  </url>
-  <url>
-    <loc>https://engineering.msaqlain.com/Graph%20ML/interview/graph-ml-interview.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Advanced/graph-ml-deep-gnns-limitations.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Advanced/graph-ml-graph-transformers.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Advanced/graph-ml-heterogeneous-graphs.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Advanced/graph-ml-temporal-dynamic-graphs.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Core/graph-ml-classic-architectures.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Core/graph-ml-message-passing.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Core/graph-ml-spectral-methods.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Foundations/graph-ml-foundations.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Foundations/graph-ml-representation-data.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Practice/graph-ml-gnns-and-llms.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Practice/graph-ml-recent-advances-papers.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Practice/graph-ml-training-scaling.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/Practice/graph-ml-when-to-use-evaluation.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/learn/graph-ml-learn.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Graph%20ML/research/papers-hub.html</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://engineering.msaqlain.com/Interactive%20Labs/attention.html</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://engineering.msaqlain.com/Interactive%20Labs/cpu-scheduling.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/Interactive%20Labs/index.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
-    <loc>https://engineering.msaqlain.com/Interactive%20Labs/transformers.html</loc>
+    <loc>https://engineering.msaqlain.com/Interactive%20Labs/load-balancing.html</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://engineering.msaqlain.com/Interactive%20Labs/page-replacement.html</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://engineering.msaqlain.com/Interactive%20Labs/sampling.html</loc>
+    <lastmod>2026-11-28</lastmod>
+  </url>
+  <url>
+    <loc>https://engineering.msaqlain.com/Interactive%20Labs/subnet-calculator.html</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
   <url>
     <loc>https://engineering.msaqlain.com/</loc>
+    <lastmod>2026-11-28</lastmod>
   </url>
 </urlset>

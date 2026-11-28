@@ -71,6 +71,8 @@ def tag_errors(text):
     return checker.errors
 problems = []
 pages = 0
+titles = {}
+descriptions = {}
 for html in sorted(scan.rglob("*.html")):
     if ".git" in html.parts:
         continue
@@ -104,6 +106,19 @@ for html in sorted(scan.rglob("*.html")):
         fail(f"{dashes} em dash(es) (character or &mdash; entity); use ' - ' instead")
     for err in tag_errors(text)[:3]:
         fail(f"tag structure: {err}")
+    if rel != "404.html":
+        if not re.search(r'<link rel="canonical" href="https://[^"]+"', text):
+            fail("missing canonical link (run scripts/apply-layout.py)")
+        t = re.search(r"<title>([^<]+)</title>", text)
+        if t:
+            titles.setdefault(t.group(1).strip(), []).append(rel)
+        if m:
+            descriptions.setdefault(m.group(1).strip(), []).append(rel)
+
+for label, seen in (("title", titles), ("meta description", descriptions)):
+    for value, rels in seen.items():
+        if len(rels) > 1:
+            problems.append(f"same {label} on {len(rels)} pages ({', '.join(rels)}): {value[:70]}")
 
 for p in problems:
     print("ERROR:", p)

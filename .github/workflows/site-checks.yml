@@ -18,12 +18,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Search index, sitemap, and robots.txt are up to date
+      - name: Shared layout (head tags, top bar, footer) is up to date
+        run: python3 scripts/apply-layout.py --check
+
+      - name: Architecture diagrams are valid and up to date
+        run: python3 scripts/diagrams.py --check
+
+      - name: Search index, sitemap, robots.txt and llms.txt are up to date
         run: |
           python3 scripts/build-search-index.py
-          if ! git diff --quiet -- assets/search-index.json assets/search-index.js sitemap.xml robots.txt; then
+          FILES="assets/search-index.json assets/search-index.js sitemap.xml robots.txt llms.txt"
+          # <lastmod> comes from git history, which a shallow clone cannot see, so ignore it here.
+          if [ -n "$(git status --porcelain -- $FILES | grep -v '^ M sitemap.xml$')" ] || ! git diff --quiet -I '<lastmod>' -- $FILES; then
             echo "::error::Generated site files are stale. Run: python3 scripts/build-search-index.py and commit the result."
-            git diff --stat -- assets/search-index.json assets/search-index.js sitemap.xml robots.txt
+            git status --short -- $FILES
+            git diff --stat -I '<lastmod>' -- $FILES
             exit 1
           fi
 
